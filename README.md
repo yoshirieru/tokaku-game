@@ -4,7 +4,9 @@
 
 ## 遊び方
 
-`index.html` をブラウザで開くだけで遊べます(ビルドやインストールは不要)。セーブはブラウザの localStorage に残ります。
+**ブラウザで遊ぶ:https://yoshirieru.github.io/tokaku-game/**
+
+手元で遊ぶときは、`index.html` をブラウザで開くだけで遊べます(ビルドやインストールは不要)。セーブはブラウザの localStorage に残ります。
 
 ## 内容
 
