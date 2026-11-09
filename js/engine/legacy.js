@@ -17,6 +17,7 @@ Game.Legacy = (function () {
     oppositionLeader: { title: '野党党首のまま', text: '党首として戦い抜いたが、政権には手が届かなかった。' },
     minister:         { title: '大臣どまり', text: '大臣まで上りつめたが、党の頂点には届かなかった。' },
     governor:         { title: '知事に転身', text: '国政を離れ、知事として地元の政治を担う道を選んだ。永田町では見えなかった景色が、そこにはある。' },
+    oneParty:         { title: '大政翼賛会', text: 'すべての党を飲み込み、国会から野党が消えた。数の力ですべてを手にしたが、民意の受け皿も、権力を見張る目もなくなった。歴史はこれを「大政翼賛会」の再来と呼ぶだろう。' },
     backbencher:      { title: '陣笠議員どまり', text: '議員として地元に尽くした。表舞台に立つことは少なかったが、その仕事は確かに残った。' },
   };
 
@@ -46,6 +47,7 @@ Game.Legacy = (function () {
     if (reason === 'lostPower') return 'lostPower';
     if (reason === 'replaced') return 'replaced';
     if (reason === 'governor') return 'governor';
+    if (reason === 'oneParty') return 'oneParty';
     const pmYears = g ? g.pmTurns / 4 : 0;
     const isPM = g && g.role === 'pm';
     if (isPM || pmYears > 0) {
@@ -88,6 +90,7 @@ Game.Legacy = (function () {
     const successor = reason === 'successor' && state.world.approval >= L.successor.minApproval;
     if (successor) push('支持の高いうちに後継を指名', `支持率${Math.round(state.world.approval)}%`, L.successor.bonus);
     if (reason === 'governor' && state.governor) push('知事に当選', `${state.governor.place}(得票率${Math.round(state.governor.share * 100)}%)`, Game.Balance.local.legacyGovernor);
+    if (reason === 'oneParty') push('野党が消えた', '一党体制', L.oneParty);
     // 経済と暮らし(M14):首相のあいだの指標の「気分」の平均、辞めるときの財政
     for (const it of Game.Economy.legacyItems(state)) push(it.label, it.value, it.points);
     // 減点

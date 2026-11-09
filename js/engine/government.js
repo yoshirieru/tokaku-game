@@ -80,6 +80,13 @@ Game.Gov = (function () {
       w.upper.nextYear = y;
     }
     if (!w.coopPacts) w.coopPacts = [];
+    // 首相の党が合流で消えたセーブ(合流の制限より前の版)を直す:いまの勢力図で政権を組み直す
+    if (state.gov && !w.parties[state.gov.pmParty]) {
+      state.gov.coalition = state.gov.coalition.filter((p) => w.parties[p]);
+      const f = aiForm(state, null);
+      setGov(state, f.pmParty, f.coalition, {});
+      if (f.coalition.includes(state.leader.party) && f.pmParty !== state.leader.party) state.gov.role = 'partner';
+    }
     if (state.gov) return state.gov;
     const f = aiForm(state, null);
     setGov(state, f.pmParty, f.coalition, {});
@@ -715,7 +722,7 @@ Game.Gov = (function () {
     return out;
   }
 
-  // ---------------- 党首の任期(1期3年、連続2期まで) ----------------
+  // ---------------- 党首の任期(1期3年、連続4期まで) ----------------
   function reelectChance(state) {
     const R = Game.Balance.leaderTerm.reelect;
     const ld = state.leader;

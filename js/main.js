@@ -128,6 +128,7 @@ window.Game = window.Game || {};
     if (s.party && s.party.custom) Game.NewParty.register(s.party);
     if (s.versus && s.versus.customParty) Game.NewParty.register(s.versus.customParty);   // 対戦モードの新党
     if (s.world && s.world.parties) Game.Leader.applyOverrides(s);
+    if (s.gov && s.leader && s.world && !s.versus && Game.Gov) Game.Gov.ensure(s);   // 壊れた政権のデータを直す
   }
 
   Game.continueGame = function (n) {

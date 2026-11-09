@@ -95,6 +95,7 @@ Game.UI = Game.UI || {};
       if (ld.actionsLeft > 0 && !confirm(`行動があと${ld.actionsLeft}回残っています。ターンを終えますか?`)) return;
       LD().endTurn(st);
       Game.clearUndo();
+      if (st.pendingEnding) return Game.goEnding(st.pendingEnding);
       st.ui.lastResult = null;
       st.ui.showLeaderReport = true;
       Game.commit();
@@ -249,9 +250,9 @@ Game.UI = Game.UI || {};
         const backers = p.backers.map((o) => ORGS[o].name).join('・');
         const clash = p.conflicts.map(([a, b]) => `「${polName(a)}」と「${polName(b)}」`).join('、');
         return `
-          <button class="btn choice-btn partner-btn" data-partner="${p.id}" ${p.cooldown ? 'disabled' : ''}>
+          <button class="btn choice-btn partner-btn" data-partner="${p.id}" ${p.cooldown || p.blocked ? 'disabled' : ''}>
             <b>${chip(p.id)} ${esc(p.name)} <span class="muted small">${p.seats}議席</span></b>
-            <span class="small muted">${backers ? `支持母体:${esc(backers)}` : '支持母体なし'}${clash ? ` ・ 政策がぶつかる:${esc(clash)}` : ' ・ 政策は近い'}${p.cooldown ? ` ・ 交渉決裂から間がない(あと${p.cooldown}ターン)` : ''}</span>
+            <span class="small muted">${backers ? `支持母体:${esc(backers)}` : '支持母体なし'}${clash ? ` ・ 政策がぶつかる:${esc(clash)}` : ' ・ 政策は近い'}${p.cooldown ? ` ・ 交渉決裂から間がない(あと${p.cooldown}ターン)` : ''}${p.blocked ? ` ・ <b>${esc(p.blocked)}</b>` : ''}</span>
           </button>`;
       })
       .join('');
@@ -321,6 +322,7 @@ Game.UI = Game.UI || {};
         }
         const res = Game.Merger.propose(st, partner, terms);
         Game.clearUndo();   // 合流の提案は取り消せない
+        if (st.pendingEnding) { root.innerHTML = ''; return Game.goEnding(st.pendingEnding); }   // 全党を飲み込んだ:大政翼賛会
         st.leader.report = { title: res.accepted ? '合流が決まった' : '交渉決裂', lines: [res.text], event: null };
         st.ui.showLeaderReport = true;
         Game.commit();

@@ -40,9 +40,22 @@ Game.Merger = (function () {
           id, name: info.name, color: info.color, seats: w.parties[id].seats,
           conflicts: conflicts(state, id), backers: Game.Data.PARTY_BACKERS[id] || [],
           cooldown: ld.cooldowns[id] || 0, real: !!info.real,
+          blocked: blockedReason(state, id),
         };
       })
       .sort((a, b) => b.seats - a.seats);
+  }
+
+  // そもそも交渉の席につかない理由(なければ null)
+  function blockedReason(state, partner) {
+    const g = state.gov;
+    // 政権を担う首相の党は、ほかの党に合流しない(連立相手でも同じ)
+    if (g && g.pmParty === partner && partner !== state.leader.party) return '政権を担う党は合流に応じない';
+    // 議席の差が大きすぎると、合流ではなく「入党」の話になる
+    const ours = L().seatsOf(state, state.leader.party);
+    const theirs = L().seatsOf(state, partner);
+    if (theirs > Math.max(1, ours) * MB().absorbRatio) return '議席の差が大きすぎる(相手は「合流ではなく入党なら」と言う)';
+    return null;
   }
 
   function isSmaller(state, partner) {
@@ -79,6 +92,8 @@ Game.Merger = (function () {
   function propose(state, partner, terms) {
     const ld = state.leader;
     const info = L().partyInfo(partner);
+    const blocked = blockedReason(state, partner);
+    if (blocked) return { accepted: false, text: `${info.name}は交渉に応じない:${blocked}。` };
     const ev = evaluate(state, partner, terms);
     L().spendAction(state);
     if (ev.willing < 0) {
@@ -163,8 +178,20 @@ Game.Merger = (function () {
     parts.push(`党内の結束は ${ev.drop} 下がった。`);
     const text = parts.join('');
     L().addLog(state, `🤝 ${text}`, 'news');
+    if (isOneParty(state)) {
+      // 議席のある党がほかに残っていない:大政翼賛会のエンディング(legacy.js)
+      state.pendingEnding = 'oneParty';
+      L().addLog(state, '🏛 国会から野党が消えた。', 'news');
+    }
     return text;
   }
 
-  return { partners, conflicts, isSmaller, defaultTerms, evaluate, propose };
+  // 衆議院で議席を持つ党が自分の党だけになったか(無所属は数えない)
+  function isOneParty(state) {
+    const w = state.world;
+    const me = state.leader.party;
+    return !Object.keys(w.parties).some((id) => id !== me && id !== 'indep' && w.parties[id].seats > 0);
+  }
+
+  return { partners, conflicts, blockedReason, isOneParty, isSmaller, defaultTerms, evaluate, propose };
 })();

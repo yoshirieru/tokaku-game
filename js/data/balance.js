@@ -440,7 +440,8 @@ Game.Balance.partyLeader = {
 Game.Balance.merger = {
   baseWillingness: 20,
   sizePenalty: 30,           // 相手が自分より大きいほど渋る(相手/自分の議席比 × これ、上限あり)
-  sizePenaltyMax: 40,
+  sizePenaltyMax: 70,
+  absorbRatio: 5,            // 相手の議席が自分の(最低1)のこの倍を超えると交渉に応じない。首相の党も応じない
   conflictPenalty: 12,       // 基本政策が1組ぶつかるごとの前向き度の低下
   conflictCohesion: 8,       // 同じく結束の低下
   baseCohesionDrop: 6,
@@ -602,6 +603,7 @@ Game.Balance.legacy = {
   successor:   { minApproval: 45, bonus: 6 },   // 支持が高いうちに後継を指名して退く
   // 減点
   scandal: 3, coalitionBreak: 4, twistedFail: 1, twistedFailMax: 10,
+  oneParty: -15,           // 合流ですべての党を飲み込んだ(大政翼賛会のエンディング)
   // 評価の境目
   grades: [{ g: 'S', min: 75 }, { g: 'A', min: 58 }, { g: 'B', min: 40 }, { g: 'C', min: 22 }, { g: 'D', min: -999 }],
   // 首相の退き方
@@ -612,7 +614,7 @@ Game.Balance.legacy = {
 // ---- 党首の任期(leader.js) ----
 Game.Balance.leaderTerm = {
   years: 3,
-  maxTerms: 2,
+  maxTerms: 4,
   // 再選の確率 = base + (内閣支持率 − 35) × perApproval(首相のとき)+ (結束 − 50) × perCohesion + (支持率の変化) × perSupport
   reelect: { base: 0.55, perApproval: 0.012, perCohesion: 0.008, perSupport: 0.03, min: 0.05, max: 0.95 },
   blameLossShare: 0.15,    // 野党党首が総選挙で議席をこれ以上の割合で減らすと責任論

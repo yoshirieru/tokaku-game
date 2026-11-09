@@ -126,7 +126,7 @@ Game.Leader = (function () {
     ld.report = { title: custom ? `${p.name} 党首` : ld.isPM ? '内閣総理大臣' : `${p.name} 党首`, lines, event: null };
     addLog(state, '党首モードを開始。', 'news');
     Game.Legacy.stats(state).wasLeader = true;
-    ld.termStart = ld.since;   // 党首の任期(1期3年、連続2期まで)
+    ld.termStart = ld.since;   // 党首の任期(1期3年、連続4期まで)
     ld.terms = 1;
     if (Game.Gov) {
       const g = Game.Gov.ensure(state);   // いまの政権と参議院
@@ -285,6 +285,8 @@ Game.Leader = (function () {
   function endTurn(state) {
     const ld = state.leader;
     if (ld.pending) return;
+    // ほかの党がすべて消えている(合流の制限より前の版のセーブ):大政翼賛会のエンディング
+    if (Game.Merger.isOneParty(state)) { state.pendingEnding = 'oneParty'; return; }
     const L = LB();
     const lines = [];
     // 結束:しこりの分だけ下がり、少しずつ戻る
@@ -347,7 +349,7 @@ Game.Leader = (function () {
     } else if (ld.lowTurns >= 1) {
       lines.push(`党内の結束が危険な水準(${Math.round(ld.cohesion)})。このままだと分裂しかねない。`);
     }
-    // 党首の任期(1期3年・連続2期まで)
+    // 党首の任期(1期3年・連続4期まで)
     if (!ev && Game.Gov && Game.Gov.termDue(state)) {
       ev = Game.Gov.leaderTermEvent(state);
       ld.pending = ev;
