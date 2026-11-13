@@ -27,6 +27,8 @@
   --track: rgba(255, 255, 255, .12);
   --card-bg: linear-gradient(180deg, #1b2b68, #101b47);
   --card-bd: #3c52a0;
+  --telop-a: #2551b3;                       /* テロップ風のボタンの地(上) */
+  --telop-b: #163b8a;                       /* 同(下) */
   --paper: #f3efe4;                         /* 新聞と当確のハンコだけは明るい紙 */
   --paper-ink: #16130f;
   --font: 'Zen Kaku Gothic New', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, system-ui, sans-serif;
@@ -61,7 +63,7 @@ h1, h2, p { margin: 0; }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
 /* 主な決定:タイトルのメニューと同じテロップ風(紺地に白、左に赤い帯) */
 .btn-primary {
-  background: linear-gradient(#2551b3, #163b8a); color: var(--on-accent); font-weight: 700;
+  background: linear-gradient(var(--telop-a), var(--telop-b)); color: var(--on-accent); font-weight: 700;
   border: 0; border-left: 6px solid var(--accent); border-radius: 4px;
   box-shadow: 0 3px 10px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .18);
 }
@@ -380,177 +382,144 @@ h1, h2, p { margin: 0; }
   .game *, .count *, .result *, .modal-back, .modal-back * { animation-duration: .01s !important; transition-duration: .01s !important; }
 }
 
-/* ---------- タイトル(js/effects/title.js。開票特番の夜) ---------- */
+/* ---------- タイトル(js/effects/title.js。開票速報のオープニング) ---------- */
 /* --s:演出の速さ(1 通常 / 0.4 速い / 0 スキップ)。--d:その部品が出る時刻(通常の速さの秒) */
 .tl-stage {
-  position: fixed; inset: 0; z-index: 10;
-  display: grid; place-items: center;
-  overflow: hidden;
-  background: #02040f;
-  color: #fff;
+  position: fixed; inset: 0; z-index: 10; overflow: hidden; color: var(--ink); background: var(--night);
+  display: grid; grid-template-columns: minmax(0, 45fr) minmax(0, 55fr); grid-template-rows: minmax(0, 1fr) auto;
 }
-.tl-frame {
-  position: relative;
-  width: min(100vw, calc(100vh * 16 / 9));
-  width: min(100vw, calc(100dvh * 16 / 9));
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  container-type: size;
-  /* 1u = 16:9 の画面の幅の1%(中の部品で使う) */
-  --u: min(1cqw, 1.7778cqh);
+.tl-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 90% 75% at 72% 42%, #1c3070 0%, #0a1232 55%, var(--night) 100%); animation: tl-fade calc(var(--s) * 1s) ease both; }
+.tl-floor {
+  position: absolute; left: -25%; right: -25%; bottom: -6%; height: 46%; opacity: .5;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 64px 64px; transform: perspective(520px) rotateX(64deg); transform-origin: 50% 100%;
+  -webkit-mask-image: linear-gradient(transparent, #000 60%); mask-image: linear-gradient(transparent, #000 60%);
+  animation: tl-floor 5s linear infinite;
 }
-.tl-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; animation: tl-fade calc(var(--s) * 1.2s) ease both; }
-.tl-star { fill: #fff; opacity: .55; animation: tl-twinkle var(--tw) ease-in-out var(--twd) infinite; }
-.tl-beams { mix-blend-mode: screen; animation: tl-fade calc(var(--s) * 1.4s) ease calc(var(--s) * .6s) both; }
-.tl-beam { transform-origin: 0 0; }
-.tl-beam-a { animation: tl-sway-a 9s ease-in-out infinite alternate; }
-.tl-beam-b { animation: tl-sway-b 11.5s ease-in-out infinite alternate; }
-.tl-win { fill: #ffd98a; opacity: 0; animation: tl-on calc(var(--s) * .3s) ease calc(var(--d) * var(--s)) both; }
-.tl-win.tl-blink { animation: tl-on calc(var(--s) * .3s) ease calc(var(--d) * var(--s)) both, tl-blink var(--bl) steps(1) calc(var(--bd) * var(--s) + 1s) infinite; }
-.tl-aviation { fill: #ff4a3d; animation: tl-aviation 1.8s steps(1) infinite; }
+.tl-sweep {
+  position: absolute; inset: 0; mix-blend-mode: screen;
+  background: linear-gradient(100deg, transparent 42%, rgba(160, 190, 255, .11) 50%, transparent 58%) 120% 0 / 300% 100% no-repeat;
+  animation: tl-sweep 9s ease-in-out infinite;
+}
+@keyframes tl-fade { from { opacity: 0; } }
+@keyframes tl-floor { to { background-position: 0 64px, 0 0; } }
+@keyframes tl-sweep { to { background-position: -60% 0; } }
 
-/* ロゴ */
-.tl-logo-wrap { position: absolute; left: 50%; top: 11%; transform: translateX(-50%); text-align: center; width: max-content; }
-.tl-logo {
-  position: relative; margin: 0;
-  font-family: "Shippori Mincho B1", var(--font-head);
-  font-weight: 800;
-  font-size: calc(var(--u) * 15);
-  line-height: 1.05;
-  letter-spacing: .04em;
-  color: #fff;
-  text-shadow: 0 0 .12em rgba(150, 185, 255, .65), 0 .035em 0 #8fa3dc, 0 .08em .22em rgba(0, 0, 0, .7);
-  animation: tl-zoom calc(var(--s) * .7s) cubic-bezier(.2, 1.35, .4, 1) calc(var(--s) * 2.3s) both;
+/* 情勢ボード */
+.tl-board {
+  grid-column: 2; grid-row: 1; align-self: center; justify-self: center; position: relative; z-index: 1;
+  width: min(90%, 108vh); padding: 1.4% 1.7% 1.8%; border: 1px solid rgba(125, 149, 220, .45); border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20, 34, 86, .84), rgba(8, 14, 40, .9));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6), 0 0 70px rgba(70, 110, 255, .2);
+  transform: perspective(1500px) rotateY(-13deg) rotateX(3deg);
+  animation: tl-board-in calc(var(--s) * .9s) cubic-bezier(.2, .8, .2, 1) calc(var(--s) * .4s) both;
 }
-.tl-logo-text { display: inline-block; animation: tl-thud calc(var(--s) * .3s) ease-out calc(var(--s) * 3.18s) both; }
-.tl-stamp {
-  position: absolute; right: -.46em; top: -.3em;
-  width: .64em; height: .64em;
-  rotate: -14deg;
-  animation: tl-stamp calc(var(--s) * .32s) cubic-bezier(.3, 1.5, .5, 1) calc(var(--s) * 3.1s) both;
+@keyframes tl-board-in { from { opacity: 0; transform: perspective(1500px) rotateY(-34deg) rotateX(3deg) translateX(14%); } }
+.tl-board-head { display: flex; align-items: center; gap: .8em; margin-bottom: 1.2%; font: 800 clamp(11px, 1.45vw, 19px) var(--font-head); letter-spacing: .12em; white-space: nowrap; }
+.tl-live { padding: 0 .6em; background: var(--accent); color: var(--on-accent); font: 900 .78em/1.6 var(--font); letter-spacing: .1em; animation: blink 1.6s steps(1) infinite; }
+.tl-board-seat { color: var(--gold); font-size: .85em; }
+.tl-board-pct { margin-left: auto; color: var(--sub); font: 500 .8em var(--font); letter-spacing: 0; }
+.tl-board-pct b { display: inline-block; min-width: 2.2em; text-align: right; font: 800 1.5em var(--font-head); color: var(--gold); font-variant-numeric: tabular-nums; }
+.tl-map { display: block; width: 100%; aspect-ratio: 600 / 430; border-radius: 8px; overflow: hidden; }
+.tl-rg { fill: color-mix(in srgb, var(--c, var(--land)) var(--on, 0%), var(--land)); stroke: var(--map-stroke); stroke-width: 1.5px; stroke-linejoin: round; transition: fill .7s; }
+.tl-rg.lit { --on: 64%; }
+.tl-rg-name { fill: var(--ink); font: 800 17px var(--font-head); letter-spacing: .08em; paint-order: stroke; stroke: var(--night); stroke-width: 4px; stroke-linejoin: round; opacity: .92; }
+.tl-bars { display: grid; gap: clamp(3px, .6vw, 7px); margin-top: 2%; }
+.tl-bar-row { position: relative; display: grid; grid-template-columns: auto 1fr 5.4em; align-items: center; gap: .7em; font-size: clamp(10px, 1.15vw, 15px); }
+.tl-bar { height: clamp(6px, .95vw, 13px); border-radius: 3px; background: var(--track); overflow: hidden; }
+.tl-bar i { display: block; height: 100%; width: 0; background: var(--pc); transition: width .2s linear; }
+.tl-bar-num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tl-called {
+  position: absolute; right: 6.2em; top: 50%; padding: 0 .6em; border: 2px solid var(--accent); border-radius: 4px; background: var(--paper); color: var(--accent);
+  font: 800 1em/1.35 var(--font-head); letter-spacing: .1em; opacity: 0; transform: translateY(-50%) rotate(-6deg) scale(2.4);
 }
-.tl-stamp-svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 .02em .04em rgba(0, 0, 0, .45)); }
-.tl-stamp-text { font-family: "Shippori Mincho B1", var(--font-head); }
-.tl-sub { margin: calc(var(--u) * 1.8) 0 0; animation: tl-wipe calc(var(--s) * .45s) ease-out calc(var(--s) * 3.45s) both; }
-.tl-sub span {
-  display: inline-block;
-  background: #ffd400; color: #111;
-  font-weight: 800;
-  font-size: calc(var(--u) * 2.4);
-  letter-spacing: .14em;
-  padding: .22em 1.2em .22em 1.32em;
-  box-shadow: .22em .22em 0 rgba(0, 0, 0, .4);
-}
+.tl-bar-row.called .tl-called { opacity: 1; transform: translateY(-50%) rotate(-6deg) scale(1); transition: transform .35s cubic-bezier(.2, 1.5, .4, 1), opacity .15s; }
 
-/* メニュー(開票速報のテロップ風) */
-.tl-menu { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); display: flex; gap: calc(var(--u) * 1.4); }
+/* ロゴとメニュー */
+.tl-main {
+  grid-column: 1; grid-row: 1; position: relative; z-index: 2; align-self: center; min-width: 0;
+  padding-left: clamp(20px, 6vw, 96px); display: flex; flex-direction: column; align-items: flex-start; gap: clamp(6px, 1.6vh, 18px);
+}
+.tl-kicker { padding-left: 10px; border-left: 4px solid var(--accent); font: 700 clamp(11px, min(1.3vw, 2.6vh), 16px) var(--font); letter-spacing: .35em; color: var(--sub); white-space: nowrap; animation: tl-rise calc(var(--s) * .5s) ease calc(var(--d) * var(--s)) both; }
+.tl-logo { position: relative; margin: 0; font: 800 clamp(60px, min(12.5vw, 27vh), 210px)/1 var(--font-head); letter-spacing: -.02em; white-space: nowrap; }
+.tl-logo-text { display: inline-block; text-shadow: 0 .045em 0 var(--telop-a), 0 0 .4em rgba(120, 160, 255, .55); animation: tl-logo calc(var(--s) * .6s) cubic-bezier(.2, 1.3, .3, 1) calc(var(--d) * var(--s)) both; }
+.tl-logo-text i { font-style: normal; color: var(--gold); margin-left: -.06em; }
+.tl-pin { position: absolute; right: -.44em; top: -.26em; width: .56em; transform: rotate(13deg); filter: drop-shadow(0 .03em .06em rgba(0, 0, 0, .6)); animation: tl-pin calc(var(--s) * .42s) cubic-bezier(.2, 1.6, .4, 1) calc(var(--d) * var(--s)) both; }
+.tl-rosette { display: block; width: 100%; }
+.tl-ros-a { fill: var(--accent); }
+.tl-ros-b { fill: color-mix(in srgb, var(--accent) 76%, var(--ink)); }
+.tl-ros-c { fill: var(--gold); }
+.tl-ros-d { fill: color-mix(in srgb, var(--accent) 68%, var(--night)); }
+.tl-ros-t { fill: var(--on-gold); font: 800 30px var(--font-head); }
+.tl-sub span { display: inline-block; padding: .22em 1.1em; background: var(--gold); color: var(--on-gold); font: 800 clamp(13px, min(2vw, 4vh), 29px) var(--font-head); letter-spacing: .24em; white-space: nowrap; animation: tl-wipe calc(var(--s) * .45s) ease calc(var(--d) * var(--s)) both; }
+.tl-menu { display: flex; flex-direction: column; gap: clamp(5px, 1.1vh, 10px); width: min(100%, 340px); margin-top: clamp(4px, 2vh, 22px); }
 .tl-btn {
-  font-family: var(--font); font-weight: 700;
-  font-size: max(14px, calc(var(--u) * 1.9));
-  letter-spacing: .08em;
-  color: #fff;
-  background: linear-gradient(#183578, #0b1d4d);
-  border: 0; border-left: .45em solid #d8262f;
-  padding: .7em 1.5em .7em 1.2em;
-  min-width: 8.6em;
-  cursor: pointer;
-  box-shadow: 0 .3em .8em rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .16);
-  transition: transform .15s, box-shadow .15s, background .15s;
-  animation: tl-rise calc(var(--s) * .45s) ease-out calc(var(--d) * var(--s)) both;
+  position: relative; text-align: left; padding: .6em 2.2em .6em 1.1em; border: 0; border-left: 7px solid var(--accent); cursor: pointer;
+  font: 800 clamp(15px, min(1.7vw, 3.5vh), 21px) var(--font-head); letter-spacing: .2em; color: var(--on-accent); white-space: nowrap;
+  background: linear-gradient(90deg, var(--telop-a), var(--telop-b) 65%, rgba(22, 59, 138, .25));
+  animation: tl-slide calc(var(--s) * .4s) ease calc(var(--d) * var(--s)) both; transition: transform .15s, filter .15s;
 }
-.tl-btn:hover, .tl-btn:focus-visible {
-  transform: translateY(-.2em);
-  background: linear-gradient(#2248a0, #102a63);
-  box-shadow: 0 .55em 1.2em rgba(0, 0, 0, .5), 0 0 1.1em rgba(120, 170, 255, .6), inset 0 1px 0 rgba(255, 255, 255, .25);
-}
-.tl-btn:focus-visible { outline: 2px solid #ffd400; outline-offset: 2px; }
-.tl-btn:active { transform: translateY(0); }
+.tl-btn::after { content: "▶"; position: absolute; right: 1em; top: 50%; font-size: .65em; color: var(--gold); opacity: 0; transform: translate(-8px, -50%); transition: opacity .15s, transform .15s; }
+.tl-btn:hover, .tl-btn:focus-visible { transform: translateX(8px); filter: brightness(1.22); outline: none; }
+.tl-btn:hover::after, .tl-btn:focus-visible::after { opacity: 1; transform: translate(0, -50%); }
+.tl-btn:focus-visible { box-shadow: 0 0 0 2px var(--gold); }
+@keyframes tl-rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes tl-logo { from { opacity: 0; transform: translateY(.22em) scale(.9); filter: blur(8px); } }
+@keyframes tl-pin { from { opacity: 0; transform: rotate(-30deg) scale(3.6); } }
+@keyframes tl-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+@keyframes tl-slide { from { opacity: 0; transform: translateX(-30px); } }
 
-/* 上の注記と小さいボタン */
-.tl-top {
-  position: absolute; top: 0; left: 0; right: 0;
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 1em;
-  padding: calc(var(--u) * 1.2) calc(var(--u) * 1.6);
-  font-size: max(10px, calc(var(--u) * 1.05));
-  color: rgba(220, 228, 255, .72);
-  animation: tl-fade calc(var(--s) * .8s) ease calc(var(--s) * 3.7s) both;
-}
-.tl-note { margin: 0; max-width: 58%; line-height: 1.5; }
-.tl-top-actions { display: flex; align-items: center; gap: 1em; flex-shrink: 0; }
-.tl-sound-hint { animation: tl-pulse 2.4s ease-in-out infinite; }
-.tl-sound-hint[hidden], .tl-settings[hidden] { display: none; }
-.tl-mini { background: transparent; border: 1px solid rgba(220, 228, 255, .4); color: #e3e9ff; padding: .3em .9em; border-radius: 3px; cursor: pointer; font-size: inherit; }
-.tl-mini:hover, .tl-mini:focus-visible { border-color: #fff; color: #fff; }
+.tl-note, .tl-sound-hint { position: absolute; top: 12px; z-index: 3; font-size: 11.5px; color: var(--sub); opacity: .85; }
+.tl-note { left: clamp(20px, 6vw, 96px); }
+.tl-sound-hint { right: 16px; }
+.tl-flash { position: absolute; inset: 0; z-index: 4; pointer-events: none; background: var(--ink); opacity: 0; animation: tl-flash calc(var(--s) * .55s) ease-out calc(var(--d) * var(--s)) both; }
+@keyframes tl-flash { 0% { opacity: 0; } 10% { opacity: .45; } 100% { opacity: 0; } }
 
 /* ニュースのテロップ */
-.tl-ticker {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  height: max(30px, calc(var(--u) * 4.2));
-  display: flex;
-  background: rgba(4, 10, 32, .92);
-  border-top: 2px solid #d8262f;
-  font-size: max(13px, calc(var(--u) * 1.75));
-  font-weight: 700;
-  animation: tl-rise calc(var(--s) * .5s) ease-out calc(var(--s) * 3.7s) both;
-}
-.tl-ticker-label { display: flex; align-items: center; padding: 0 1em; background: #d8262f; letter-spacing: .2em; flex-shrink: 0; }
-.tl-ticker-window { flex: 1; overflow: hidden; display: flex; align-items: center; }
-.tl-ticker-track { display: flex; white-space: nowrap; padding-left: 1.2em; animation: tl-scroll 70s linear infinite; }
-.tl-ticker-track > * { margin-right: 1.2em; flex-shrink: 0; }
-.tl-ticker-track i { font-style: normal; color: #ffd400; }
+.tl-ticker { grid-column: 1 / -1; grid-row: 2; position: relative; z-index: 2; display: flex; align-items: stretch; background: rgba(4, 8, 26, .92); border-top: 2px solid var(--accent); font-size: clamp(12px, 1.35vw, 16px); }
+.tl-ticker-label { flex: none; display: grid; place-items: center; padding: .45em 1.1em; background: var(--accent); color: var(--on-accent); font: 800 1em var(--font-head); letter-spacing: .3em; }
+.tl-ticker-window { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; }
+.tl-ticker-track { display: inline-flex; gap: 1.6em; padding-left: 1.6em; white-space: nowrap; animation: tl-ticker 52s linear infinite; }
+.tl-ticker-track i { font-style: normal; color: var(--gold); }
+@keyframes tl-ticker { to { transform: translateX(-50%); } }
 
 /* 設定 */
-.tl-settings { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: rgba(2, 4, 15, .62); }
-.tl-settings-box {
-  width: min(30em, 92%);
-  background: #0b1d4d;
-  border-left: .5em solid #d8262f;
-  padding: 1.2em 1.6em;
-  font-size: max(14px, calc(var(--u) * 1.45));
-  box-shadow: 0 1em 3em rgba(0, 0, 0, .6);
+.tl-settings { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; background: rgba(3, 6, 20, .74); }
+.tl-settings[hidden] { display: none; }
+.tl-settings-box { width: min(470px, 100%); padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; background: linear-gradient(180deg, #17255c, #0e1840); border: var(--panel-bd); border-top: 5px solid var(--accent); border-radius: var(--radius); box-shadow: 0 24px 60px rgba(0, 0, 0, .6); }
+.tl-settings-title { font: 800 22px var(--font-head); }
+.tl-set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.tl-set-row div { display: flex; gap: 6px; }
+.tl-opt { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: transparent; cursor: pointer; white-space: nowrap; }
+.tl-opt.on { background: var(--gold); color: var(--on-gold); border-color: var(--gold); font-weight: 700; }
+.tl-opt:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.tl-set-note { margin-top: -6px; font-size: 12px; color: var(--sub); }
+.tl-set-actions { display: flex; justify-content: flex-end; }
+
+/* 背の低い横長の画面:メニューを2列に */
+@media (max-height: 430px) {
+  .tl-menu { display: grid; grid-template-columns: 1fr 1fr; width: min(100%, 440px); }
 }
-.tl-settings-title { font-family: "Shippori Mincho B1", var(--font-head); font-size: 1.5em; margin-bottom: .4em; }
-.tl-set-row { display: flex; justify-content: space-between; align-items: center; gap: .6em 1em; margin: .7em 0; flex-wrap: wrap; }
-.tl-opt { background: transparent; border: 1px solid rgba(255, 255, 255, .38); color: #fff; padding: .35em .9em; margin-left: .3em; cursor: pointer; font-size: inherit; }
-.tl-opt:hover, .tl-opt:focus-visible { border-color: #fff; }
-.tl-opt.on { background: #ffd400; border-color: #ffd400; color: #111; font-weight: 700; }
-.tl-set-note { margin: -.3em 0 .4em; font-size: .82em; color: rgba(220, 228, 255, .7); }
-.tl-set-actions { text-align: right; margin-top: 1em; }
-.tl-btn-close { animation: none; min-width: 0; font-size: 1em; }
-
-@keyframes tl-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes tl-on { from { opacity: 0; } to { opacity: .95; } }
-@keyframes tl-blink { 0%, 64% { opacity: .95; } 66%, 86% { opacity: .1; } 88%, 100% { opacity: .95; } }
-@keyframes tl-twinkle { 0%, 100% { opacity: .2; } 50% { opacity: .8; } }
-@keyframes tl-aviation { 0%, 55% { opacity: 1; } 56%, 100% { opacity: .15; } }
-@keyframes tl-sway-a { from { transform: rotate(-30deg); } to { transform: rotate(12deg); } }
-@keyframes tl-sway-b { from { transform: rotate(28deg); } to { transform: rotate(-14deg); } }
-@keyframes tl-zoom { from { opacity: 0; transform: scale(2.4); filter: blur(8px); } to { opacity: 1; transform: none; filter: none; } }
-@keyframes tl-stamp { 0% { opacity: 0; scale: 2.6; } 70% { opacity: 1; scale: .9; } 100% { opacity: 1; scale: 1; } }
-@keyframes tl-thud { 0% { translate: 0 0; } 30% { translate: 0 .03em; } 60% { translate: 0 -.01em; } 100% { translate: 0 0; } }
-@keyframes tl-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-@keyframes tl-rise { from { opacity: 0; translate: 0 1.2em; } to { opacity: 1; translate: 0 0; } }
-@keyframes tl-scroll { to { transform: translateX(-50%); } }
-@keyframes tl-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-
-/* スマホの縦画面:画面いっぱいに使い、メニューは2列 */
-@media (max-aspect-ratio: 4/5) {
-  .tl-frame { width: 100vw; height: 100vh; height: 100dvh; aspect-ratio: auto; --u: min(2.3cqw, 1.15cqh); }
-  .tl-logo-wrap { top: 22%; }
-  .tl-logo { font-size: calc(var(--u) * 17); }
-  .tl-menu { display: grid; grid-template-columns: 1fr 1fr; width: 88%; bottom: 13%; }
-  .tl-btn { min-width: 0; padding: .8em .6em; }
-  .tl-menu .tl-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }   /* ボタンが奇数なら最後の1つは横いっぱい */
-  .tl-top { flex-direction: column-reverse; gap: .6em; }
-  .tl-top-actions { align-self: flex-end; }
-  .tl-note { max-width: none; }
+/* スマホの縦画面:上にボード、下にロゴとメニュー */
+@media (max-width: 760px), (max-aspect-ratio: 4/5) {
+  .tl-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+  .tl-board { grid-column: 1; grid-row: 1; align-self: end; width: min(90%, 43vh); margin-top: 34px; padding: 8px 10px 10px; transform: none; box-shadow: 0 16px 40px rgba(0, 0, 0, .5), 0 0 40px rgba(70, 110, 255, .2); }
+  .tl-board-head { font-size: clamp(10px, 3.2vw, 15px); }
+  .tl-bar-row { font-size: clamp(10px, 2.9vw, 13px); }
+  .tl-bar { height: 7px; }
+  .tl-main { grid-column: 1; grid-row: 2; padding: 0 18px; align-items: center; text-align: center; gap: clamp(5px, 1.3vh, 14px); }
+  .tl-kicker { border-left: 0; padding-left: .35em; font-size: clamp(10px, 3vw, 14px); }
+  .tl-logo { font-size: clamp(56px, min(26vw, 14vh), 150px); }
+  .tl-sub span { font-size: clamp(13px, min(4.4vw, 2.6vh), 22px); }
+  .tl-menu { display: grid; grid-template-columns: 1fr 1fr; width: 100%; max-width: 430px; margin-top: clamp(4px, 1.4vh, 16px); }
+  .tl-btn { text-align: center; padding: .7em .3em; letter-spacing: .1em; font-size: clamp(14px, min(4.2vw, 2.5vh), 19px); background: linear-gradient(var(--telop-a), var(--telop-b)); }
+  .tl-btn::after { display: none; }
+  .tl-btn:hover, .tl-btn:focus-visible { transform: translateY(-2px); }
+  .tl-note { left: 12px; top: 8px; font-size: 10.5px; }
+  .tl-sound-hint { right: 12px; top: 22px; font-size: 10px; }
+  .tl-ticker { grid-row: 3; font-size: 12.5px; }
 }
-
-/* 動きを減らす設定:流れる・揺れる・点滅する動きを止める */
-.tl-reduced .tl-beam-a, .tl-reduced .tl-beam-b { animation: none; }
-.tl-reduced .tl-beam-a { transform: rotate(-14deg); }
-.tl-reduced .tl-beam-b { transform: rotate(14deg); }
-.tl-reduced .tl-star, .tl-reduced .tl-aviation, .tl-reduced .tl-sound-hint, .tl-reduced .tl-ticker-track { animation: none; }
-.tl-reduced .tl-win.tl-blink { animation: tl-on 0s both; }
+/* 動きを減らす設定:流れ・点滅・揺れを止める */
+.tl-reduced .tl-floor, .tl-reduced .tl-sweep, .tl-reduced .tl-live, .tl-reduced .tl-ticker-track { animation: none; }
+.tl-reduced .tl-btn, .tl-reduced .tl-rg, .tl-reduced .tl-bar i, .tl-reduced .tl-called { transition: none; }
 .tl-reduced .tl-ticker-window { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
-.tl-reduced .tl-btn { transition: none; }

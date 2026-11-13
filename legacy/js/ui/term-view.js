@@ -201,7 +201,7 @@ Game.UI = Game.UI || {};
         </div>
         <div class="policy-row"><span class="small muted">公約</span>${pledges}</div>
         ${open.length
-          ? `<p class="small muted">団体との約束は、その政策で委員会質問(+1)や議員立法(成立で+2)をすると果たせる。果たせないまま解散すると、その団体の推薦は見送られる。</p><ul class="promise-list open">${rows}</ul>`
+          ? `<p class="small muted">団体との約束は、その政策で委員会質問(+1)や議員立法(成立で+2)をすると果たせる。果たせないまま解散すると関係度が下がり、その団体の推薦は見送られる。ただし、約束してから1年たたないうちの解散なら持ち越しになり、2年たたないうちなら関係度の下がりは小さく、推薦も残る。</p><ul class="promise-list open">${rows}</ul>`
           : '<p class="small muted">いま果たすべき約束はない。</p>'}
         <p class="small muted">これまで:守った約束 ${ps.kept} ・ 破った約束 ${ps.broken}</p>
       </section>`;

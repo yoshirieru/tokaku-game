@@ -258,6 +258,10 @@ Game.Balance.term = {
   promiseGoal: 2,            // 約束を果たすのに要る進み(質問 +1、議員立法 +1〜2)
   promiseKept: 10,           // 約束を果たしたときの関係度
   promiseBroken: -20,        // 約束を破ったまま選挙を迎えたときの関係度(次の推薦は取り消し)
+  // 解散が早かったときの加減(約束してから議員でいたターン数。1年 = 4ターン)
+  promiseGraceTurns: 4,      // これ未満なら「果たす時間がなかった」:持ち越し、関係度は変わらない
+  promiseFullTurns: 8,       // これ未満なら関係度の下がりを小さくし、推薦は残る。これ以上は promiseBroken と推薦見送り
+  promiseBrokenLight: -6,    // promiseGraceTurns ちょうどで破ったときの関係度(promiseFullTurns に向けて promiseBroken に近づく)
 
   // 内閣支持率と解散
   approvalStart: 45,

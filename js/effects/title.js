@@ -1,4 +1,5 @@
-// タイトル画面の演出(開票特番の夜)。絵は SVG と CSS だけで描き、音は Web Audio API で合成する。
+// タイトル画面の演出(開票速報のオープニング)。絵は SVG と CSS だけで描き、音は Web Audio API で合成する。
+// 左にロゴとメニュー、右に「情勢ボード」(選挙区の地図に色がつき、票が積み上がって当確が出る)。
 // ゲームの状態には触らない。画面の切り替えは呼び出し側(screens.js の renderTitle)から渡された関数で行う。
 //   Game.Effects.Title.render(app, { hasSave, onNew, onContinue, onLegacy, note })
 // 演出の設定(通常 / 速い / スキップ、BGM、効果音)はこの画面だけのもので、localStorage に別に保存する。
@@ -9,11 +10,11 @@ Game.Effects.Title = (function () {
   const SETTINGS_KEY = 'kokusei-title-settings';
   const SPEED = { normal: 1, fast: 0.4, skip: 0 };
   // 演出の流れ(通常の速さでの秒)。CSS の --d に掛ける
-  const T = { bg: 0, windows: 0.8, windowsSpan: 1.5, logo: 2.3, stamp: 3.1, sub: 3.45, menu: 3.7, menuStep: 0.12, ticker: 3.7 };
+  const T = { board: 0.4, lights: 1.3, kicker: 2.0, logo: 2.3, pin: 3.05, sub: 3.45, menu: 3.8, menuStep: 0.1 };
   const TICKER = [
-    '本日投開票', '全国で開票作業が進んでいます', '午後8時、投票が締め切られました',
-    '投票率は前回をやや上回る見込み', '東央7区、大接戦', '備陽2区、開票作業はじまる',
-    '各党の選挙事務所に支持者が集まっています', '比例代表の開票は深夜から', '浪央5区、出口調査の結果が出ています',
+    '本日投開票', '午後8時、投票が締め切られました', '北陽3区、現職に新人が挑む', '出口調査では大接戦',
+    '開票は農村部から進む見込み', '各陣営の事務所に支持者が集まっています', '投票率は前回をやや上回る見込み',
+    '約束は、当選のあともついてくる',
   ];
 
   let started = false;     // このページで一度でも演出を見せたか(2回目以降はすぐに最後の形で出す)
@@ -35,24 +36,24 @@ Game.Effects.Title = (function () {
   const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   // ---------------- 音(Web Audio API) ----------------
+  // BGM は「選挙特番のテーマ」:2小節のファンファーレのあと、ニ短調・8小節のループ(BPM 104)。
+  // 弦の刻み、低音、持続音、ニュースの信号音、ティンパニ。1周おきに主旋律が乗る。
   const Audio = (function () {
-    let ctx = null;
-    let master = null;
-    let bgmGain = null;
-    let noiseBuf = null;
-    let timer = null;
-    let step = 0;
-    let nextTime = 0;
+    let ctx = null, master = null, noiseBuf = null;
+    let bus = null, timer = null, step = 0, nextTime = 0;
 
     function ensure() {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
       if (!ctx) {
         ctx = new AC();
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = -16; comp.ratio.value = 4;
+        comp.connect(ctx.destination);
         master = ctx.createGain();
-        master.gain.value = 0.9;
-        master.connect(ctx.destination);
-        noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+        master.gain.value = 0.85;
+        master.connect(comp);
+        noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
         const d = noiseBuf.getChannelData(0);
         for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       }
@@ -61,12 +62,13 @@ Game.Effects.Title = (function () {
     }
     const ready = () => !!ctx && ctx.state === 'running';
 
-    function tone(dest, { type = 'sine', freq, freqEnd, t, dur, vol, attack = 0.005, filter }) {
+    function tone(dest, { type = 'sine', freq, freqEnd, t, dur, vol, attack = 0.005, filter, detune = 0 }) {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = type;
       o.frequency.setValueAtTime(freq, t);
       if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+      if (detune) o.detune.value = detune;
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(vol, t + attack);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -85,12 +87,13 @@ Game.Effects.Title = (function () {
       o.start(t);
       o.stop(t + dur + 0.05);
     }
-    function noise(dest, { t, dur, vol, type = 'highpass', freq = 6000 }) {
+    function noise(dest, { t, dur, vol, type = 'highpass', freq = 6000, q = 1 }) {
       const s = ctx.createBufferSource();
       s.buffer = noiseBuf;
       const f = ctx.createBiquadFilter();
       f.type = type;
       f.frequency.value = freq;
+      f.Q.value = q;
       const g = ctx.createGain();
       g.gain.setValueAtTime(vol, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -101,59 +104,128 @@ Game.Effects.Title = (function () {
       s.stop(t + dur + 0.05);
     }
 
-    // 決定音:短い2音
+    // ---- 効果音 ----
+    // 決定音:テロップが出るときのチャイム(上がる2音)
     function decide() {
       if (!ensure()) return;
       const t = ctx.currentTime + 0.01;
-      tone(master, { type: 'square', freq: 988, t, dur: 0.07, vol: 0.12, filter: { freq: 3000 } });
-      tone(master, { type: 'square', freq: 1480, t: t + 0.07, dur: 0.12, vol: 0.1, filter: { freq: 3500 } });
+      tone(master, { type: 'sine', freq: 1318.5, t, dur: 0.2, vol: 0.14 });
+      tone(master, { type: 'triangle', freq: 659.25, t, dur: 0.12, vol: 0.05 });
+      tone(master, { type: 'sine', freq: 1975.5, t: t + 0.085, dur: 0.38, vol: 0.12 });
     }
-    // ハンコの「ドン」
+    // 地区に色がつくときの小さな音(だんだん上がる)
+    function blip(i) {
+      if (!ready()) return;
+      const t = ctx.currentTime + 0.01;
+      tone(master, { type: 'sine', freq: [587.33, 698.46, 880, 1046.5, 1174.66][i % 5], t, dur: 0.16, vol: 0.07 });
+    }
+    // 当確の「ドン」:低い打音と、紙をたたく音、上で鳴る金属音
     function stamp() {
       if (!ready()) return;
       const t = ctx.currentTime + 0.01;
-      tone(master, { type: 'sine', freq: 140, freqEnd: 38, t, dur: 0.45, vol: 0.9, attack: 0.003 });
-      tone(master, { type: 'triangle', freq: 90, freqEnd: 50, t, dur: 0.25, vol: 0.35, attack: 0.002 });
-      noise(master, { t, dur: 0.12, vol: 0.45, type: 'lowpass', freq: 900 });
+      tone(master, { type: 'sine', freq: 150, freqEnd: 34, t, dur: 0.6, vol: 0.95, attack: 0.003 });
+      tone(master, { type: 'triangle', freq: 96, freqEnd: 44, t, dur: 0.3, vol: 0.4, attack: 0.002 });
+      noise(master, { t, dur: 0.14, vol: 0.5, type: 'lowpass', freq: 1100 });
+      noise(master, { t, dur: 0.03, vol: 0.25, type: 'highpass', freq: 4000 });
+      tone(master, { type: 'triangle', freq: 1760, t: t + 0.01, dur: 0.5, vol: 0.05 });
+      tone(master, { type: 'triangle', freq: 2637, t: t + 0.01, dur: 0.35, vol: 0.03 });
     }
 
-    // BGM:BPM 132、16分音符 × 4小節のループ(Am → Am → F → E)。低いパルス、刻み、ティンパニ風、持続音
-    const BPM = 132;
+    // ---- BGM ----
+    const BPM = 104;
     const S16 = 60 / BPM / 4;
+    const N = {
+      G1: 49.0, A1: 55.0, Bb1: 58.27, C2: 65.41, D2: 73.42,
+      G2: 98.0, A2: 110.0, Bb2: 116.54, C3: 130.81, Cs3: 138.59, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.0, A3: 220.0, Bb3: 233.08,
+      C4: 261.63, Cs4: 277.18, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.0, A4: 440.0, Bb4: 466.16,
+      C5: 523.25, Cs5: 554.37, D5: 587.33, E5: 659.26, F5: 698.46, G5: 783.99, A5: 880.0, Bb5: 932.33,
+    };
+    // 8小節:Dm → Dm/C → B♭ → A → Gm → B♭ → C → A。mel は [8分音符の位置, 高さ, 長さ(8分)]
     const BARS = [
-      { bass: 55.0, pad: [220.0, 261.63, 329.63], arp: [440.0, 659.26, 523.25, 659.26] },   // Am
-      { bass: 55.0, pad: [220.0, 261.63, 329.63], arp: [440.0, 659.26, 523.25, 783.99] },   // Am
-      { bass: 43.65, pad: [174.61, 220.0, 261.63], arp: [349.23, 523.25, 440.0, 523.25] },  // F
-      { bass: 41.2, pad: [164.81, 207.65, 246.94], arp: [329.63, 493.88, 415.3, 493.88] },  // E(導音の G# で緊張)
+      { bass: N.D2, pad: [N.D3, N.F3, N.A3], arp: [N.D4, N.A4, N.D5, N.A4], mel: [[0, N.D5, 3], [3, N.F5, 1], [4, N.E5, 2], [6, N.D5, 2]] },
+      { bass: N.C2, pad: [N.C3, N.F3, N.A3], arp: [N.C4, N.A4, N.D5, N.A4], mel: [[0, N.A4, 4], [4, N.C5, 2], [6, N.D5, 2]] },
+      { bass: N.Bb1, pad: [N.Bb2, N.D3, N.F3], arp: [N.Bb3, N.F4, N.Bb4, N.F4], mel: [[0, N.F5, 3], [3, N.G5, 1], [4, N.F5, 2], [6, N.D5, 2]] },
+      { bass: N.A1, pad: [N.A2, N.Cs3, N.E3], arp: [N.A3, N.E4, N.A4, N.E4], mel: [[0, N.E5, 6], [6, N.Cs5, 2]] },
+      { bass: N.G1, pad: [N.G2, N.Bb2, N.D3], arp: [N.G3, N.D4, N.G4, N.D4], mel: [[0, N.D5, 3], [3, N.G5, 1], [4, N.Bb5, 2], [6, N.A5, 2]] },
+      { bass: N.Bb1, pad: [N.Bb2, N.D3, N.F3], arp: [N.Bb3, N.F4, N.Bb4, N.F4], mel: [[0, N.F5, 4], [4, N.D5, 2], [6, N.F5, 2]] },
+      { bass: N.C2, pad: [N.C3, N.E3, N.G3], arp: [N.C4, N.G4, N.C5, N.G4], mel: [[0, N.G5, 3], [3, N.E5, 1], [4, N.C5, 2], [6, N.E5, 2]] },
+      { bass: N.A1, pad: [N.A2, N.Cs3, N.E3, N.G3], arp: [N.A3, N.E4, N.Cs5, N.E4], mel: [[0, N.A5, 6]] },
     ];
+    const PING = [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0];   // ニュースの信号音のリズム
+    // ファンファーレ(ループの前の2小節):[16分音符の位置, 和音, 長さ(16分)]
+    const INTRO = 32;
+    const FANFARE = [
+      [0, [N.D4, N.A4], 3], [4, [N.D4, N.A4], 1.5], [6, [N.F4, N.A4], 1.5], [8, [N.A4, N.D5], 7],
+      [16, [N.Bb3, N.D4, N.F4], 3.5], [20, [N.C4, N.E4, N.G4], 3.5], [24, [N.A3, N.Cs4, N.E4, N.A4], 8],
+    ];
+    function brass(f, t, dur, vol) {
+      const fl = { freq: 700, freqEnd: 1900, q: 1.2 };
+      tone(bus, { type: 'sawtooth', freq: f, t, dur, vol, attack: 0.03, filter: fl, detune: -7 });
+      tone(bus, { type: 'sawtooth', freq: f, t, dur, vol, attack: 0.03, filter: fl, detune: 7 });
+    }
+    function timpani(f, t, vol) { tone(bus, { type: 'sine', freq: f * 2, freqEnd: f * 0.9, t, dur: 0.45, vol, attack: 0.004 }); }
+
     function scheduleStep(i, t) {
-      const bar = BARS[Math.floor(i / 16) % BARS.length];
-      const s = i % 16;
-      // 持続音(小節の頭で、ゆっくりふくらむ和音)
-      if (s === 0) {
-        for (const f of bar.pad) {
-          tone(bgmGain, { type: 'sawtooth', freq: f, t, dur: S16 * 16, vol: 0.035, attack: S16 * 6, filter: { freq: 900, freqEnd: 500 } });
+      if (i < 0) {   // ファンファーレ
+        const k = i + INTRO;
+        FANFARE.forEach((n) => { if (n[0] === k) n[1].forEach((f) => brass(f, t, S16 * n[2], 0.06)); });
+        if (k === 0 || k === 8 || k === 16) timpani(N.D2, t, 0.4);
+        if (k >= 24) {   // ティンパニと小太鼓のロールで盛り上げる
+          timpani(N.A1, t, 0.14 + (k - 24) * 0.035);
+          noise(bus, { t, dur: 0.06, vol: 0.02 + (k - 24) * 0.008, type: 'bandpass', freq: 1900, q: 0.8 });
         }
+        return;
       }
-      // 低いパルス(8分)
-      if (s % 2 === 0) tone(bgmGain, { type: 'sawtooth', freq: bar.bass, t, dur: S16 * 1.6, vol: 0.22, filter: { freq: 420, freqEnd: 140, q: 4 } });
-      // 刻み(16分のアルペジオ。2拍目と4拍目の裏で少し強く)
-      const v = s % 4 === 3 ? 0.06 : 0.035;
-      tone(bgmGain, { type: 'triangle', freq: bar.arp[s % 4], t, dur: S16 * 0.9, vol: v });
-      // ティンパニ風(1拍目・3拍目)
-      if (s === 0 || s === 8) tone(bgmGain, { type: 'sine', freq: 110, freqEnd: 45, t, dur: 0.35, vol: 0.4 });
-      if (s === 14 && Math.floor(i / 16) % BARS.length === 3) tone(bgmGain, { type: 'sine', freq: 120, freqEnd: 50, t, dur: 0.2, vol: 0.3 });
-      // ハイハット(裏拍)
-      if (s % 4 === 2) noise(bgmGain, { t, dur: 0.05, vol: 0.08 });
+      const pass = Math.floor(i / 128);
+      const b = Math.floor(i / 16) % 8, bar = BARS[b], s = i % 16;
+      if (s === 0) {
+        // 持続音(ゆっくりふくらむ和音)
+        bar.pad.forEach((f) => {
+          tone(bus, { type: 'sawtooth', freq: f, t, dur: S16 * 16.5, vol: 0.02, attack: S16 * 5, filter: { freq: 750, freqEnd: 480 }, detune: 6 });
+          tone(bus, { type: 'sawtooth', freq: f, t, dur: S16 * 16.5, vol: 0.02, attack: S16 * 5, filter: { freq: 750, freqEnd: 480 }, detune: -6 });
+        });
+        timpani(bar.bass, t, 0.3);
+        if (b === 0) noise(bus, { t, dur: 1.4, vol: 0.05, type: 'highpass', freq: 5200 });   // シンバル
+      }
+      // 低音(4分。小節の終わりに経過音)
+      if (s % 4 === 0) tone(bus, { type: 'triangle', freq: bar.bass, t, dur: S16 * 3.4, vol: 0.24, filter: { freq: 320 } });
+      if (s === 14) tone(bus, { type: 'triangle', freq: bar.bass, t, dur: S16 * 1.6, vol: 0.14, filter: { freq: 320 } });
+      // 弦の刻み(8分)
+      if (s % 2 === 0) {
+        tone(bus, { type: 'sawtooth', freq: bar.arp[(s / 2) % 4], t, dur: S16 * 1.5, vol: s % 8 === 0 ? 0.05 : 0.034, attack: 0.012, filter: { freq: 1700, freqEnd: 800, q: 1.5 } });
+      }
+      // ニュースの信号音
+      if (PING[s]) tone(bus, { type: 'sine', freq: 1760, t, dur: 0.07, vol: 0.02 });
+      // 主旋律(1周おき)
+      if (pass % 2 === 1 && s % 2 === 0) {
+        bar.mel.forEach((m) => {
+          if (m[0] !== s / 2) return;
+          const dur = S16 * 2 * m[2] * 0.96;
+          tone(bus, { type: 'square', freq: m[1], t, dur, vol: 0.036, attack: 0.02, filter: { freq: 2100, freqEnd: 1300 } });
+          tone(bus, { type: 'triangle', freq: m[1] / 2, t, dur, vol: 0.03, attack: 0.02 });
+        });
+      }
+      // 刻みの金物と、節目のティンパニ・小太鼓
+      if (s % 4 === 2) noise(bus, { t, dur: 0.03, vol: 0.03, freq: 7000 });
+      if ((b === 3 || b === 7) && (s === 12 || s === 14)) timpani(bar.bass, t, 0.22);
+      if (b === 7 && s >= 8) noise(bus, { t, dur: 0.06, vol: 0.02 + (s - 8) * 0.007, type: 'bandpass', freq: 1900, q: 0.8 });
     }
     function startBgm() {
       if (!ensure() || timer) return;
-      bgmGain = ctx.createGain();
-      bgmGain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      bgmGain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 1.2);
-      bgmGain.connect(master);
-      step = 0;
-      nextTime = ctx.currentTime + 0.08;
+      const now = ctx.currentTime;
+      bus = ctx.createGain();
+      bus.gain.setValueAtTime(0.0001, now);
+      bus.gain.exponentialRampToValueAtTime(0.6, now + 0.25);
+      bus.connect(master);
+      // 少しだけ残響(やまびこ)をつける
+      const delay = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain();
+      delay.delayTime.value = S16 * 3;
+      fb.gain.value = 0.26;
+      wet.gain.value = 0.2;
+      bus.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(master);
+      bus._tail = [delay, fb, wet];
+      step = -INTRO;
+      nextTime = now + 0.08;
       timer = setInterval(() => {
         while (nextTime < ctx.currentTime + 0.15) {
           scheduleStep(step, nextTime);
@@ -166,170 +238,106 @@ Game.Effects.Title = (function () {
       if (!timer) return;
       clearInterval(timer);
       timer = null;
-      const g = bgmGain;
-      bgmGain = null;
+      const g = bus;
+      bus = null;
       if (g && ctx) {
         const t = ctx.currentTime;
         g.gain.cancelScheduledValues(t);
         g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), t);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
-        setTimeout(() => g.disconnect(), 800);
+        setTimeout(() => { g.disconnect(); g._tail.forEach((n) => n.disconnect()); }, 1500);
       }
     }
-    return { ensure, ready, decide, stamp, startBgm, stopBgm, playing: () => !!timer };
+    return { ensure, ready, decide, blip, stamp, startBgm, stopBgm, playing: () => !!timer };
   })();
 
-  // ---------------- 絵(SVG) ----------------
-  // 同じ並びになるよう、種つきの乱数で窓やビルを決める
-  function rng(seed) {
-    let t = seed >>> 0;
-    return () => {
-      t = (t + 0x6d2b79f5) | 0;
-      let r = Math.imul(t ^ (t >>> 15), t | 1);
-      r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
-      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  function sceneSvg() {
-    const R = rng(20261104);
-    const W = 1600;
-    const GROUND = 822;
-    const parts = [];
-
-    // 星
-    const stars = [];
-    for (let i = 0; i < 70; i++) {
-      const x = (R() * W).toFixed(0);
-      const y = (R() * 430).toFixed(0);
-      const r = (0.6 + R() * 1.3).toFixed(1);
-      stars.push(`<circle class="tl-star" cx="${x}" cy="${y}" r="${r}" style="--tw:${(2.5 + R() * 4).toFixed(2)}s;--twd:${(R() * 4).toFixed(2)}s"/>`);
-    }
-
-    // サーチライト(建物の後ろから2本)
-    const beam = (x, cls) => `
-      <g transform="translate(${x} ${GROUND - 120})"><g class="tl-beam ${cls}">
-        <polygon points="0,0 -46,-980 46,-980" fill="url(#tl-beam-grad)"/>
-      </g></g>`;
-
-    // 窓の明かり:d = 点灯の遅れ(通常の速さの秒)。blink = あとで点滅する
-    const windows = [];
-    const addWindow = (shape, d, blink) => {
-      const b = blink ? ` tl-blink" style="--d:${d.toFixed(2)}s;--bd:${(d + 1.2 + R() * 5).toFixed(2)}s;--bl:${(3 + R() * 6).toFixed(2)}s"` : `" style="--d:${d.toFixed(2)}s"`;
-      windows.push(shape.replace('CLASS', `class="tl-win${b}`));
-    };
-
-    // ビル群(左右)。中央から外に向かって順に点灯する
-    const buildings = [];
-    const city = (x0, x1, side) => {
-      let x = x0;
-      while (x < x1) {
-        const w = 40 + Math.floor(R() * 70);
-        const nearCenter = side === 'left' ? (x - x0) / (x1 - x0) : 1 - (x - x0) / (x1 - x0);
-        const h = 90 + Math.floor(R() * 260) - nearCenter * 40;
-        const top = GROUND - h;
-        const shade = R() < 0.5 ? '#0a1130' : '#0c143a';
-        buildings.push(`<rect x="${x}" y="${top}" width="${w}" height="${h}" fill="${shade}"/>`);
-        if (R() < 0.25) buildings.push(`<rect x="${x + w / 2 - 1}" y="${top - 26}" width="2" height="26" fill="${shade}"/><circle class="tl-aviation" cx="${x + w / 2}" cy="${top - 27}" r="2.5"/>`);
-        // 窓
-        for (let wy = top + 12; wy < GROUND - 14; wy += 16) {
-          for (let wx = x + 7; wx < x + w - 8; wx += 12) {
-            if (R() < 0.42) {
-              const dist = side === 'left' ? (x1 - wx) / (x1 - x0) : (wx - x0) / (x1 - x0);
-              const d = T.windows + 0.35 + dist * (T.windowsSpan - 0.35) + R() * 0.15;
-              addWindow(`<rect CLASS x="${wx}" y="${wy}" width="5" height="7"/>`, d, R() < 0.12);
-            }
-          }
-        }
-        x += w + Math.floor(R() * 8);
-      }
-    };
-    city(-10, 470, 'left');
-    city(1130, 1610, 'right');
-
-    // 架空の議事堂風の建物(左右対称。中央に塔、左右に翼)
-    const C = 800;
-    const sil = '#050918';
-    const diet = [
-      // 左右の翼と端の棟
-      `<rect x="480" y="${GROUND - 112}" width="640" height="112" fill="${sil}"/>`,
-      `<rect x="460" y="${GROUND - 136}" width="88" height="136" fill="${sil}"/>`,
-      `<rect x="1052" y="${GROUND - 136}" width="88" height="136" fill="${sil}"/>`,
-      // 中央棟と列柱の前廊
-      `<rect x="${C - 120}" y="${GROUND - 170}" width="240" height="170" fill="${sil}"/>`,
-      `<polygon points="${C - 140},${GROUND - 168} ${C},${GROUND - 214} ${C + 140},${GROUND - 168}" fill="${sil}"/>`,
-      // 塔(段を重ねた屋根)
-      `<rect x="${C - 54}" y="${GROUND - 300}" width="108" height="100" fill="${sil}"/>`,
-      `<rect x="${C - 44}" y="${GROUND - 330}" width="88" height="32" fill="${sil}"/>`,
-      `<rect x="${C - 34}" y="${GROUND - 354}" width="68" height="26" fill="${sil}"/>`,
-      `<polygon points="${C - 30},${GROUND - 352} ${C},${GROUND - 400} ${C + 30},${GROUND - 352}" fill="${sil}"/>`,
-      `<rect x="${C - 1.5}" y="${GROUND - 428}" width="3" height="30" fill="${sil}"/>`,
-      `<circle class="tl-aviation" cx="${C}" cy="${GROUND - 430}" r="3"/>`,
-    ];
-    // 議事堂の窓(点を並べる。中央から外へ順に点灯)
-    const dotRow = (xs, xe, y, gap) => {
-      for (let x = xs; x <= xe; x += gap) {
-        const d = T.windows + (Math.abs(x - C) / 340) * 0.35 + (GROUND - y) * 0.0006;
-        addWindow(`<circle CLASS cx="${x}" cy="${y}" r="2.6"/>`, d, false);
-      }
-    };
-    for (const y of [GROUND - 92, GROUND - 68, GROUND - 44]) {
-      dotRow(498, C - 132, y, 20);
-      dotRow(C + 132, 1102, y, 20);
-    }
-    for (const y of [GROUND - 118, GROUND - 92, GROUND - 68]) {
-      dotRow(474, 534, y, 20);
-      dotRow(1066, 1126, y, 20);
-    }
-    for (const y of [GROUND - 140, GROUND - 112, GROUND - 84, GROUND - 56]) dotRow(C - 100, C + 100, y, 20);
-    for (const y of [GROUND - 280, GROUND - 255, GROUND - 230]) dotRow(C - 38, C + 38, y, 19);
-
-    parts.push(`
-      <defs>
-        <linearGradient id="tl-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#02040f"/>
-          <stop offset=".45" stop-color="#071434"/>
-          <stop offset=".78" stop-color="#14265c"/>
-          <stop offset=".92" stop-color="#2b3c7a"/>
-          <stop offset="1" stop-color="#121c44"/>
-        </linearGradient>
-        <radialGradient id="tl-glow" cx=".5" cy="1" r=".6">
-          <stop offset="0" stop-color="#5a6fc0" stop-opacity=".45"/>
-          <stop offset="1" stop-color="#5a6fc0" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="tl-beam-grad" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="#e8f0ff" stop-opacity=".55"/>
-          <stop offset=".6" stop-color="#cfdcff" stop-opacity=".12"/>
-          <stop offset="1" stop-color="#cfdcff" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <rect width="${W}" height="900" fill="url(#tl-sky)"/>
-      <ellipse cx="${C}" cy="${GROUND}" rx="900" ry="300" fill="url(#tl-glow)"/>
-      <g class="tl-stars">${stars.join('')}</g>
-      <g class="tl-beams">${beam(C - 150, 'tl-beam-a')}${beam(C + 150, 'tl-beam-b')}</g>
-      <g class="tl-city">${buildings.join('')}</g>
-      <g class="tl-diet">${diet.join('')}</g>
-      <g class="tl-windows">${windows.join('')}</g>
-      <rect x="0" y="${GROUND}" width="${W}" height="${900 - GROUND}" fill="#03050f"/>
-      <rect x="0" y="${GROUND}" width="${W}" height="2" fill="#24346e" opacity=".6"/>`);
-    return `<svg class="tl-scene" viewBox="0 0 ${W} 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true">${parts.join('')}</svg>`;
-  }
-
-  // 朱色のハンコ(縁がかすれた丸)
-  function stampSvg() {
+  // ---------------- 絵 ----------------
+  // 情勢ボード:ゲームと同じ選挙区の地図(Game.Data.DISTRICT)を使う
+  function boardHtml() {
+    const D = Game.Data.DISTRICT, P = Game.Data.PARTIES;
+    const polys = D.regions.map((r) => `<polygon class="tl-rg" points="${r.pts}"/>`).join('');
+    const names = D.regions.map((r) => `<text class="tl-rg-name" x="${(r.x * D.viewBox[0] / 100).toFixed(0)}" y="${(r.y * D.viewBox[1] / 100 + 5).toFixed(0)}" text-anchor="middle">${r.name}</text>`).join('');
+    const rows = Object.keys(P).map((id) => `
+      <div class="tl-bar-row" data-p="${id}" style="--pc:${P[id].color}">
+        <span class="pchip">${P[id].short}</span><span class="tl-bar"><i></i></span><span class="tl-bar-num">0</span><span class="tl-called">当確</span>
+      </div>`).join('');
     return `
-      <svg class="tl-stamp-svg" viewBox="0 0 120 120" aria-hidden="true">
-        <defs>
-          <filter id="tl-rough" x="-10%" y="-10%" width="120%" height="120%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>
-            <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2"/>
-          </filter>
-        </defs>
-        <g filter="url(#tl-rough)" fill="none" stroke="#e0412b">
-          <circle cx="60" cy="60" r="54" stroke-width="7"/>
-          <circle cx="60" cy="60" r="44" stroke-width="2"/>
-          <text x="60" y="76" text-anchor="middle" fill="#e0412b" stroke="none" font-size="42" font-weight="800" class="tl-stamp-text">当選</text>
-        </g>
+      <div class="tl-board" aria-hidden="true">
+        <div class="tl-board-head"><span class="tl-live">LIVE</span><span>開票速報</span><span class="tl-board-seat">${D.name}</span><span class="tl-board-pct">開票率 <b>0</b>%</span></div>
+        <svg class="tl-map" viewBox="0 0 ${D.viewBox[0]} ${D.viewBox[1]}">
+          <defs><pattern id="tl-scan" width="6" height="6" patternUnits="userSpaceOnUse"><line x1="0" y1="1" x2="6" y2="1" class="scanline"/></pattern></defs>
+          <rect class="outland" x="0" y="0" width="${D.viewBox[0]}" height="${D.viewBox[1]}"/>
+          <polygon class="sea" points="${D.seaPts}"/><polygon points="${D.seaPts}" fill="url(#tl-scan)"/>
+          ${polys}<path class="rail" d="${D.rail}"/>${names}
+        </svg>
+        <div class="tl-bars">${rows}</div>
+      </div>`;
+  }
+  // ボードを動かす:地区に色がつき、票が積み上がり、当確が出て、また次の開票が始まる
+  function startBoard(stage, still, delayMs, onLight) {
+    const ids = Object.keys(Game.Data.PARTIES), P = Game.Data.PARTIES;
+    const regs = Array.from(stage.querySelectorAll('.tl-rg'));
+    const rows = ids.map((id) => stage.querySelector(`.tl-bar-row[data-p="${id}"]`));
+    const pctEl = stage.querySelector('.tl-board-pct b');
+    let tick = null, hold = null, cycle = 0;
+
+    function plan() {
+      const base = [96000, 84000, 41000].sort(() => Math.random() - 0.5);
+      const totals = {}, wob = {};
+      ids.forEach((id, i) => { totals[id] = Math.round(base[i] * (0.9 + Math.random() * 0.2)); wob[id] = (Math.random() - 0.5) * 0.5; });
+      const sum = ids.reduce((a, id) => a + totals[id], 0);
+      const winners = regs.map(() => { let x = Math.random() * sum; for (const id of ids) { x -= totals[id]; if (x < 0) return id; } return ids[0]; });
+      const order = regs.map((_, i) => i).sort(() => Math.random() - 0.5);
+      const th = [];
+      order.forEach((ri, k) => { th[ri] = 8 + k * (70 / regs.length) + Math.random() * 6; });
+      const leader = ids.slice().sort((a, b) => totals[b] - totals[a])[0];
+      return { totals, wob, winners, th, leader, max: totals[leader] };
+    }
+    function paint(p, pct, quiet) {
+      pctEl.textContent = Math.round(pct);
+      regs.forEach((el, i) => {
+        const on = pct >= p.th[i];
+        if (on && !el.classList.contains('lit')) {
+          el.style.setProperty('--c', P[p.winners[i]].color);
+          if (!quiet && onLight) onLight(i, cycle);
+        }
+        el.classList.toggle('lit', on);
+      });
+      rows.forEach((row, i) => {
+        const id = ids[i];
+        const v = p.totals[id] * (pct / 100) * (1 + p.wob[id] * (1 - pct / 100));
+        row.querySelector('i').style.width = (v / p.max * 96) + '%';
+        row.querySelector('.tl-bar-num').textContent = Math.round(v).toLocaleString('ja-JP');
+        row.classList.toggle('called', pct >= 100 && id === p.leader);
+      });
+    }
+    function run() {
+      cycle += 1;
+      const p = plan();
+      let pct = 0;
+      paint(p, 0, true);
+      tick = setInterval(() => {
+        pct = Math.min(100, pct + 1.2);
+        paint(p, pct, false);
+        if (pct >= 100) { clearInterval(tick); tick = null; hold = setTimeout(run, 4200); }
+      }, 90);
+    }
+    if (still) { paint(plan(), 100, true); return () => {}; }
+    hold = setTimeout(run, delayMs);
+    return () => { clearInterval(tick); clearTimeout(hold); };
+  }
+
+  // 当選の花(事務所のボードにつける赤いバラ)
+  function rosetteSvg() {
+    const petals = (n, cy, rx, ry, cls, off) => Array.from({ length: n }, (_, i) =>
+      `<ellipse class="${cls}" cx="60" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${(360 / n * i + off).toFixed(1)} 60 60)"/>`).join('');
+    return `
+      <svg class="tl-rosette" viewBox="0 0 120 156" aria-hidden="true">
+        <polygon class="tl-ros-d" points="44,84 28,152 48,138 60,154 62,90"/>
+        <polygon class="tl-ros-d" points="76,84 92,152 72,138 60,154 58,90"/>
+        ${petals(14, 24, 13, 24, 'tl-ros-a', 0)}${petals(11, 34, 11, 19, 'tl-ros-b', 16)}
+        <circle class="tl-ros-a" cx="60" cy="60" r="26"/><circle class="tl-ros-c" cx="60" cy="60" r="20"/>
+        <text class="tl-ros-t" x="60" y="71" text-anchor="middle">当</text>
       </svg>`;
   }
 
@@ -351,40 +359,38 @@ Game.Effects.Title = (function () {
       { id: 'settings', label: '設定' },
     ].filter(Boolean);
     const tickerText = TICKER.map((t) => `<span>${esc(t)}</span>`).join('<i>◆</i>');
+    const d = (sec) => `style="--d:${sec.toFixed(2)}s"`;
 
     app.innerHTML = `
       <div class="tl-stage ${reduced ? 'tl-reduced' : ''}" style="--s:${s}">
-        <div class="tl-frame">
-          ${sceneSvg()}
-          <div class="tl-top">
-            <p class="tl-note">${esc(opts.note || '')}</p>
-            <div class="tl-top-actions">
-              <span class="tl-sound-hint" ${Audio.playing() || !settings.bgm ? 'hidden' : ''}>♪ クリックかキーで音が鳴ります</span>
-            </div>
-          </div>
-          <div class="tl-logo-wrap">
-            <h1 class="tl-logo"><span class="tl-logo-text">当確!</span><span class="tl-stamp">${stampSvg()}</span></h1>
-            <p class="tl-sub"><span>新人候補から総理へ</span></p>
-          </div>
+        <div class="tl-bg"><div class="tl-floor"></div><div class="tl-sweep"></div></div>
+        ${boardHtml()}
+        <div class="tl-main">
+          <p class="tl-kicker" ${d(T.kicker)}>衆議院総選挙 開票特番</p>
+          <h1 class="tl-logo"><span class="tl-logo-text" ${d(T.logo)}>当確<i>!</i></span><span class="tl-pin" ${d(T.pin)}>${rosetteSvg()}</span></h1>
+          <p class="tl-sub"><span ${d(T.sub)}>新人候補から総理へ</span></p>
           <nav class="tl-menu" aria-label="メニュー">
-            ${buttons.map((b, i) => `<button class="tl-btn" data-act="${b.id}" ${b.nav ? 'data-nav' : ''} style="--d:${(T.menu + i * T.menuStep).toFixed(2)}s">${esc(b.label)}</button>`).join('')}
+            ${buttons.map((b, i) => `<button type="button" class="tl-btn" data-act="${b.id}" ${b.nav ? 'data-nav' : ''} ${d(T.menu + i * T.menuStep)}>${esc(b.label)}</button>`).join('')}
           </nav>
-          <div class="tl-ticker" role="marquee" aria-label="ニュース">
-            <span class="tl-ticker-label">速報</span>
-            <div class="tl-ticker-window"><div class="tl-ticker-track">${tickerText}<i>◆</i>${tickerText}<i>◆</i></div></div>
-          </div>
-          <div class="tl-settings" hidden></div>
         </div>
+        <p class="tl-note">${esc(opts.note || '')}</p>
+        <span class="tl-sound-hint" ${Audio.playing() || !settings.bgm ? 'hidden' : ''}>♪ クリックかキーで音が鳴ります</span>
+        <div class="tl-ticker" role="marquee" aria-label="ニュース">
+          <span class="tl-ticker-label">速報</span>
+          <div class="tl-ticker-window"><div class="tl-ticker-track">${tickerText}<i>◆</i>${tickerText}<i>◆</i></div></div>
+        </div>
+        <div class="tl-flash" ${d(T.pin)}></div>
+        <div class="tl-settings" hidden></div>
       </div>`;
 
     const stage = app.querySelector('.tl-stage');
     const timers = [];
-    const sfx = (fn) => { if (loadSettings().sfx) fn(); };
+    const sfx = (fn, arg) => { if (loadSettings().sfx) fn(arg); };
 
-    // ハンコの「ドン」:演出のときだけ(最初のクリックより前は音が出せないので鳴らない)
-    if (first && s > 0) {
-      timers.push(setTimeout(() => sfx(Audio.stamp), T.stamp * s * 1000 + 60));
-    }
+    // 花をつける「ドン」:演出のときだけ(最初のクリックより前は音が出せないので鳴らない)
+    if (first && s > 0) timers.push(setTimeout(() => sfx(Audio.stamp), T.pin * s * 1000 + 60));
+    // 情勢ボード。最初の開票のあいだだけ、地区に色がつくたびに小さな音
+    const stopBoard = startBoard(stage, reduced, first ? T.lights * s * 1000 : 300, (i, cycle) => { if (cycle === 1) sfx(Audio.blip, i); });
 
     // 最初のクリックかキー入力で BGM(画面を移るボタンを押したときは鳴らさない)
     const hint = stage.querySelector('.tl-sound-hint');
@@ -400,9 +406,10 @@ Game.Effects.Title = (function () {
     stage.addEventListener('pointerdown', onGesture);
     window.addEventListener('keydown', onGesture);
 
-    // 画面を離れるとき:BGM を止めて後始末
+    // 画面を離れるとき:BGM とボードを止めて後始末
     cleanup = () => {
       timers.forEach(clearTimeout);
+      stopBoard();
       stage.removeEventListener('pointerdown', onGesture);
       window.removeEventListener('keydown', onGesture);
       Audio.stopBgm();
@@ -427,7 +434,7 @@ Game.Effects.Title = (function () {
     const panel = stage.querySelector('.tl-settings');
     const draw = () => {
       const st = loadSettings();
-      const opt = (key, val, label) => `<button class="tl-opt ${st[key] === val ? 'on' : ''}" data-key="${key}" data-val="${String(val)}" aria-pressed="${st[key] === val}">${label}</button>`;
+      const opt = (key, val, label) => `<button type="button" class="tl-opt ${st[key] === val ? 'on' : ''}" data-key="${key}" data-val="${String(val)}" aria-pressed="${st[key] === val}">${label}</button>`;
       panel.innerHTML = `
         <div class="tl-settings-box" role="dialog" aria-label="設定">
           <h2 class="tl-settings-title">設定</h2>
@@ -435,7 +442,7 @@ Game.Effects.Title = (function () {
           ${reducedMotion() ? '<p class="tl-set-note">端末の「視差効果を減らす」設定がオンのため、演出は流さずに表示します。</p>' : '<p class="tl-set-note">次にタイトルを開いたときから変わります。</p>'}
           <div class="tl-set-row"><span>BGM</span><div>${opt('bgm', true, 'オン')}${opt('bgm', false, 'オフ')}</div></div>
           <div class="tl-set-row"><span>効果音</span><div>${opt('sfx', true, 'オン')}${opt('sfx', false, 'オフ')}</div></div>
-          <div class="tl-set-actions"><button class="tl-btn tl-btn-close" data-close>閉じる</button></div>
+          <div class="tl-set-actions"><button type="button" class="btn btn-primary" data-close>閉じる</button></div>
         </div>`;
       panel.querySelectorAll('[data-key]').forEach((b) => {
         b.onclick = () => {

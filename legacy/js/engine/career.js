@@ -520,6 +520,11 @@ Game.Career = (function () {
       }
     }
 
+    // 約束を果たすために使えた時間を数える(議員でいるあいだだけ。解散が早かったときの加減に使う)
+    if (c.status === 'member' && state.support) {
+      for (const p of state.support.promises) if (p.status === 'open') p.turns = (p.turns || 0) + 1;
+    }
+
     // 解散の判定
     c.turn.elapsed++;
     const full = c.turn.elapsed >= T().termTurns;
@@ -644,6 +649,10 @@ Game.Career = (function () {
 
   // 解散のときに、果たせなかった約束を「破った」にする
   // 浪人中は国会で動けないので、約束はそのまま持ち越す(破ったことにはしない)
+  // 約束してからの時間(議員でいたターン数)で加減する:
+  //   promiseGraceTurns 未満 … 果たす時間がなかった。持ち越し(関係度は変わらず、推薦も残る)
+  //   promiseFullTurns 未満  … 関係度の下がりは小さく(promiseBrokenLight から promiseBroken へ時間に比例)、推薦は残る
+  //   それ以上               … これまでどおり(promiseBroken、今回の推薦は見送り)
   function settlePromises(state, lines) {
     const sup = state.support;
     if (!sup) return;
@@ -652,13 +661,27 @@ Game.Career = (function () {
       return;
     }
     sup.banned = sup.banned || [];
+    const grace = T().promiseGraceTurns, fullTurns = T().promiseFullTurns;
     for (const p of sup.promises) {
       if (p.status !== 'open') continue;
+      const name = `${ORGS()[p.org].name}との約束「${Game.Data.POLICIES[p.policy].name}」`;
+      const had = p.turns == null ? state.career.turn.elapsed : p.turns;   // 古いセーブは任期の経過で代える
+      if (had < grace) {
+        lines.push(`${name}は、解散が早く、果たす時間がなかった。事情をくんでもらい、約束は次の任期に持ち越す。`);
+        continue;
+      }
       p.status = 'broken';
+      state.career.promiseStats.broken++;
+      if (had < fullTurns) {
+        const k = (had - grace) / (fullTurns - grace);
+        const drop = Math.round(T().promiseBrokenLight + (T().promiseBroken - T().promiseBrokenLight) * k);
+        sup.relations[p.org] = clamp(sup.relations[p.org] + drop, 0, 100);
+        lines.push(`${name}を果たせなかった。任期の途中の解散だったため、関係度の下がりは小さくすんだ(${drop})。推薦は見送られない。`);
+        continue;
+      }
       sup.relations[p.org] = clamp(sup.relations[p.org] + T().promiseBroken, 0, 100);
       if (!sup.banned.includes(p.org)) sup.banned.push(p.org);
-      state.career.promiseStats.broken++;
-      lines.push(`${ORGS()[p.org].name}との約束「${Game.Data.POLICIES[p.policy].name}」を果たせなかった。今回の選挙では推薦を見送られる。`);
+      lines.push(`${name}を果たせなかった。今回の選挙では推薦を見送られる。`);
     }
   }
 
