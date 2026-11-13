@@ -394,7 +394,11 @@ Game.Vote = (function () {
       if (b.id === Game.Data.HOME_BLOCK) for (const lp in leaders) if (runs[lp]) runs[lp].add(leaders[lp]);   // 党首本人の選挙区(北陽3区など)
       const smdSeats = {};
       parties.forEach((p) => (smdSeats[p] = 0));
-      for (let i = 0; i < b.smd; i++) {
+      // 中選挙区制(史実シナリオ):1区に数人が当選。党の候補の数を上限に、得票の多い順(ドント式に近い)で配る
+      if (Game.Data.ELECTION_SYSTEM === 'mmd') {
+        mmdBlock(camp, b, parties, share, nat, me, isLeaderSeat, lognorm, smdSeats, districts, prevTotal);
+      }
+      for (let i = 0; Game.Data.ELECTION_SYSTEM !== 'mmd' && i < b.smd; i++) {
         const local = {};
         for (const p of parties) {
           if (!runs[p].has(i)) continue;
@@ -460,6 +464,53 @@ Game.Vote = (function () {
     };
     el.timeline = buildNationalTimeline(camp, el);
     return el;
+  }
+
+  // 中選挙区(1区の定数 M 前後)。nat.coverage はブロックの候補者の数
+  function mmdBlock(camp, b, parties, share, nat, me, isLeaderSeat, lognorm, smdSeats, districts, prevTotal) {
+    const N = Bal().national;
+    const M = Bal().scenario.mmdMagnitude;
+    const nd = Math.max(1, Math.round(b.smd / M));
+    const mag = Array.from({ length: nd }, (_, k) => Math.floor(b.smd / nd) + (k < b.smd % nd ? 1 : 0));
+    // 候補者を区に配る(大きい区から順に、1区に定数まで)
+    const cand = {};
+    for (const p of parties) {
+      cand[p] = mag.map(() => 0);
+      let n = Math.min(b.smd, nat.coverage[p][b.id] || 0);
+      const start = Math.floor(rand(camp) * nd);
+      for (let r = 0; n > 0 && r < M + 2; r++) {
+        for (let j = 0; j < nd && n > 0; j++) {
+          const k = (start + j) % nd;
+          if (cand[p][k] < mag[k]) { cand[p][k]++; n--; }
+        }
+      }
+    }
+    for (const lp of parties) if (isLeaderSeat(lp, b.id, 0) && cand[lp][0] < 1) cand[lp][0] = 1;   // 党首本人
+    for (let k = 0; k < nd; k++) {
+      const local = {};
+      for (const p of parties) {
+        if (!cand[p][k]) continue;
+        const inc = 1 + N.incumbencyBonus * ((nat.prev[p] || 0) / prevTotal) * 4;
+        // 候補が多いほど票は伸びるが、割れるので1人あたりの効きは落ちる
+        local[p] = share[p] * lognorm(N.districtNoise) * inc * Math.pow(cand[p][k] / mag[k], 0.35);
+        if (isLeaderSeat(p, b.id, k)) local[p] *= N.leaderDistrictBonus;
+      }
+      if (!Object.keys(local).length) for (const p of parties) local[p] = share[p];
+      const total = Object.values(local).reduce((s, v) => s + v, 0) || 1;
+      // 党の票を候補の数で割った商の大きい順に当選(候補の数が上限。ドント式と同じ)
+      // 最後の当選者と次点の差を「差」とする(開票特番の当確の順番)
+      const quot = [];
+      for (const p in local) for (let j = 1; j <= (cand[p][k] || mag[k]); j++) quot.push([p, local[p] / j]);
+      quot.sort((x, y) => y[1] - x[1]);
+      const loserQ = quot[mag[k]] ? quot[mag[k]][1] : 0;
+      let leaderMarked = false;
+      for (const [p, q] of quot.slice(0, mag[k])) {
+        smdSeats[p]++;
+        const isLeader = !leaderMarked && p === me && isLeaderSeat(p, b.id, k);
+        if (isLeader) leaderMarked = true;
+        districts.push({ block: b.id, idx: k, winner: p, second: null, margin: (q - loserQ) / total, leader: isLeader, playerRan: !!local[me] });
+      }
+    }
   }
 
   // 候補者調整:選挙区での票の譲り合い

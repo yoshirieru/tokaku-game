@@ -30,7 +30,7 @@ Game.Leader = (function () {
     policy:  { name: '政策協議', icon: '📘', target: 'policy', desc: '党の政策として具体化を進める。団体との約束が前に進む。' },
     fund:    { name: '資金集め', icon: '💴', target: 'none', desc: '党の資金を集める。' },
     merge:   { name: '合流・合併の交渉', icon: '🤝', target: 'merge', desc: 'ほかの党に合流を持ちかける。議席は増えるが、党内の結束は下がる。' },
-    successor: { name: '後継を指名して退く', icon: '🎌', target: 'none', desc: '党首を退いてゲームを終える(エンディング)。首相のうちに支持が高ければ「名宰相」、レガシー評価にボーナス。' },
+    successor: { name: '後継を指名して退く', icon: '🎌', target: 'none', desc: '党首を退く。政界を引退する(エンディング)か、一議員として残るかを選ぶ。首相のうちに支持が高いまま引退すれば「名宰相」、レガシー評価にボーナス。' },
   };
 
   const SESSIONS = () => Game.Data.SESSIONS;
@@ -83,18 +83,119 @@ Game.Leader = (function () {
     }
   }
 
+  // ---------------- 党首を退いて一議員に戻る(M18) ----------------
+  // 党首を辞める理由(後継指名・政権交代・党首交代・退陣など)のあと、引退せずに議員任期へ戻る。
+  // 既存の党の党首:同じ党の平議員に。新党の党首:党を後継に託し、既存の党(target)へ移る
+  function stepDownInfo(state) {
+    const c = state.career;
+    if (!state.leader || state.leader.mode !== 'leader') return { ok: false, reason: '党首のときだけ' };
+    if (state.scenario) return { ok: false, reason: '史実シナリオでは議員任期に戻らない' };
+    const custom = Game.Career.isCustom(state);
+    const targets = custom ? Game.NewParty.migrateTargets(state) : [];
+    if (custom && !targets.length) return { ok: false, reason: '移れる党が残っていない' };
+    return { ok: true, custom, targets };
+  }
+  function successorName(state, party) {
+    const used = new Set([state.player.name, state.world.pmName]);
+    const r = (Game.Data.LEADER_RIVALS[party] || []).find((x) => !used.has(x.name));
+    return r ? r.name : `${partyInfo(party).name}の新党首`;
+  }
+  function stepDown(state, reason, target) {
+    const info = stepDownInfo(state);
+    if (!info.ok) return null;
+    const ld = state.leader;
+    const w = state.world;
+    const c = state.career;
+    const g = state.gov;
+    const me = ld.party;
+    const s = Game.Legacy.stats(state);
+    const wasPM = !!(g && g.role === 'pm');
+    s.steppedDown = (s.steppedDown || 0) + 1;
+    if (wasPM) s.wasPM = true;
+    // 後継の党首。首相だったなら、同じ党の後継が首相に就く
+    const heir = successorName(state, me);
+    (w.leaderNames = w.leaderNames || {})[me] = heir;
+    if (g) {
+      if (g.pmParty === me) { g.pmName = heir; g.pmSince = w.year; }
+      g.pmTurnsPast = (g.pmTurnsPast || 0) + (g.pmTurns || 0);   // 首相の在任はレガシー評価のために取っておく
+      g.pmTurns = 0;
+      g.role = 'none';
+      g.formation = null;
+      g.invite = null;
+    }
+    // 合流などで上がった党の支持率は、党首が代わっても党に残す
+    if (ld.supportBonus && w.parties[me]) w.parties[me].supportBonus = (w.parties[me].supportBonus || 0) + ld.supportBonus;
+    // 衆議院の任期の経過を議員任期へ戻す
+    c.turn = { elapsed: w.termElapsed || 0, actionsLeft: Game.Balance.term.actionsPerTurn, mods: {} };
+    delete w.termElapsed;
+    // 自分の選挙区で議席を失っていた(新党の党首は議席がなくても党を率いる)なら浪人に戻る
+    const seated = c.status === 'member' && c.wins > 0;
+    c.status = seated ? 'member' : 'ronin';
+    c.postLevel = 0;
+    c.pending = null;
+    c.migratedPenalty = false;
+    const lines = [];
+    const reasonText = {
+      successor: '後継に党首の座を譲った。', lostPower: '政権を失った責任をとって党首を辞めた。', replaced: '党首の座を退いた。',
+      forcedResign: '首相を辞し、党首も退いた。', noConfidence: '内閣総辞職とともに党首を退いた。',
+    }[reason] || '党首を退いた。';
+    lines.push(reasonText + `後継は${heir}。`);
+    if (info.custom) {
+      // 新党は後継に託し、既存の党へ移る(元の党からの刺客は出ない。新党は議席を持ったまま残る)
+      const to = info.targets.includes(target) ? target : info.targets[0];
+      state.player.party = to;
+      if (seated) {
+        if (w.parties[me]) w.parties[me].seats = Math.max(0, w.parties[me].seats - 1);
+        if (!w.parties[to]) w.parties[to] = { seats: 0 };
+        w.parties[to].seats += 1;
+      }
+      if (state.party) state.party.mps = Math.max(0, (w.parties[me] || { seats: 0 }).seats);
+      c.partyEval = 0;
+      c.migratedPenalty = true;
+      c.leftParty = me;
+      if (state.support) state.support.endorsedLast = [];
+      c.rivals = c.rivals.filter((r) => r.party !== to);
+      lines.push(`自ら立ち上げた${partyInfo(me).name}を後継に託し、${partyInfo(to).name}に移った。${seated ? '一議員として出直す。' : '議席はない。次の選挙で国会をめざす。'}`);
+    } else {
+      lines.push(seated ? `これからは${partyInfo(me).name}の一議員(${Game.Career.postName(state, 0)})として国会に立つ。` : `議席はない。${partyInfo(me).name}の前職として、次の選挙で国会をめざす。`);
+    }
+    // 対立候補:合流などで消えた党の候補は出ない
+    c.rivals = c.rivals.filter((r) => r.party !== state.player.party && (w.parties[r.party] || (Game.Data.PARTIES[r.party] && Game.Data.PARTIES[r.party].real)));
+    if (!c.rivals.length) {
+      const other = Object.keys(w.parties).filter((id) => id !== 'indep' && id !== state.player.party && w.parties[id].seats > 0 && Game.Data.PARTIES[id] && Game.Data.RIVALS[id])
+        .sort((a, b) => w.parties[b].seats - w.parties[a].seats)[0];
+      if (other) c.rivals = [{ party: other, name: Game.Data.RIVALS[other].name, role: 'newcomer', wins: 0, home: null }];
+    }
+    if (g) {
+      Game.Gov.syncRuling(state);
+      lines.push(`政権は${partyInfo(g.pmParty).name}(${g.pmName}首相)。${Game.Career.isRuling(state) || g.coalition.includes(state.player.party) ? 'あなたの党は与党だ。' : 'あなたの党は野党だ。'}`);
+    }
+    lines.push('党首選の年に推薦人がそろえば、また党首をめざせる。離党・移籍もできる。');
+    state.leader = null;
+    state.pendingEnding = null;
+    c.report = { title: '一議員として', lines, event: null };
+    Game.Career.addLogPublic(state, `党首を退き、一議員に戻った(後継は${heir})。`, 'news');
+    state.screen = 'term';
+    return { lines };
+  }
+
   // ---------------- 党首モードを始める ----------------
   function init(state) {
     if (state.leader && state.leader.mode === 'leader') return state.leader;
     const w = state.world;
     const custom = Game.Career.isCustom(state);
     const party = state.player.party;
-    w.parties = {};
-    for (const id in Game.Data.PARTY_SEATS) w.parties[id] = { seats: Game.Data.PARTY_SEATS[id] };
-    if (custom) {
-      const mps = state.party.mps;
-      w.parties[party] = { seats: mps };
-      w.parties.indep.seats = Math.max(0, w.parties.indep.seats - mps);
+    // 党首を退いて議員任期に戻っていたなら(M18)、衆議院の勢力図はそのまま引き継ぐ
+    if (!w.parties) {
+      w.parties = {};
+      for (const id in Game.Data.PARTY_SEATS) w.parties[id] = { seats: Game.Data.PARTY_SEATS[id] };
+      if (custom) {
+        const mps = state.party.mps;
+        w.parties[party] = { seats: mps };
+        w.parties.indep.seats = Math.max(0, w.parties.indep.seats - mps);
+      }
+    } else if (!w.parties[party]) {
+      w.parties[party] = { seats: custom ? state.party.mps : 0 };
     }
     w.partyShift = w.partyShift || {};
     // 衆議院の任期の経過は議員任期から引き継ぐ
@@ -110,6 +211,9 @@ Game.Leader = (function () {
       merges: [], cooldowns: {}, pending: null, report: null, log: [],
     };
     const ld = state.leader;
+    // 党首でないあいだに勢力図に預けていた支持率の上乗せ(合流の効果など)を党首に戻す
+    if (w.parties[party].supportBonus) { ld.supportBonus = w.parties[party].supportBonus; delete w.parties[party].supportBonus; }
+    if (w.leaderNames) delete w.leaderNames[party];
     const p = partyInfo(party);
     const lines = [];
     if (custom) {
@@ -131,6 +235,7 @@ Game.Leader = (function () {
     if (Game.Gov) {
       const g = Game.Gov.ensure(state);   // いまの政権と参議院
       if (g.role === 'pm') lines.splice(lines.length - 1, 1, '首相として政権を運営する。重要法案、予算、外交、そして解散権。参院選で負ければ「ねじれ」になる。');
+      else if (g.role === 'partner') lines.splice(lines.length - 1, 1, `政権は${partyInfo(g.pmParty).name}(${g.pmName}首相)。連立与党として政権を支える。`);
       else lines.splice(lines.length - 1, 1, `政権は${partyInfo(g.pmParty).name}(${g.pmName}首相)。野党として追及し、政権交代をめざす。`);
     }
     return ld;
@@ -141,7 +246,8 @@ Game.Leader = (function () {
     const ld = state.leader;
     const c = state.career;
     const A = LB().actions;
-    return Object.keys(ACTIONS).map((id) => {
+    const noSns = Game.Scenario.noSns(state);   // SNSのない時代の史実シナリオ
+    return Object.keys(ACTIONS).filter((id) => !(noSns && id === 'sns')).map((id) => {
       const a = Object.assign({ id }, ACTIONS[id]);
       a.money = A[id].money || 0;
       let enabled = ld.actionsLeft > 0 && !ld.pending;
@@ -327,7 +433,7 @@ Game.Leader = (function () {
         title: full ? '任期満了' : '衆議院解散',
         lines: full
           ? ['衆議院議員の任期が満了した。総選挙が行われる。']
-          : [`${Game.Career.pmName(state)}首相が衆議院を解散した。総選挙が始まる。`, '全国11ブロック、465議席をめぐる戦いだ。'],
+          : [`${Game.Career.pmName(state)}首相が衆議院を解散した。総選挙が始まる。`, `全国11ブロック、${Game.Data.HOUSE_SEATS}議席をめぐる戦いだ。`],
         event: null,
         dissolution: true,
       };
@@ -344,7 +450,7 @@ Game.Leader = (function () {
     let ev = null;
     if (ld.cohesion < L.split.threshold) ld.lowTurns++;
     else ld.lowTurns = 0;
-    if (ld.lowTurns >= L.split.turns && rand(state) < L.split.chance) {
+    if (!ev && ld.lowTurns >= L.split.turns && rand(state) < L.split.chance) {
       ev = split(state);
     } else if (ld.lowTurns >= 1) {
       lines.push(`党内の結束が危険な水準(${Math.round(ld.cohesion)})。このままだと分裂しかねない。`);
@@ -359,14 +465,19 @@ Game.Leader = (function () {
       ev = Game.Gov.turn(state, lines);
       if (ev && ev.choices) ld.pending = ev;
     }
+    // 史実シナリオの出来事(scenario.js)。選ぶ出来事は、ほかの出来事が出ているターンには次に回す
+    if (state.scenario) {
+      const sev = Game.Scenario.turn(state, lines, !!ev);
+      if (sev && !ev) { ev = sev; if (ev.choices) ld.pending = ev; }
+    }
     // SNSの炎上(前のターンの切り抜き・投稿)に対応する
     if (!ev && sns.queue.length) {
       ev = Game.Sns.surface(sns, { money: state.career.money, unit: 'ターン' });
       ld.pending = ev;
       addLog(state, `🔥 ${ev.title}`, 'news');
     }
-    // 補欠選挙・地方選挙(local.js)。党首の求心力が問われる
-    if (!ev) {
+    // 補欠選挙・地方選挙(local.js)。党首の求心力が問われる(史実シナリオでは起きない)
+    if (!ev && !state.scenario) {
       const lev = Game.Local.roll(state);
       if (lev) { ev = lev; ld.pending = ev; }
     }
@@ -438,7 +549,7 @@ Game.Leader = (function () {
     const ld = state.leader;
     const E = LB().events;
     if (rand(state) >= LB().eventChance) return null;
-    const keys = Object.keys(E).filter((k) => !(k === 'orgDemand' && !openPromises(state).length));
+    const keys = Object.keys(E).filter((k) => !(k === 'orgDemand' && !openPromises(state).length) && !(k === 'snsHoax' && Game.Scenario.noSns(state)));
     const total = keys.reduce((s, k) => s + E[k].weight, 0);
     let r = rand(state) * total;
     let kind = keys[keys.length - 1];
@@ -488,6 +599,14 @@ Game.Leader = (function () {
     if (!ch || ch.disabled) return null;
     const I = LB().infighting;
     let text = '';
+    if (ev.id.startsWith('sc_')) {
+      // 史実シナリオの出来事(scenario.js)
+      text = Game.Scenario.resolve(state, ev, choice);
+      ld.pending = null;
+      if (ld.report && ld.report.event === ev) ld.report.result = text;
+      addLog(state, `📨 ${text}`, 'news');
+      return text;
+    }
     if (ev.id.startsWith('gov')) {
       // 政権運営のイベント(government.js)
       const res = Game.Gov.resolve(state, ev, choice);
@@ -540,7 +659,7 @@ Game.Leader = (function () {
   }
 
   return {
-    ACTIONS, init, applyOverrides, partyInfo, seatsOf, supportOf, dissolveChance,
+    ACTIONS, init, applyOverrides, partyInfo, seatsOf, supportOf, dissolveChance, stepDown, stepDownInfo,
     availableActions, policyTargets, doAction, spendAction, endTurn, resolveEvent, addLog, when,
   };
 })();

@@ -32,6 +32,8 @@ window.Game = window.Game || {};
   function newState(playerName, partyId, pledges, opts) {
     opts = opts || {};
     const seat = Game.Data.applySeat(opts.seat).id;
+    Game.Data.applyRuling(null);
+    Game.Scenario.apply(null);
     const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
     return {
       version: SAVE_VERSION,
@@ -104,6 +106,8 @@ window.Game = window.Game || {};
   Game.startNewParty = function (playerName, opts, mode) {
     mode = mode || {};
     const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+    Game.Data.applyRuling(null);
+    Game.Scenario.apply(null);
     const st = {
       version: SAVE_VERSION,
       screen: 'term',
@@ -122,9 +126,23 @@ window.Game = window.Game || {};
     Game.render();
   };
 
+  // 史実シナリオ(M19):scenario.js が政党・制度・政権を組み立て、党首として始める
+  // opts: { id, role(index), name }
+  Game.startScenario = function (opts) {
+    const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+    const st = Game.Scenario.start(Object.assign({ seed }, opts));
+    st.version = SAVE_VERSION;
+    Game.state = st;
+    Game.screen = null;
+    Game.save();
+    Game.render();
+  };
+
   // 新党は実行時に政党一覧へ登録するので、セーブを読み込んだら登録し直す
   function restoreRuntime(s) {
     Game.Data.applySeat(s.seat);   // 選んだ選挙区(古いセーブは北陽3区)
+    Game.Scenario.apply(s);   // 史実シナリオの政党と制度(シナリオでなければ元に戻す)
+    Game.Data.applyRuling(s.world && s.world.ruling);   // 議員任期の与党(党首を退いたあとは政権の党)
     if (s.party && s.party.custom) Game.NewParty.register(s.party);
     if (s.versus && s.versus.customParty) Game.NewParty.register(s.versus.customParty);   // 対戦モードの新党
     if (s.world && s.world.parties) Game.Leader.applyOverrides(s);
@@ -145,6 +163,8 @@ window.Game = window.Game || {};
   Game.startVersus = function (opts) {
     const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
     Game.Data.applySeat(null);   // 対戦モードの党首の地元は北陽3区(既定の選挙区)
+    Game.Data.applyRuling(null);
+    Game.Scenario.apply(null);
     Game.state = Game.Versus.start(Object.assign({ seed }, opts));
     Game.state.version = SAVE_VERSION;
     Game.screen = null;
@@ -215,6 +235,7 @@ window.Game = window.Game || {};
   // ---------------- 党首モードの総選挙 ----------------
   Game.startNationalPrep = function () {
     const st = Game.state;
+    Game.Scenario.beforeElection(st);   // 史実シナリオ:選挙制度が変わっていれば差し込む
     st.nationalPrep = Game.National.defaultPrep(st);
     st.screen = 'nationalPrep';
     Game.clearUndo();
@@ -338,7 +359,7 @@ window.Game = window.Game || {};
   };
   // エンディングのとき1回だけ記録する(エンディング画面を読み直しても二重にならない)
   Game.recordHall = function (st) {
-    if (!st.ending || st.ending.hall) return;
+    if (!st.ending || st.ending.hall || st.scenario) return;   // 史実シナリオは殿堂に記録しない
     const r = Game.Hall.record(Game.loadHall(), st);
     Game.saveHall(r.hall);
     st.ending.hall = { newly: r.newly, rank: r.rank };
@@ -361,8 +382,9 @@ window.Game = window.Game || {};
     const modal = document.getElementById('modal-root');
     modal.innerHTML = '';
     if (Game.UI.stopCountTimer) Game.UI.stopCountTimer();
-    if (!Game.state || Game.screen === 'title' || Game.screen === 'setup' || Game.screen === 'versusSetup' || Game.screen === 'slots' || Game.screen === 'hall') {
+    if (!Game.state || Game.screen === 'title' || Game.screen === 'setup' || Game.screen === 'versusSetup' || Game.screen === 'slots' || Game.screen === 'hall' || Game.screen === 'scenarioSelect') {
       if (Game.screen === 'setup') Game.UI.renderSetup(app);
+      else if (Game.screen === 'scenarioSelect') Game.UI.renderScenarioSelect(app);   // 史実シナリオ(scenario-view.js)
       else if (Game.screen === 'hall') Game.UI.renderHall(app);   // 殿堂(hall-view.js)
       else if (Game.screen === 'versusSetup') Game.UI.renderVersusSetup(app);
       else if (Game.screen === 'slots') Game.UI.renderSlots(app);

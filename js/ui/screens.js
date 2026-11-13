@@ -14,10 +14,11 @@ Game.UI = Game.UI || {};
     };
     Game.Effects.Title.render(app, {
       hasSave: Game.hasSave(),
-      note: `登場する政党・政治家・選挙区はすべて架空です。ただし宗教団体と、その団体が支持母体の政党(公明党、幸福実現党)は実名で、公開されている事実だけで描いています(${Game.Data.ORG_INFO_DATE})。`,
+      note: `登場する政党・政治家・選挙区はすべて架空です。ただし宗教団体と、その団体が支持母体の政党(公明党、幸福実現党)は実名で、公開されている事実だけで描いています(${Game.Data.ORG_INFO_DATE})。史実シナリオだけは実在の政党・政治家が実名で登場します。`,
       onNew: () => toSlots('new'),
       onContinue: () => toSlots('load'),
       onVersus: () => toSlots('versus'),
+      onScenario: () => toSlots('scenario'),   // 史実シナリオ(scenario-view.js)
       onHall: () => Game.showScreen('hall'),   // 殿堂(hall-view.js)
       onOrgs: () => UI.openOrgModal({}),
     });
@@ -27,7 +28,7 @@ Game.UI = Game.UI || {};
   // Game.slotMode:'load'(つづきから)| 'new'(はじめから)| 'versus'(2人で対戦)
   UI.renderSlots = function (app) {
     const mode = Game.slotMode || 'load';
-    const title = { load: 'つづきから:セーブデータを選ぶ', new: 'はじめから:どこに記録する?', versus: '2人で対戦:どこに記録する?' }[mode];
+    const title = { load: 'つづきから:セーブデータを選ぶ', new: 'はじめから:どこに記録する?', versus: '2人で対戦:どこに記録する?', scenario: '史実シナリオ:どこに記録する?' }[mode];
     const cards = Game.listSlots()
       .map(({ n, state }) => {
         const s = UI.saveSummary(state);
@@ -58,7 +59,7 @@ Game.UI = Game.UI || {};
       b.onclick = () => {
         if (b.dataset.full === '1' && !confirm(`セーブデータ${b.dataset.use}を消して、新しく始めますか?`)) return;
         Game.useSlot(+b.dataset.use);
-        Game.showScreen(mode === 'versus' ? 'versusSetup' : 'setup');
+        Game.showScreen(mode === 'versus' ? 'versusSetup' : mode === 'scenario' ? 'scenarioSelect' : 'setup');
       };
     });
     app.querySelectorAll('[data-del]').forEach((b) => {

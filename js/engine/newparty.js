@@ -73,7 +73,7 @@ Game.NewParty = (function () {
   // 毎ターン:新しさ・盛り上がりが薄れる、政党交付金、候補者の不祥事のリスク
   function turnUpdate(state, lines) {
     const p = state.party;
-    if (!p || !p.custom) return null;
+    if (!p || !p.custom || !Game.Career.isCustom(state)) return null;   // 新党を離れたあと(M18)は動かさない
     const B = NB();
     p.newness = Math.max(0, p.newness - B.newnessDecay);
     p.buzz *= B.buzzDecay;
@@ -311,6 +311,7 @@ Game.NewParty = (function () {
     const followers = defectFollowers(state);
     create(state, Object.assign({}, opts, { origin: 'defect', mps: 1 + followers, year: state.world.year }));
     state.player.party = ID;
+    moveSeats(state, oldParty, ID, 1 + followers);
     c.allies = Math.max(0, c.allies - followers);
     c.partyEval = 0;
     c.postLevel = 0;
@@ -325,15 +326,33 @@ Game.NewParty = (function () {
     return { followers, requirement: state.party.requirement };
   }
 
+  // 党首を退いたあと(M18)は衆議院の勢力図があるので、離党・移籍した議席を動かす
+  function moveSeats(state, from, to, n) {
+    const ps = state.world && state.world.parties;
+    if (!ps) return;
+    const k = Math.min(n, (ps[from] || { seats: 0 }).seats);
+    if (ps[from]) ps[from].seats -= k;
+    if (!ps[to]) ps[to] = { seats: 0 };
+    ps[to].seats += k;
+  }
+
   // ---------------- 移籍 ----------------
   function canMigrate(state) {
     const c = state.career;
-    return c.status === 'member' && !(state.party && state.party.custom) && c.wins >= NB().migrate.minWins;
+    return c.status === 'member' && !Game.Career.isCustom(state) && c.wins >= NB().migrate.minWins;
+  }
+  // 移籍できる党:既存の3党のうち、いまの党以外(勢力図があれば、議席の残っている党だけ。合流で消えた党には移れない)
+  function migrateTargets(state) {
+    const ps = state.world && state.world.parties;
+    return Object.values(Game.Data.PARTIES)
+      .filter((p) => p.playable && p.id !== state.player.party && (!ps || (ps[p.id] && ps[p.id].seats > 0)))
+      .map((p) => p.id);
   }
   function migrate(state, target) {
     const c = state.career;
     const oldParty = state.player.party;
     state.player.party = target;
+    moveSeats(state, oldParty, target, 1);
     c.partyEval = 0;
     c.postLevel = 0;
     c.migratedPenalty = true;
@@ -362,6 +381,7 @@ Game.NewParty = (function () {
     defectFollowers,
     defect,
     canMigrate,
+    migrateTargets,
     migrate,
   };
 })();

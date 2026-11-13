@@ -21,7 +21,7 @@ Game.National = (function () {
     const me = state.leader.party;
     // 議席のない党は立てない。ただしプレイヤーの党と、対戦モードのもう1人の党(state.alsoRun)は必ず立てる
     const ids = Object.keys(w.parties).filter((id) => id !== 'indep' && (w.parties[id].seats > 0 || id === me || (state.alsoRun || []).includes(id)));
-    if (!ids.includes('kofuku')) ids.push('kofuku');   // 幸福実現党は議席がなくても候補を立てる
+    if (!ids.includes('kofuku') && Game.Scenario.kofukuRuns(state)) ids.push('kofuku');   // 幸福実現党は議席がなくても候補を立てる(史実シナリオでは結党の2009年から)
     return [me].concat(ids.filter((id) => id !== me));
   }
 
@@ -50,11 +50,12 @@ Game.National = (function () {
   // 党の今の議席のうち小選挙区の分を、ブロックの大きさに応じて割り振る(現職の数)
   function incumbents(state, party) {
     const seats = LD().seatsOf(state, party);
-    const smdShare = Math.round(seats * 289 / 465);
+    const smdTotal = BLOCKS().reduce((s, b) => s + b.smd, 0);   // 制度で変わる(史実シナリオの中選挙区・480議席など)
+    const smdShare = Math.round(seats * smdTotal / Game.Data.HOUSE_SEATS);
     const out = {};
     let left = smdShare;
     BLOCKS().forEach((b, i) => {
-      const n = i === BLOCKS().length - 1 ? left : Math.round(smdShare * b.smd / 289);
+      const n = i === BLOCKS().length - 1 ? left : Math.round(smdShare * b.smd / smdTotal);
       out[b.id] = clamp(n, 0, b.smd);
       left -= out[b.id];
     });
@@ -116,6 +117,7 @@ Game.National = (function () {
     if (type === 'smdUs') w -= C.biggerAskPenalty * ratio;
     if (type === 'unify' && theirs > mine) w -= (C.biggerAskPenalty / 2) * ratio;
     if (type === 'smdThem') w += C.favorPartnerBonus;
+    if (Game.Scenario.coopBlocked(state, partner)) w -= 100;   // 史実シナリオ:郵政造反組は自民党と組まない
     return Math.round(w);
   }
 
@@ -184,6 +186,7 @@ Game.National = (function () {
       sns: Game.Sns.ensure(state),   // 党首のSNSの話題度・好感度を一部持ち越す
     });
     camp.player.capacity = capacity(LD().supportOf(state, me));
+    camp.noSns = Game.Scenario.noSns(state);   // SNSのない時代の史実シナリオ
     camp.national = {
       coverage, celebrities: Object.assign({}, prep.celebrities), listPolicy: prep.listPolicy, coops: prep.coops.slice(),
       prev: Object.fromEntries(ids.map((id) => [id, LD().seatsOf(state, id)])),
@@ -221,6 +224,39 @@ Game.National = (function () {
     return out;
   }
 
+  // ---------------- 党首でないあいだの総選挙(M18:党首を退いたあと) ----------------
+  // プレイヤーは自分の選挙区だけを戦い、全国の議席は簡易計算で決める。戻り値:{ before, after }(党ごとの議席)
+  function aiTally(state, rng) {
+    const w = state.world;
+    const K = NB().memberTally;
+    const T = Game.Balance.term;
+    const gauss = () => Math.sqrt(-2 * Math.log(Math.max(rng(), 1e-9))) * Math.cos(2 * Math.PI * rng());
+    const ids = Object.keys(w.parties).filter((id) => id !== 'indep' && w.parties[id].seats > 0);
+    const before = Object.fromEntries(ids.map((id) => [id, w.parties[id].seats]));
+    const pool = ids.reduce((s, id) => s + before[id], 0);
+    const weight = {};
+    for (const id of ids) {
+      let s = LD().supportOf(state, id) + ((NB().supportAdjust || {})[id] || 0) + ((w.wind && w.wind[id]) || 0) + gauss() * K.noise;
+      if (id === Game.Data.RULING_PARTY) s += (w.approval - T.approvalStart) * T.partyDriftFromApproval;
+      weight[id] = Math.pow(Math.max(0.3, s), K.exponent);
+    }
+    const sum = ids.reduce((s, id) => s + weight[id], 0);
+    const after = {};
+    for (const id of ids) after[id] = Math.round(before[id] * (1 - K.mix) + (pool * weight[id] / sum) * K.mix);
+    // 新党の党首として結党準備をしていた(離党したあと):党の議席は newparty.js の結果に合わせる
+    if (Game.Career.isCustom(state) && state.party.firstElectionDone) after[Game.NewParty.ID] = state.party.mps;
+    // 端数の調整:合計を選挙前と同じにする(新党を除いて、いちばん大きい党で吸収)
+    const total = Object.values(after).reduce((s, v) => s + v, 0);
+    const big = Object.keys(after).filter((id) => id !== Game.NewParty.ID).sort((x, y) => after[y] - after[x])[0];
+    if (big) after[big] = Math.max(0, after[big] + pool - total);
+    for (const id in after) {
+      if (!w.parties[id]) w.parties[id] = { seats: 0 };
+      w.parties[id].seats = after[id];
+    }
+    w.lastGeneralElection = { year: w.year, seats: Object.assign({}, after) };
+    return { before, after };
+  }
+
   // ---------------- 選挙のあと ----------------
   function afterElection(state) {
     const el = state.election;
@@ -245,6 +281,7 @@ Game.National = (function () {
       Game.NewParty.register(state.party);
     }
     w.termElapsed = 0;
+    w.generalElections = (w.generalElections || 0) + 1;   // 史実シナリオの終わりの判定に使う
     w.lastGeneralElection = { year: w.year, seats: Object.fromEntries(Object.keys(el.seats).map((id) => [id, el.seats[id].total])) };
     state.career.money = Math.max(0, Math.round(state.campaign.player.money * 0.5));
     if (state.campaign.support) state.support = Object.assign(state.support || {}, Game.Support.exportState(state.campaign));
@@ -276,6 +313,6 @@ Game.National = (function () {
 
   return {
     COOP_TYPES, contestants, ensureBalance, incumbents, defaultPrep, funds, prepCost,
-    coopWillingness, coopPartners, newNationalCampaign, project, afterElection, capacity,
+    coopWillingness, coopPartners, newNationalCampaign, project, afterElection, capacity, aiTally,
   };
 })();

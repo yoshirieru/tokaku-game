@@ -89,7 +89,7 @@ Game.Debate = (function () {
     const d = {
       rng: opts.seed >>> 0 || 1,
       kind: opts.kind, side: opts.side, role: opts.role, topic: opts.topic || null,
-      opponent: { name: opts.opponentName, composure: O.composure, tell: O.tell },
+      opponent: { name: opts.opponentName, composure: O.composure, tell: O.tell, noGaffe: !!state.scenario },   // 史実シナリオ:実在の政治家に失言させない
       me: { composure: clamp(DB().composure.start + post * DB().composure.perPost, 0, 100) },
       meter: DB().meterStart,
       time: K.minutes, timeMax: K.minutes,
@@ -178,7 +178,7 @@ Game.Debate = (function () {
       rec.gaffe = 'me';
       // 失言はSNSで炎上する(1回の論戦で炎上は1件まで)
       if (Game.Sns && d.gaffes.me === 1) Game.Sns.startFlame(Game.Sns.ensure(state), 'gaffe', () => rand(d));
-    } else if (gaffeRoll(d, d.opponent.composure)) {
+    } else if (!d.opponent.noGaffe && gaffeRoll(d, d.opponent.composure)) {
       d.gaffes.opp++;
       d.meter = clamp(d.meter + G.swing, 0, 100);
       rec.gaffe = 'opp';

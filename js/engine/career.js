@@ -241,6 +241,24 @@ Game.Career = (function () {
       event: null,
     };
     addLog(state, won ? `当選(${c.wins}回目)。` : '落選。浪人生活が始まった。', 'news');
+    // 党首を退いたあと(M18):全国の議席は簡易計算で決まり、政権もそれで決まる
+    if (state.world.parties && state.gov && !(state.leader && state.leader.mode === 'leader')) memberNational(state, c.report.lines);
+  }
+
+  function memberNational(state, lines) {
+    const prevPm = state.gov.pmParty;
+    const t = Game.National.aiTally(state, () => rand(state.career));
+    const changed = Game.Gov.reformAI(state);
+    const info = (id) => Game.Leader.partyInfo(id);
+    const me = state.player.party;
+    const top = Object.keys(t.after).sort((a, b) => t.after[b] - t.after[a]).slice(0, 4);
+    lines.push(`全国の結果:${top.map((id) => `${info(id).name} ${t.after[id]}(${t.after[id] - (t.before[id] || 0) >= 0 ? '+' : ''}${t.after[id] - (t.before[id] || 0)})`).join('、')}。`);
+    const g = state.gov;
+    const coal = g.coalition.length > 1 ? `(連立:${g.coalition.filter((p) => p !== g.pmParty).map((p) => info(p).name).join('・')})` : '';
+    if (changed) lines.push(`政権交代。${info(prevPm).name}に代わって${info(g.pmParty).name}が政権を握り、${g.pmName}が首相に就いた${coal}。`);
+    else lines.push(`${info(g.pmParty).name}が政権を維持した${coal}。`);
+    lines.push(isRuling(state) || g.coalition.includes(me) ? 'あなたの党は与党だ。' : 'あなたの党は野党だ。');
+    addLog(state, changed ? `🗳 政権交代:${info(g.pmParty).name}の${g.pmName}政権。` : `🗳 ${info(g.pmParty).name}が政権を維持。`, 'news');
   }
 
   function newName(c, used) {
@@ -524,7 +542,7 @@ Game.Career = (function () {
         dissolution: true,
       };
       if (Math.abs(econWind) >= Game.Balance.econ.mood.windNotice) {
-        c.report.lines.push(econWind > 0 ? `景気と暮らしの手応えから、与党の${Game.Data.PARTIES[Game.Data.RULING_PARTY].name}に追い風が吹いている。` : `景気や暮らしへの不満が、与党の${Game.Data.PARTIES[Game.Data.RULING_PARTY].name}への逆風になっている。`);
+        c.report.lines.push(econWind > 0 ? `景気と暮らしの手応えから、与党の${Game.Leader.partyInfo(Game.Data.RULING_PARTY).name}に追い風が吹いている。` : `景気や暮らしへの不満が、与党の${Game.Leader.partyInfo(Game.Data.RULING_PARTY).name}への逆風になっている。`);
       }
       settlePromises(state, c.report.lines);
       addLog(state, full ? '任期満了。総選挙へ。' : '衆議院が解散された。総選挙へ。', 'news');

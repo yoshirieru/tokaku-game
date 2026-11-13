@@ -9,7 +9,7 @@ const vm = require('vm');
 
 global.window = global;
 const root = path.join(__dirname, '..', 'js');
-for (const f of ['data/balance.js', 'data/parties.js', 'data/organizations.js', 'data/districts.js', 'data/factions.js', 'data/achievements.js', 'data/blocks.js', 'data/sns.js', 'data/debate.js', 'engine/support.js', 'engine/sns.js', 'engine/debate.js', 'engine/campaign.js', 'engine/vote.js', 'engine/career.js', 'engine/newparty.js', 'engine/leadership.js', 'engine/leader.js', 'engine/merger.js', 'engine/national.js', 'engine/government.js', 'engine/legacy.js', 'engine/economy.js', 'engine/local.js', 'engine/faction.js', 'engine/hall.js']) {
+for (const f of ['data/balance.js', 'data/parties.js', 'data/organizations.js', 'data/districts.js', 'data/factions.js', 'data/achievements.js', 'data/blocks.js', 'data/sns.js', 'data/debate.js', 'data/scenarios.js', 'engine/support.js', 'engine/sns.js', 'engine/debate.js', 'engine/campaign.js', 'engine/vote.js', 'engine/career.js', 'engine/newparty.js', 'engine/leadership.js', 'engine/leader.js', 'engine/merger.js', 'engine/national.js', 'engine/government.js', 'engine/legacy.js', 'engine/economy.js', 'engine/local.js', 'engine/faction.js', 'engine/hall.js', 'engine/scenario.js']) {
   vm.runInThisContext(fs.readFileSync(path.join(root, f), 'utf8'), { filename: f });
 }
 const C = Game.Campaign;
@@ -98,7 +98,7 @@ function play(party, step, seed) {
 const N = +process.argv[2] || 100;
 const botsAll = [['最善手', greedyStep], ['中級', mediumStep], ['ランダム', randomStep]].filter(([n]) => !process.env.BOTS || process.env.BOTS.split(',').includes(n));
 const isMain = require.main === module;   // require() したときは何も実行しない
-const bots = !isMain || process.env.CAREER || process.env.FULL ? [] : botsAll;
+const bots = !isMain || process.env.CAREER || process.env.FULL || process.env.SCENARIO ? [] : botsAll;
 if (bots.length) console.log(`各 ${N} 回。初当選率 = 小選挙区当選 + 比例復活`);
 for (const [name, step] of bots) {
   const cells = [];
@@ -427,4 +427,97 @@ if (isMain && process.env.FULL) {
   }
 }
 
-module.exports = { C, play, greedyStep, mediumStep, randomStep, termBot, playCampaign, playCareer, playFull };
+// ---------------- 史実シナリオ(M19) ----------------
+// 連立交渉:前向きな相手から順に、大臣と政策を差し出して過半数をめざす
+function formationBot(state) {
+  const g = state.gov;
+  const partners = Game.Gov.formationPartners(state)
+    .map((p) => Object.assign(p, { w: Game.Gov.willingness(state, p.id, { ministers: 2, policies: [], coop: false }) }))
+    .sort((a, b) => b.w - a.w || b.seats - a.seats);
+  const chosen = [];
+  let seats = Game.Leader.seatsOf(state, state.leader.party);
+  for (const p of partners) {
+    if (seats >= Game.Data.MAJORITY) break;
+    const ok = p.platform.filter((x) => !state.support.pledges.some((y) => Game.Support.conflicts(x, y)));
+    const tries = [[1, 1, false], [2, 1, false], [2, 2, false], [2, 2, true], [3, 2, true]];
+    let offer = null;
+    for (const [m, n, coop] of tries) {
+      const o = { ministers: m, policies: ok.slice(0, n), coop };
+      if (Game.Gov.willingness(state, p.id, o) >= 0) { offer = o; break; }
+    }
+    if (!offer) continue;
+    g.formation.offers[p.id] = offer;
+    chosen.push(p.id);
+    seats += p.seats;
+  }
+  const res = seats >= Game.Data.MAJORITY ? Game.Gov.proposeCoalition(state, chosen) : { formed: false };
+  if (!res.formed) {
+    const largest = Object.keys(state.world.parties).filter((id) => id !== 'indep').sort((a, b) => state.world.parties[b].seats - state.world.parties[a].seats)[0];
+    Game.Gov.giveUpFormation(state, largest === state.leader.party);
+    if (state.gov.invite) Game.Gov.answerInvite(state, false);
+  }
+}
+// 合流のボット(シナリオの目標が合流なら、相手の言い分を全部のんで持ちかける)
+function mergeBot(state, partner) {
+  if (!state.world.parties[partner] || state.leader.actionsLeft < 1) return;
+  const small = Game.Merger.isSmaller(state, partner);
+  const terms = { name: 'fresh', freshName: '', freshShort: '', leader: small ? 'co' : 'posts', policy: 'both', candidates: 'incumbent' };
+  if (Game.Merger.evaluate(state, partner, terms).willing >= 0) Game.Merger.propose(state, partner, terms);
+}
+function scenarioElection(state, seed) {
+  Game.Scenario.beforeElection(state);
+  nationalElection(state, seed);
+}
+function playScenario(id, role, seed) {
+  const state = Game.Scenario.start({ id, role, name: '自動', seed });
+  const role0 = Game.Scenario.roleOf(state);
+  const mergeGoal = role0.goals.find((g) => g.type === 'merged');
+  if (state.screen === 'coalition') formationBot(state);
+  if (state.screen === 'nationalPrep') scenarioElection(state, seed + 1);
+  let guard = 0;
+  const elections = [];
+  while (guard++ < 80 && !state.pendingEnding && !Game.Scenario.isOver(state)) {
+    if (mergeGoal) mergeBot(state, mergeGoal.arg);
+    leaderTurnBot(state);
+    if (state.pendingEnding) break;
+    Game.Leader.endTurn(state);
+    if (state.pendingEnding) break;
+    if (state.leader.report && state.leader.report.dissolution) {
+      state.leader.report.dissolution = false;
+      scenarioElection(state, seed + 1000 + guard);
+      elections.push(Object.assign({}, state.world.lastGeneralElection.seats));
+    }
+  }
+  if (state.screen === 'nationalPrep' || elections.length === 0 && state.world.lastGeneralElection) elections.push(Object.assign({}, state.world.lastGeneralElection.seats));
+  const ending = Game.Legacy.finish(state, state.pendingEnding || 'scenario');
+  return { ending, elections, goals: ending.scenario ? ending.scenario.goals : [], year: state.world.year, era: state.world.era };
+}
+
+if (isMain && process.env.SCENARIO) {
+  const ids = process.env.SCENARIOS ? process.env.SCENARIOS.split(',') : Game.Data.SCENARIOS.map((s) => s.id);
+  console.log(`史実シナリオ 各 ${N} 回(ボット)`);
+  for (const id of ids) {
+    const sc = Game.Data.scenarioById(id);
+    sc.roles.forEach((r, ri) => {
+      const goalHits = r.goals.map(() => 0);
+      const seatSum = {};
+      let nEl = 0;
+      const endings = {};
+      for (let i = 0; i < N; i++) {
+        const res = playScenario(id, ri, i * 7919 + 101);
+        res.goals.forEach((g, k) => { if (g.done) goalHits[k]++; });
+        const last = res.elections[res.elections.length - 1];
+        if (last) { nEl++; for (const p in last) seatSum[p] = (seatSum[p] || 0) + last[p]; }
+        endings[res.ending.title] = (endings[res.ending.title] || 0) + 1;
+      }
+      Game.Scenario.apply(Game.Scenario.start({ id, role: ri, name: 'x', seed: 1 }));
+      const top = Object.keys(seatSum).sort((a, b) => seatSum[b] - seatSum[a]).slice(0, 6);
+      console.log(`${sc.title} / ${r.title}`);
+      console.log(`  目標: ${r.goals.map((g, k) => `${g.label} ${Math.round((goalHits[k] / N) * 100)}%`).join(' / ')}`);
+      console.log(`  総選挙の平均(${nEl}回): ${top.map((p) => `${Game.Leader.partyInfo(p).short} ${Math.round(seatSum[p] / nEl)}`).join('・')}`);
+      console.log(`  終わり方: ${Object.keys(endings).map((k) => `${k} ${endings[k]}`).join('、')}`);
+    });
+  }
+}
+
+module.exports = { C, play, greedyStep, mediumStep, randomStep, termBot, playCampaign, playCareer, playFull, leaderTurnBot, nationalElection, playScenario };

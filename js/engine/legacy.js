@@ -17,7 +17,10 @@ Game.Legacy = (function () {
     oppositionLeader: { title: '野党党首のまま', text: '党首として戦い抜いたが、政権には手が届かなかった。' },
     minister:         { title: '大臣どまり', text: '大臣まで上りつめたが、党の頂点には届かなかった。' },
     governor:         { title: '知事に転身', text: '国政を離れ、知事として地元の政治を担う道を選んだ。永田町では見えなかった景色が、そこにはある。' },
+    scenario:         { title: 'シナリオの終わり', text: '' },   // 史実シナリオ(題と文は scenario.js の result で決まる)
     oneParty:         { title: '大政翼賛会', text: 'すべての党を飲み込み、国会から野党が消えた。数の力ですべてを手にしたが、民意の受け皿も、権力を見張る目もなくなった。歴史はこれを「大政翼賛会」の再来と呼ぶだろう。' },
+    formerPM:         { title: '元首相として引退', text: '首相の座を降りたあとも、一議員として国会に残った。後進を見守り、最後は静かに議員バッジを外した。' },
+    formerLeader:     { title: '元党首として引退', text: '党首を退いたあとも、一議員として党を支え続けた。表舞台を降りても、その経験は党の財産になった。' },
     backbencher:      { title: '陣笠議員どまり', text: '議員として地元に尽くした。表舞台に立つことは少なかったが、その仕事は確かに残った。' },
   };
 
@@ -30,10 +33,16 @@ Game.Legacy = (function () {
     s[key] = (s[key] || 0) + (n === undefined ? 1 : n);
   }
 
+  // 首相の在任(ターン)。党首を退いて、また首相になったときは前の分も足す(M18)
+  function pmTurns(state) {
+    const g = state.gov;
+    return g ? (g.pmTurns || 0) + (g.pmTurnsPast || 0) : 0;
+  }
+
   // 到達した地位
   function rankKey(state) {
     const s = stats(state);
-    if (s.wasPM || (state.gov && state.gov.pmTurns > 0)) return 'pm';
+    if (s.wasPM || pmTurns(state) > 0) return 'pm';
     if (s.wasLeader || state.leader) return 'leader';
     const lvl = Math.max(s.maxPostLevel || 0, (state.career && state.career.postLevel) || 0);
     return ['backbencher', 'seimukan', 'fukudaijin', 'minister', 'executive'][lvl] || 'backbencher';
@@ -48,15 +57,22 @@ Game.Legacy = (function () {
     if (reason === 'replaced') return 'replaced';
     if (reason === 'governor') return 'governor';
     if (reason === 'oneParty') return 'oneParty';
-    const pmYears = g ? g.pmTurns / 4 : 0;
-    const isPM = g && g.role === 'pm';
+    if (reason === 'scenario') return 'scenario';
+    const pmYears = pmTurns(state) / 4;
+    const inLeader = !!(state.leader && state.leader.mode === 'leader');
+    const isPM = inLeader && g && g.role === 'pm';
+    // 党首を退いて一議員に戻ったあとの引退(M18)
+    if (!inLeader && stats(state).steppedDown && reason === 'retire') {
+      if (pmYears >= L.longPMYears) return 'longPM';
+      return pmYears > 0 || stats(state).wasPM ? 'formerPM' : 'formerLeader';
+    }
     if (isPM || pmYears > 0) {
       if (pmYears >= L.longPMYears) return 'longPM';
       if ((reason === 'successor' || reason === 'retire') && state.world.approval >= L.greatPMApproval) return 'greatPM';
       if (reason === 'forcedResign' || reason === 'noConfidence') return 'replaced';
       return isPM ? 'replaced' : 'oppositionLeader';
     }
-    if (state.leader) return 'oppositionLeader';
+    if (inLeader || stats(state).wasLeader) return 'oppositionLeader';
     const lvl = Math.max(stats(state).maxPostLevel || 0, (state.career && state.career.postLevel) || 0);
     return lvl >= 3 ? 'minister' : 'backbencher';
   }
@@ -70,7 +86,7 @@ Game.Legacy = (function () {
     const items = [];
     const push = (label, value, points) => items.push({ label, value, points: Math.round(points * 10) / 10 });
 
-    const pmYears = g ? g.pmTurns / 4 : 0;
+    const pmYears = pmTurns(state) / 4;
     push('首相の在任期間', `${pmYears.toFixed(1)}年`, Math.min(L.pmYears.max, pmYears * L.pmYears.per));
     if (g && g.approvalTurns) {
       const avg = g.approvalSum / g.approvalTurns;
@@ -91,6 +107,10 @@ Game.Legacy = (function () {
     if (successor) push('支持の高いうちに後継を指名', `支持率${Math.round(state.world.approval)}%`, L.successor.bonus);
     if (reason === 'governor' && state.governor) push('知事に当選', `${state.governor.place}(得票率${Math.round(state.governor.share * 100)}%)`, Game.Balance.local.legacyGovernor);
     if (reason === 'oneParty') push('野党が消えた', '一党体制', L.oneParty);
+    // 史実シナリオの目標(終わり方にかかわらず数える)
+    if (state.scenario && Game.Scenario.current(state)) {
+      for (const g of Game.Scenario.result(state).goals) push(`目標:${g.label}`, g.done ? '達成' : '未達', g.done ? Game.Balance.scenario.goalPoints : 0);
+    }
     // 経済と暮らし(M14):首相のあいだの指標の「気分」の平均、辞めるときの財政
     for (const it of Game.Economy.legacyItems(state)) push(it.label, it.value, it.points);
     // 減点
@@ -112,13 +132,19 @@ Game.Legacy = (function () {
       year: state.world ? state.world.year : null,
       score: sc.total, grade: sc.grade, items: sc.items,
       party: state.player.party,
-      pmYears: g ? g.pmTurns / 4 : 0,
+      pmYears: pmTurns(state) / 4,
       elections: (state.career.elections || []).length,
       wins: state.career.wins,
     };
+    // 史実シナリオ:目標の結果と史実の結末
+    if (state.scenario && Game.Scenario.current(state)) {
+      const r = Game.Scenario.result(state);
+      state.ending.scenario = r;
+      if (type === 'scenario') { state.ending.title = r.title; state.ending.text = r.text; }
+    }
     state.screen = 'ending';
     return state.ending;
   }
 
-  return { ENDINGS, RANK_LABEL, stats, add, classify, score, finish, rankKey };
+  return { ENDINGS, RANK_LABEL, stats, add, classify, score, finish, rankKey, pmTurns };
 })();

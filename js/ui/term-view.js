@@ -125,7 +125,11 @@ Game.UI = Game.UI || {};
     const termPct = Math.round((c.turn.elapsed / T.termTurns) * 100);
     const dc = K().dissolveChance(st);
     const mood = dc >= 0.25 ? { t: '解散風が強い', cls: 'warn' } : dc >= 0.12 ? { t: '解散の噂', cls: '' } : { t: '静か', cls: '' };
-    const status = c.status === 'member' ? `衆議院議員 当選${c.wins}回` : c.status === 'founder' ? '新党の党首(議席なし)' : '浪人中';
+    const S = Game.Legacy.stats(st);
+    const former = S.steppedDown ? (S.wasPM ? '・元首相' : '・元党首') : '';   // 党首を退いたあと(M18)
+    const status = (c.status === 'member' ? `衆議院議員 当選${c.wins}回` : c.status === 'founder' ? '新党の党首(議席なし)' : '浪人中') + former;
+    const ruling = UI.party(Game.Data.RULING_PARTY);
+    const govTip = `${K().pmName(st)}首相(${ruling.name})。あなたの党は${K().isRuling(st) || (st.gov && st.gov.coalition.includes(st.player.party)) ? '与党' : '野党'}`;
     return `
       <header class="hud" style="--pc:${party.color}">
         <div class="hud-title">
@@ -141,7 +145,7 @@ Game.UI = Game.UI || {};
           <div class="stat"><span class="stat-label">資金</span><span class="stat-val">${Math.round(c.money)}<small>万円</small></span></div>
           <div class="stat"><span class="stat-label">実績</span><span class="stat-val">${Math.round(c.achievements)}</span></div>
           <div class="stat"><span class="stat-label">党内評価</span><span class="stat-val">${Math.round(c.partyEval)}</span></div>
-          <div class="stat"><span class="stat-label">内閣支持率</span><span class="stat-val">${Math.round(w.approval)}<small>%</small></span></div>
+          <div class="stat" title="${esc(govTip)}"><span class="stat-label">内閣支持率</span><span class="stat-val">${Math.round(w.approval)}<small>%</small></span></div>
           <div class="stat"><span class="stat-label">永田町</span><span class="stat-val small ${mood.cls}">${mood.t}</span></div>
         </div>
         <button class="btn btn-ghost hud-menu" data-act="menu" title="メニュー(セーブしてタイトルへ・政界を引退する)">≡</button>
@@ -392,7 +396,7 @@ Game.UI = Game.UI || {};
 
   function openMigrateModal(st) {
     const root = document.getElementById('modal-root');
-    const targets = Object.values(Game.Data.PARTIES).filter((p) => p.playable && p.id !== st.player.party);
+    const targets = Game.NewParty.migrateTargets(st).map((id) => Game.Data.PARTIES[id]);
     root.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal">

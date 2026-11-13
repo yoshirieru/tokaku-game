@@ -16,6 +16,8 @@ Game.UI = Game.UI || {};
     const st = Game.state;
     const fresh = !(st.leader && st.leader.mode === 'leader');
     LD().init(st);
+    // 史実シナリオ:決着の時が来たら結果の画面へ(scenario.js)
+    if (st.scenario && Game.Scenario.isOver(st) && !st.pendingEnding) return Game.goEnding('scenario');
     if (fresh) {
       st.ui.showLeaderReport = true;   // はじめて党首モードに入ったときの知らせ
       Game.clearUndo();
@@ -49,12 +51,13 @@ Game.UI = Game.UI || {};
         </header>
         <div class="campaign-main">
           <div class="col-left">
+            ${UI.scenarioPanel(st)}
             ${UI.govPanel(st)}
             ${UI.econPanel(st)}
             ${housePanel(st)}
             ${cohesionPanel(st)}
             ${UI.debateDeckPanel(st, st.gov && st.gov.role === 'pm' ? 'answer' : 'ask')}
-            ${UI.snsPanel(Game.Sns.ensure(st), { unit: 'ターン', note: '党首のSNS。好感度は党の支持率に、首相なら内閣支持率にも少し効く。記者会見の発言は切り抜かれることがある。' })}
+            ${Game.Scenario.noSns(st) ? '' : UI.snsPanel(Game.Sns.ensure(st), { unit: 'ターン', note: '党首のSNS。好感度は党の支持率に、首相なら内閣支持率にも少し効く。記者会見の発言は切り抜かれることがある。' })}
           </div>
           <div class="col-right">
             ${actionsPanel(st)}
@@ -73,7 +76,7 @@ Game.UI = Game.UI || {};
           if (!res.ok) Game.dropUndo();
           if (res.debate) Game.clearUndo();   // 論戦は取り消せない
           if (res.dissolution) { Game.clearUndo(); st.ui.showLeaderReport = true; }
-          if (res.ending) return Game.goEnding(res.ending);
+          if (res.ending) return leaveLeader(st, res.ending, true);   // 後継を指名して退く:引退か、一議員として残るか
           st.ui.lastResult = res.text;
           Game.commit();
         };
@@ -81,7 +84,6 @@ Game.UI = Game.UI || {};
         const target = (gov || LD().ACTIONS[id]).target;
         if (gov && target !== 'none') UI.openGovTarget(st, id, run);   // 法案・連立相手・共闘相手(gov-view.js)
         else if (gov && id === 'dissolve' && !confirm('衆議院を解散して総選挙に打って出ますか?')) return;
-        else if (id === 'successor' && !confirm('後継を指名して党首を退き、ゲームを終えますか?')) return;
         else if (gov) run(null);
         else if (target === 'merge') openMergeModal(st);
         else if (target === 'org') UI.openOrgModal({ camp: orgView(st), pick: run });
@@ -95,7 +97,7 @@ Game.UI = Game.UI || {};
       if (ld.actionsLeft > 0 && !confirm(`行動があと${ld.actionsLeft}回残っています。ターンを終えますか?`)) return;
       LD().endTurn(st);
       Game.clearUndo();
-      if (st.pendingEnding) return Game.goEnding(st.pendingEnding);
+      if (st.pendingEnding) return leaveLeader(st, st.pendingEnding);
       st.ui.lastResult = null;
       st.ui.showLeaderReport = true;
       Game.commit();
@@ -107,9 +109,57 @@ Game.UI = Game.UI || {};
     const orgInfo = app.querySelector('[data-act="org-info"]');
     if (orgInfo) orgInfo.onclick = () => UI.openOrgModal({ camp: orgView(st) });
 
-    if (st.gov && st.gov.invite) UI.renderGovInvite(modalRoot, st);   // 連立入りの打診
+    if (st.pendingEnding && STEP_DOWN.includes(st.pendingEnding)) renderLeaveLeader(modalRoot, st);   // 党首を退く(M18)
+    else if (st.gov && st.gov.invite) UI.renderGovInvite(modalRoot, st);   // 連立入りの打診
     else if ((st.ui.showLeaderReport || ld.pending) && ld.report) renderReport(modalRoot, st);
   };
+
+  // ---------------- 党首を退く:引退するか、一議員として残るか(M18) ----------------
+  const STEP_DOWN = ['successor', 'lostPower', 'replaced', 'forcedResign', 'noConfidence'];
+  // cancellable:自分で「後継を指名して退く」を選んだときは、党首を続けることもできる(行動を取り消す)
+  function leaveLeader(st, reason, cancellable) {
+    if (!STEP_DOWN.includes(reason) || !LD().stepDownInfo(st).ok) return Game.goEnding(reason);
+    st.pendingEnding = reason;
+    st.ui.leaveCancellable = !!cancellable;
+    st.ui.showLeaderReport = false;
+    Game.commit();
+  }
+  function renderLeaveLeader(root, st) {
+    const reason = st.pendingEnding;
+    const info = LD().stepDownInfo(st);
+    const ending = Game.Legacy.ENDINGS[Game.Legacy.classify(st, reason)];
+    const party = LD().partyInfo(st.leader.party);
+    const lead = {
+      successor: '党首の座を後継に譲ることにした。', lostPower: '政権を失った責任をとって、党首を辞めることにした。',
+      replaced: '党首の座を退くことになった。', forcedResign: '首相を辞め、党首も退くことにした。', noConfidence: '内閣総辞職とともに、党首を退くことにした。',
+    }[reason] || '党首を退くことにした。';
+    const stay = info.custom
+      ? info.targets.map((id) => { const p = LD().partyInfo(id); return `<button class="btn choice-btn" data-stay="${id}"><b>${chip(id)} ${esc(p.name)}に移って一議員として残る</b><span class="small muted">${esc(party.name)}は後継に託す。知名度・地盤・当選回数は残り、党内評価と役職はゼロから。次の選挙は「渡り鳥」批判で支持が少し減る</span></button>`; }).join('')
+      : `<button class="btn choice-btn" data-stay="same"><b>一議員として残る</b><span class="small muted">${esc(party.name)}の平議員に戻る。当選回数・知名度・仲間の議員は残る。党首選の年に推薦人がそろえば、また党首をめざせる。離党・移籍もできる</span></button>`;
+    root.innerHTML = `
+      <div class="modal-backdrop"><div class="modal">
+        <p class="modal-kicker">${esc(party.name)}</p>
+        <h2>党首を退く</h2>
+        <p>${esc(lead)}これからどうする?</p>
+        <div class="choices">
+          <button class="btn choice-btn" data-retire><b>政界を引退する</b><span class="small muted">エンディング:${esc(ending.title)}</span></button>
+          ${stay}
+        </div>
+        ${st.ui.leaveCancellable ? '<div class="modal-actions"><button class="btn" data-act="cancel">やめる(党首を続ける)</button></div>' : ''}
+      </div></div>`;
+    root.querySelector('[data-retire]').onclick = () => { root.innerHTML = ''; st.ui.leaveCancellable = false; Game.goEnding(reason); };
+    root.querySelectorAll('[data-stay]').forEach((b) => (b.onclick = () => {
+      LD().stepDown(st, reason, b.dataset.stay === 'same' ? null : b.dataset.stay);
+      Game.clearUndo();
+      root.innerHTML = '';
+      st.ui.leaveCancellable = false;
+      st.ui.showLeaderReport = false;
+      st.ui.showTermReport = true;
+      Game.commit();
+    }));
+    const cancel = root.querySelector('[data-act="cancel"]');
+    if (cancel) cancel.onclick = () => { root.innerHTML = ''; Game.undo(); };
+  }
 
   // 支援団体モーダルに渡す形
   function orgView(st) {
@@ -357,7 +407,7 @@ Game.UI = Game.UI || {};
       </div></div>`;
     root.querySelectorAll('[data-choice]').forEach((b) => (b.onclick = () => {
       LD().resolveEvent(st, b.dataset.choice);
-      if (st.pendingEnding) return Game.goEnding(st.pendingEnding);   // 退陣・党首交代・政権交代など
+      if (st.pendingEnding) return leaveLeader(st, st.pendingEnding);   // 退陣・党首交代・政権交代など:引退か、一議員として残るか
       Game.commit();
     }));
     root.querySelector('[data-act="close-report"]').onclick = () => {

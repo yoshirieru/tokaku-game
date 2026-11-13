@@ -87,6 +87,12 @@ Game.Gov = (function () {
       setGov(state, f.pmParty, f.coalition, {});
       if (f.coalition.includes(state.leader.party) && f.pmParty !== state.leader.party) state.gov.role = 'partner';
     }
+    // 党首を退いていた(role 'none')あとで、また党首になった:いまの政権のまま、プレイヤーの立場を決め直す
+    if (state.gov && state.gov.role === 'none' && state.leader) {
+      const g = state.gov;
+      setGov(state, g.pmParty, g.coalition, g.partners);
+      if (g.coalition.includes(state.leader.party) && g.pmParty !== state.leader.party) state.gov.role = 'partner';
+    }
     if (state.gov) return state.gov;
     const f = aiForm(state, null);
     setGov(state, f.pmParty, f.coalition, {});
@@ -107,6 +113,7 @@ Game.Gov = (function () {
       pmParty, coalition: coalition.slice(), role: pmParty === me ? 'pm' : coalition.includes(me) ? 'partner' : 'opposition',
       partners: parts,
       pmTurns: sameGov ? prev.pmTurns : 0,
+      pmTurnsPast: (prev.pmTurnsPast || 0) + (sameGov ? 0 : prev.pmTurns || 0),   // 前の政権で首相だった期間(レガシー評価で足す)
       billsPassed: prev.billsPassed || 0, billsFailed: prev.billsFailed || 0,
       approvalSum: prev.approvalSum || 0, approvalTurns: prev.approvalTurns || 0,
       reshuffleCooldown: 0, noConfCooldown: 0, lowTurns: 0,
@@ -122,17 +129,20 @@ Game.Gov = (function () {
   }
 
   function aiPmName(state, party) {
+    const named = state.world.leaderNames && state.world.leaderNames[party];   // 党首を退いたあとの後継(M18)
+    if (named) return named;
     if (party === 'minsei') return state.world.pmName || Game.Data.PRIME_MINISTER.name;
     const r = (Game.Data.LEADER_RIVALS[party] || [])[0];
     return r ? r.name : `${LD().partyInfo(party).name}の党首`;
   }
 
   // AI の第1党が連立を組む(exclude の党は除く)。足りなければプレイヤーの党の力が要る
-  function aiForm(state, exclude) {
+  // me:プレイヤーが党首の党(党首でないときは null。ほかの党と同じように扱う)
+  function aiForm(state, exclude, me) {
     const w = state.world;
     const ids = Object.keys(w.parties).filter((id) => id !== 'indep' && w.parties[id].seats > 0);
     ids.sort((a, b) => w.parties[b].seats - w.parties[a].seats);
-    const me = state.leader.party;
+    if (me === undefined) me = state.leader.party;
     const lead = ids.find((id) => id !== exclude) || ids[0];
     const coalition = [lead];
     let seats = w.parties[lead].seats;
@@ -145,8 +155,40 @@ Game.Gov = (function () {
       coalition.push(p);
       seats += w.parties[p].seats;
     }
-    const needsPlayer = seats < MAJ() && lead !== me && exclude !== me && seats + LD().seatsOf(state, me) >= MAJ();
+    const needsPlayer = !!me && seats < MAJ() && lead !== me && exclude !== me && seats + LD().seatsOf(state, me) >= MAJ();
     return { pmParty: lead, coalition, seats, needsPlayer };
+  }
+
+  // ---------------- 党首でないあいだの政権(M18:党首を退いたあと) ----------------
+  // 議員任期の与党(Game.Data.RULING_PARTY)と首相の名前を、いまの政権に合わせる
+  function syncRuling(state) {
+    const g = state.gov;
+    const w = state.world;
+    w.ruling = g ? g.pmParty : null;
+    Game.Data.applyRuling(w.ruling);
+    if (g) w.pmName = g.pmName;
+  }
+  // プレイヤーが党首でないときに、勢力図から政権を組み直す(総選挙のあと)。戻り値:政権が代わったか
+  function reformAI(state) {
+    const w = state.world;
+    const prev = state.gov;
+    const f = aiForm(state, null, null);
+    const same = !!prev && prev.pmParty === f.pmParty;
+    const partners = {};
+    for (const p of f.coalition) {
+      if (p === f.pmParty) continue;
+      partners[p] = (same && prev.partners[p]) || { ministers: 1, policies: [], coop: false, satisfaction: GB().coalition.satisfactionStart };
+    }
+    const base = prev || { billsPassed: 0, billsFailed: 0, approvalSum: 0, approvalTurns: 0, pmTurns: 0, pmTurnsPast: 0, history: [] };
+    state.gov = Object.assign({}, base, {
+      pmParty: f.pmParty, coalition: f.coalition.slice(), partners, role: 'none',
+      pmName: same ? w.pmName || prev.pmName : aiPmName(state, f.pmParty),   // 任期中の党首選で首相が代わっていることがある
+      formation: null, invite: null,
+      pmSince: same ? prev.pmSince : w.year,
+      history: same ? base.history : (base.history || []).concat([{ year: w.year, pmParty: f.pmParty, coalition: f.coalition.slice() }]),
+    });
+    syncRuling(state);
+    return !same;
   }
 
   // ---------------- 総選挙のあと ----------------
@@ -182,6 +224,7 @@ Game.Gov = (function () {
     const largest = Object.keys(w.parties).filter((id) => id !== 'indep').sort((a, b) => w.parties[b].seats - w.parties[a].seats)[0];
     if (largest !== me) v -= C.notLargestPenalty;
     v += (offer.ministers || 0) * C.perMinister + (offer.policies || []).length * C.perPolicy + (offer.coop ? C.coopBonus : 0);
+    v += Game.Scenario.formationBonus(state, partner);   // 史実シナリオ(非自民の熱気、政権復帰のためなら首相を譲る など)
     return Math.round(v);
   }
 
@@ -229,6 +272,14 @@ Game.Gov = (function () {
   function giveUpFormation(state, minorityGov) {
     const me = state.leader.party;
     state.gov.formation = null;
+    // 史実シナリオ:プレイヤーが組めなければ、史実の政権ができる(1993年の非自民連立など)
+    const alt = Game.Scenario.altGov(state);
+    if (alt) {
+      setGov(state, alt.pmParty, alt.coalition, {});
+      state.gov.pmName = alt.pmName;
+      state.world.pmName = alt.pmName;
+      return 'ai';
+    }
     if (minorityGov) {
       setGov(state, me, [me], {});
       return 'minority';
@@ -567,7 +618,7 @@ Game.Gov = (function () {
     const S = GB().upper.strategy;
     return {
       id: 'govUpper', title: `${state.world.year}年 参議院選挙`,
-      text: `参議院の半数(124議席)の改選。与党が参議院で過半数(${UMAJ()})を割ると「ねじれ」になり、法案が通りにくくなる。どう戦う?`,
+      text: `参議院の半数(${GB().upper.prSeats + GB().upper.districtSeats}議席)の改選。与党が参議院で過半数(${UMAJ()})を割ると「ねじれ」になり、法案が通りにくくなる。どう戦う?`,
       choices: Object.keys(S).map((k) => ({ id: k, label: S[k].label, note: k === 'single' ? '選挙区で議席を取りやすい' : k === 'pr' ? '比例の票が伸びる' : '当たれば大きく伸びるが、外すと逆効果' })),
     };
   }
@@ -796,7 +847,7 @@ Game.Gov = (function () {
 
   return {
     ACTIONS, ensure, setGov, aiForm, afterElection, willingness, formationPartners, proposeCoalition, giveUpFormation, answerInvite,
-    actions, billChance, billTargets, doAction, turn, resolve, mergeUpper, noConfidence,
+    actions, billChance, billTargets, doAction, turn, resolve, mergeUpper, noConfidence, reformAI, syncRuling,
     reelectChance, termDue, leaderTermEvent, electionAftermath,
     lower, upper, upperOf, twisted, minority, conflictsBetween,
   };

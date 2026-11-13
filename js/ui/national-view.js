@@ -3,6 +3,9 @@ window.Game = window.Game || {};
 Game.UI = Game.UI || {};
 
 (function (UI) {
+  // 選挙制度(史実シナリオの中選挙区制では「中選挙区」、比例なし)
+  const SMD = () => Game.Data.SMD_LABEL || '小選挙区';
+  const hasPr = () => Game.Data.BLOCKS.some((b) => b.pr > 0);
   const esc = (s) => UI.esc(s);
   const N = () => Game.National;
   const NB = () => Game.Balance.national;
@@ -25,11 +28,11 @@ Game.UI = Game.UI || {};
         const prOk = nat.requirement || n >= Math.ceil(b.pr * NB().prRequirementShare);
         return `
           <tr>
-            <th>${esc(b.name)}<small class="muted"> 選挙区${b.smd}・比例${b.pr}</small></th>
+            <th>${esc(b.name)}<small class="muted"> 選挙区${b.smd}${b.pr ? `・比例${b.pr}` : ''}</small></th>
             <td class="num">${inc[b.id]}</td>
             <td class="stepper"><button class="btn small" data-cov="${b.id}" data-d="-1" ${n <= inc[b.id] || (b.id === Game.Data.HOME_BLOCK && n <= 1) ? 'disabled' : ''}>−</button><b>${n}</b><button class="btn small" data-cov="${b.id}" data-d="1" ${n >= b.smd ? 'disabled' : ''}>+</button></td>
             <td class="stepper"><button class="btn small" data-cel="${b.id}" data-d="-1" ${cel <= 0 ? 'disabled' : ''}>−</button><b>${cel}</b><button class="btn small" data-cel="${b.id}" data-d="1" ${cel >= NB().celebrityMax ? 'disabled' : ''}>+</button></td>
-            <td>${prOk ? '<span class="tag win">比例に出る</span>' : `<span class="tag">比例に出られない(あと${Math.ceil(b.pr * NB().prRequirementShare) - n}人)</span>`}</td>
+            ${!hasPr() ? '' : `<td>${prOk ? '<span class="tag win">比例に出る</span>' : `<span class="tag">比例に出られない(あと${Math.ceil(b.pr * NB().prRequirementShare) - n}人)</span>`}</td>`}
           </tr>`;
       })
       .join('');
@@ -59,14 +62,14 @@ Game.UI = Game.UI || {};
           <div class="stat-card"><span>選挙資金</span><b>${cost.funds}</b><small>万円</small></div>
           <div class="stat-card"><span>擁立の費用</span><b>${cost.cost}</b><small>万円</small></div>
           <div class="stat-card"><span>選挙戦に回せる資金</span><b class="${cost.remain < 0 ? 'warn-text' : ''}">${cost.remain}</b><small>万円</small></div>
-          <div class="stat-card"><span>小選挙区の候補</span><b>${Object.values(prep.coverage).reduce((a, b) => a + b, 0)}</b><small>/ 289人</small></div>
+          <div class="stat-card"><span>${SMD()}の候補</span><b>${Object.values(prep.coverage).reduce((a, b) => a + b, 0)}</b><small>/ ${Game.Data.BLOCKS.reduce((a, b) => a + b.smd, 0)}人</small></div>
         </div>
         <section class="setup-section">
           <h3 class="field-label">ブロックごとの擁立</h3>
           <p class="small muted">現職はそのまま立つ(費用なし)。新人は1人${NB().candidateCost}万円、有名人は1人${NB().celebrityCost}万円(そのブロックの知名度と支持が上がる)。候補を立てない選挙区では勝てない。${nat.requirement ? '' : '政党要件がないので、ブロック定数の2割以上の候補を立てないとそのブロックの比例に出られない。'}</p>
           <div class="list-wrap">
             <table class="result-table prep-table">
-              <thead><tr><th>ブロック</th><th class="num">現職</th><th>小選挙区の候補</th><th>有名人</th><th>比例</th></tr></thead>
+              <thead><tr><th>ブロック</th><th class="num">現職</th><th>${SMD()}の候補</th><th>有名人</th>${hasPr() ? '<th>比例</th>' : ''}</tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>
@@ -76,7 +79,8 @@ Game.UI = Game.UI || {};
             <button class="btn small" data-all="full">全選挙区に</button>
           </div>
         </section>
-        <section class="setup-section">
+        ${!hasPr() ? '<p class="small muted">中選挙区制:1つの選挙区から数人が当選する。候補を多く立てるほど議席を取れる見込みは増えるが、1人あたりの票は割れる。比例代表はない。</p>' : ''}
+        <section class="setup-section" ${hasPr() ? '' : 'hidden'}>
           <h3 class="field-label">比例名簿の方針</h3>
           <div class="policy-picks">
             <button class="policy-pick ${prep.listPolicy === 'dup' ? 'on' : ''}" data-list="dup">重複立候補を中心に</button>
@@ -216,7 +220,7 @@ Game.UI = Game.UI || {};
           </div>
           <div class="col-right">
             <section class="panel">
-              <div class="panel-head"><h3>${esc(sel.name)}ブロック</h3><span class="muted small">小選挙区${sel.smd}・比例${sel.pr}</span></div>
+              <div class="panel-head"><h3>${esc(sel.name)}ブロック</h3><span class="muted small">${SMD()}${sel.smd}${sel.pr ? `・比例${sel.pr}` : ''}</span></div>
               <ul class="share-legend block-shares small">${selRows}</ul>
             </section>
             <section class="panel actions-panel">
@@ -312,7 +316,7 @@ Game.UI = Game.UI || {};
     else if (step.prOpened.length && (!steps[i - 1] || !steps[i - 1].prOpened.length)) ticker = '比例代表の開票が始まった。';
     else if (last && st.versus) ticker = `すべての議席が確定した。${st.versus.players.map((P) => `${UI.party(P.party).name} ${step.counted[P.party].smd + step.counted[P.party].pr}`).join('、')}。`;
     else if (last) ticker = `すべての議席が確定した。${UI.party(me).name}は${meNow}議席。`;
-    else ticker = `小選挙区 ${step.smdCounted}/${step.smdTotal} 確定。${UI.party(me).name}は${meNow}議席を獲得。`;
+    else ticker = `${SMD()} ${step.smdCounted}/${step.smdTotal} 確定。${UI.party(me).name}は${meNow}議席を獲得。`;
     app.innerHTML = `
       <div class="tv">
         <header class="tv-head">
@@ -320,8 +324,8 @@ Game.UI = Game.UI || {};
           <div class="tv-clock">${esc(step.time)}</div>
         </header>
         <div class="tv-body">
-          <div class="tv-progress"><span>小選挙区</span><span class="tv-progress-bar"><span style="width:${(step.smdCounted / step.smdTotal) * 100}%"></span></span><b>${step.smdCounted}/${step.smdTotal}</b></div>
-          <div class="tv-progress"><span>比例</span><span class="tv-progress-bar"><span style="width:${(step.prOpened.length / 11) * 100}%"></span></span><b>${step.prOpened.length}/11</b></div>
+          <div class="tv-progress"><span>${SMD()}</span><span class="tv-progress-bar"><span style="width:${(step.smdCounted / step.smdTotal) * 100}%"></span></span><b>${step.smdCounted}/${step.smdTotal}</b></div>
+          ${hasPr() ? `<div class="tv-progress"><span>比例</span><span class="tv-progress-bar"><span style="width:${(step.prOpened.length / 11) * 100}%"></span></span><b>${step.prOpened.length}/11</b></div>` : ''}
           <ul class="tv-rows">${rows}</ul>
           <div class="tv-ticker">${esc(ticker)}</div>
           <div class="tv-meta small">投票日の天気:${esc(el.weather.label)} ・ 過半数 ${Game.Data.MAJORITY}</div>
@@ -377,7 +381,7 @@ Game.UI = Game.UI || {};
         <div class="house-bar"><div class="seat-bar">${bar}</div><i class="majority-line" style="left:${(Game.Data.MAJORITY / Game.Data.HOUSE_SEATS) * 100}%"></i></div>
         <div class="list-wrap">
           <table class="result-table">
-            <thead><tr><th>政党</th><th class="num">小選挙区</th><th class="num">比例</th><th class="num">計</th><th class="num">増減</th><th class="num">比例得票率</th></tr></thead>
+            <thead><tr><th>政党</th><th class="num">${SMD()}</th><th class="num">比例</th><th class="num">計</th><th class="num">増減</th><th class="num">比例得票率</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
@@ -385,7 +389,7 @@ Game.UI = Game.UI || {};
         <h3 class="list-title">ブロック別(${esc(UI.party(me).name)})</h3>
         <div class="list-wrap">
           <table class="result-table compact">
-            <thead><tr><th>ブロック</th><th class="num">小選挙区</th><th class="num">比例</th><th class="num">得票率</th></tr></thead>
+            <thead><tr><th>ブロック</th><th class="num">${SMD()}</th><th class="num">比例</th><th class="num">得票率</th></tr></thead>
             <tbody>${blockRows}</tbody>
           </table>
         </div>

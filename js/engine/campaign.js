@@ -458,7 +458,7 @@ Game.Campaign = (function () {
   function availableActions(camp) {
     const P = camp.player;
     const me = camp.candidates.find((c) => c.id === P.id);
-    return MODES[camp.mode].actions.map((aid) => {
+    return MODES[camp.mode].actions.filter((aid) => !(camp.noSns && aid === 'sns')).map((aid) => {   // SNSのない時代の史実シナリオ
       const A = Bal().actions[aid];
       const info = ACTIONS[aid];
       const st = staminaCost(camp, aid);
@@ -771,7 +771,10 @@ Game.Campaign = (function () {
     }
     if (rand(camp) >= C.eventChance) return null;
     const weights = Object.assign({}, camp.mode === 'national' ? E.weightsNational : E.weights);
-    if (camp.humans) delete weights.snsHoax;   // 対戦モードではデマを出さない(どちらに出すか決められない)
+    if (camp.humans || camp.noSns) delete weights.snsHoax;   // 対戦モードではデマを出さない(どちらに出すか決められない)。SNSのない時代も
+    // 実名の党ばかりのとき(史実シナリオ)は、党や候補を名指しする出来事を出さない
+    const named = camp.candidates.some((c) => !c.isPlayer && !(Game.Data.PARTIES[c.party] && Game.Data.PARTIES[c.party].real));
+    if (!named) { delete weights.partyScandal; delete weights.partyBoost; delete weights.rivalGaffe; delete weights.celebrity; }
     const id = weightedPick(camp, weights);
     const mods = camp.today.mods;
     const isReal = (party) => !!(Game.Data.PARTIES[party] && Game.Data.PARTIES[party].real);

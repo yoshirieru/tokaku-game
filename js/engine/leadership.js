@@ -25,7 +25,7 @@ Game.Leadership = (function () {
   // 党首選があるか(毎ターンの始まりに career.js が呼ぶ)
   function scheduled(state) {
     const w = state.world;
-    if (state.party && state.party.custom) return null;
+    if (Game.Career.isCustom(state)) return null;   // 新党の党首(党首を退いて既存の党に移ったあとは、その党の党首選がある)
     if (w.pendingResign && state.player.party === Game.Data.RULING_PARTY) return 'resign';
     if (w.turnIndex === Game.Balance.term.promotion.turnIndex && (w.year - LB().firstYear) % LB().everyYears === 0) return 'term';
     return null;
@@ -176,6 +176,7 @@ Game.Leadership = (function () {
       const shareFirst = f.total / res.totalFirst;
       c.partyEval += shareFirst >= LB().closeShare ? LB().loseEval.close : LB().loseEval.far;
       if (race.party === Game.Data.RULING_PARTY) state.world.pmName = winner.name;
+      (state.world.leaderNames = state.world.leaderNames || {})[race.party] = winner.name;   // 党首の名前(政権が代わったときの首相)
     }
     if (race.party === Game.Data.RULING_PARTY) {
       state.world.pendingResign = false;
@@ -193,6 +194,7 @@ Game.Leadership = (function () {
     // 派閥のある党は、派閥の大きさとキングメーカーの推しで決まる(faction.js)
     const idx = Game.Faction.aiRaceWinner(state, () => rand(state));
     const w = list[idx === null ? Math.floor(rand(state) * list.length) : idx] || { name: '新党首' };
+    (state.world.leaderNames = state.world.leaderNames || {})[party] = w.name;
     if (party === Game.Data.RULING_PARTY) {
       state.world.pmName = w.name;
       state.world.pendingResign = false;

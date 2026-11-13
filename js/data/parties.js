@@ -100,7 +100,8 @@ Game.Data.POSTS = {
   ruling:     ['平議員', '政務官', '副大臣・委員長', '大臣', '党役員'],
   opposition: ['平議員', '委員会理事', '筆頭理事', '次の内閣の大臣', '党役員'],
 };
-Game.Data.RULING_PARTY = 'minsei';   // M4 の時点では政権交代しない(M7 で動かす)
+Game.Data.RULING_PARTY = 'minsei';   // 議員任期の与党。最初は民政で、党首を退いたあと(M18)は政権の党に差し替える(applyRuling)
+Game.Data.applyRuling = function (party) { Game.Data.RULING_PARTY = party || 'minsei'; };
 Game.Data.PRIME_MINISTER = { name: '鷹野 修一郎', party: 'minsei' };   // 架空の首相
 Game.Data.SESSIONS = ['通常国会', '夏の閉会中', '臨時国会', '冬の閉会中'];
 // 国会の会期中かどうか(委員会質問と議員立法ができる)

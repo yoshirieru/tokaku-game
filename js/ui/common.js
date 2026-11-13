@@ -100,7 +100,8 @@ Game.UI = Game.UI || {};
   // セーブデータの中身をひとことで(セーブデータを選ぶ画面)
   UI.saveSummary = function (s) {
     if (!s) return null;
-    const p = UI.party(s.player && s.player.party).name;
+    const sc = s.scenario && Game.Data.scenarioById(s.scenario.id);   // 史実シナリオの政党は読み込むまで差し込まれていない
+    const p = sc && sc.parties && sc.parties[s.player.party] ? sc.parties[s.player.party].name : UI.party(s.player && s.player.party).name;
     const when = s.world ? `${s.world.year}年` : '';
     let where = '';
     if (s.versus) where = `2人で対戦(${s.versus.players.map((P) => P.name).join(' 対 ')})`;
@@ -109,7 +110,8 @@ Game.UI = Game.UI || {};
     else if (s.career) where = s.career.status === 'ronin' ? '浪人中' : s.career.status === 'founder' ? '結党準備中' : `衆議院議員(当選${s.career.wins}回)`;
     else if (s.campaign) where = `はじめての選挙戦 ${s.campaign.day}日目`;
     const saved = s.savedAt ? new Date(s.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-    if (!s.versus && Game.Data.seatById) where = `${Game.Data.seatById(s.seat).name} ・ ${where}`;   // 選挙区(古いセーブは北陽3区)
+    if (sc) where = `${sc.title} ・ ${where}`;
+    else if (!s.versus && Game.Data.seatById) where = `${Game.Data.seatById(s.seat).name} ・ ${where}`;   // 選挙区(古いセーブは北陽3区)
     return { title: s.versus ? '対戦' : `${s.player.name}(${p})`, where, when, saved, easy: s.difficulty === 'easy' };
   };
 

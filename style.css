@@ -1023,3 +1023,16 @@ input, select, textarea { color: var(--ink); background: var(--card); border-col
 .grade-mini { display: inline-block; min-width: 1.6em; text-align: center; font-family: var(--font-head); color: var(--gc, var(--ink)); }
 .gold-text { color: var(--gold); }
 .hall-news { border-left: 4px solid var(--gold); }
+
+/* ---- 史実シナリオ(M19) ---- */
+.scenario-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.scenario-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); background: var(--card); color: var(--ink); cursor: pointer; }
+.scenario-card:hover { background: var(--card-2); }
+.scenario-card.selected { background: var(--card-2); box-shadow: 0 0 0 2px var(--gold); }
+.scenario-year { font-family: var(--font-head); font-size: 26px; color: var(--gold); line-height: 1; }
+.scenario-name { font-weight: 700; font-size: 14px; }
+.scenario-brief p { margin: 0 0 8px; }
+.scenario-history { border-left: 3px solid var(--gold); padding: 8px 12px; background: var(--card-2); margin-top: 8px; }
+.scenario-goals { list-style: none; padding: 0; margin: 0 0 6px; display: grid; gap: 4px; }
+.scenario-goals li { padding: 6px 10px; border-radius: 6px; background: var(--card-2); }
+.scenario-goals li.done { color: var(--gold); font-weight: 700; }

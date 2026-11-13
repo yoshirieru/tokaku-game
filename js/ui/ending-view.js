@@ -17,7 +17,7 @@ Game.UI = Game.UI || {};
     const hist = (st.career.elections || [])
       .map((x, i) => `<li><span class="muted">${x.year}年</span> ${i + 1}回目の衆院選:${label[x.result] || x.result}(${UI.formatVotes(x.votes)}票)</li>`)
       .join('');
-    const govHist = st.gov && st.gov.pmTurns ? `<li><span class="muted">首相</span> 在任 ${(st.gov.pmTurns / 4).toFixed(1)}年、成立した法案 ${st.gov.billsPassed}本</li>` : '';
+    const govHist = st.gov && Game.Legacy.pmTurns(st) ? `<li><span class="muted">首相</span> 在任 ${(Game.Legacy.pmTurns(st) / 4).toFixed(1)}年、成立した法案 ${st.gov.billsPassed}本</li>` : '';
     app.innerHTML = `
       <div class="end-screen ending">
         <div class="ending-hero" style="--pc:${party.color}">
@@ -31,6 +31,7 @@ Game.UI = Game.UI || {};
           </div>
         </div>
         ${UI.hallNews ? UI.hallNews(e.hall) : ''}
+        ${UI.scenarioEnding ? UI.scenarioEnding(e) : ''}
         <section class="panel">
           <h3>評価の内訳</h3>
           <table class="result-table legacy-table"><tbody>${rows}</tbody><tfoot><tr><th colspan="2">合計</th><td class="num"><b>${e.score}</b></td></tr></tfoot></table>

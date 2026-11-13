@@ -509,7 +509,10 @@ Game.Balance.national = {
   },
   // 選挙戦の行動(全国モード)
   manifestoMax: 1,           // 公約発表は1回だけ
-  supportAdjust: { minsei: -6 },   // 全国選挙だけの支持率の補正(ポイント。選挙区モードの調整を崩さないため政党の強さは変えない)
+  supportAdjust: { minsei: -6 },
+  // 党首を退いて議員任期にいるあいだ(M18)の総選挙:全国の議席は簡易計算
+  // 目標の議席 = 勢い(支持率 + 風 + 与党なら内閣支持率のつられ + ぶれ)^exponent の比。今の議席と mix の割合で混ぜる
+  memberTally: { exponent: 2.0, mix: 0.5, noise: 1.0 },   // 全国選挙だけの支持率の補正(ポイント。選挙区モードの調整を崩さないため政党の強さは変えない)
   aiSkill: 0.85,
   aiSkillOverride: { kofuku: 0.03 },   // 組織が小さく全国での選挙戦は限られる(比例の得票率が1%前後になるように)
   capacity: { base: 0.2, perSupport: 0.025, min: 0.2, max: 0.9 },   // 選挙戦の行動の効き = base + 支持率 × perSupport
@@ -923,4 +926,15 @@ Game.Balance.hall = {
   cleanPromises: 5,          // 「約束を守り抜く」に要る、果たした約束の数
   longPMYears: 6,            // 「長期政権」
   economyMood: 3,            // 「経済の立て直し」:首相のあいだの気分の平均
+};
+
+// ---- 史実シナリオ(scenario.js、M19) ----
+Game.Balance.scenario = {
+  start: { partyEval: 80, allies: 30, money: 200, nationalRecog: 70, backerRelation: 60 },   // 党首として始めるときの経歴
+  mmdMagnitude: 4,          // 中選挙区の1区あたりの定数(簡易計算)
+  newPartyCohesion: 5,      // 自分の党から新党へ議員が移ると、結束がこれだけ下がる
+  goalPoints: 8,            // レガシー評価:シナリオの目標1つあたり
+  reform: { approval: 4, cohesion: -6, shelveApproval: -5 },   // 1993年:政治改革関連法案
+  // 2012年:「近いうちに信を問う」。約束したら deadlineTurns のうちに解散しないと毎ターン下がる
+  kinchi: { deadlineTurns: 1, lateApproval: -3, lateCohesion: -4, promiseApproval: 2, promiseCohesion: -4, refuseApproval: -4, aiTermElapsed: 14 },
 };

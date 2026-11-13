@@ -81,6 +81,7 @@ Game.Merger = (function () {
     add((smaller ? T.leader.smaller : T.leader.bigger)[terms.leader]);
     add(T.policy[terms.policy]);
     add(T.candidates[terms.candidates]);
+    willing += Game.Scenario.mergeBonus(state, partner);   // 史実シナリオ(財界が保守合同を後押し など)
     // 支持母体の要望が自分の公約とぶつかると、党内がもめる
     const pledges = state.support ? state.support.pledges : [];
     const backerClash = (Game.Data.PARTY_BACKERS[partner] || []).filter((org) => Game.Support.conflictPairs(pledges, Game.Data.ORGANIZATIONS[org].policies).length > 0);
