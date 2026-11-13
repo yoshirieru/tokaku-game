@@ -1,0 +1,180 @@
+// 開票特番(20:00〜0:00を30分刻みで進める)と、選挙結果の画面。
+window.Game = window.Game || {};
+
+Game.CountView = (function () {
+  const UI = Game.UI;
+  let auto = false, timer = null, prevShown = -1;
+
+  const num = function (n) { return Math.round(n).toLocaleString('ja-JP'); };
+  const WEATHER = { sunny: '晴れ', cloudy: 'くもり', rain: '雨' };
+  // 並びは開票中ずっと固定:現職 → 元職 → 新人(並びで結果が分からないように)
+  function fixedOrder(cands) {
+    const ord = Game.Data.ROLE_ORDER;
+    return cands.slice().sort(function (a, b) { return ord.indexOf(a.role) - ord.indexOf(b.role); });
+  }
+  function turnoutAll(e) {
+    const total = Game.Data.DISTRICT.regions.reduce(function (a, r) { return a + r.voters; }, 0);
+    return e.total / total * 100;
+  }
+  function byId(cands, id) { return cands.filter(function (c) { return c.id === id; })[0]; }
+
+  function narration(s, t) {
+    const e = s.election, tick = e.ticks[t], cands = s.camp.cands;
+    const w = byId(cands, e.winner);
+    if (t === 0) {
+      const head = '午後8時、投票が締め切られました。天気は' + WEATHER[e.weather] + '、投票率は ' + turnoutAll(e).toFixed(1) + '%。';
+      return head + (e.zeroCall ? '出口調査の結果、' + w.name + '氏の当選が確実になりました。' : '出口調査では競り合っています。開票を待ちます。');
+    }
+    const ord = Object.keys(tick.counted).sort(function (a, b) { return tick.counted[b] - tick.counted[a]; });
+    const lead = byId(cands, ord[0]), second = byId(cands, ord[1]);
+    const diff = tick.counted[ord[0]] - tick.counted[ord[1]];
+    if (t === e.callTick) return w.name + '氏に当選確実が出ました。開票率 ' + Math.round(tick.pct * 100) + '%。';
+    if (t === e.ticks.length - 1) return '開票が終わりました。' + w.name + '氏が ' + num(e.totals[e.winner]) + '票で当選。';
+    return '開票率 ' + Math.round(tick.pct * 100) + '%。' + lead.short + '氏がリード、' + second.short + '氏が ' + num(diff) + '票差で追っています。';
+  }
+
+  function render(app) {
+    const s = Game.state, e = s.election, cands = s.camp.cands;
+    const t = e.shown, tick = e.ticks[t], last = e.ticks.length - 1;
+    if (t === 0) prevShown = -1;
+    const prev = e.ticks[Math.max(0, prevShown >= 0 && prevShown < t ? prevShown : t)];
+    const called = t >= e.callTick;
+    const justCalled = t === e.callTick && prevShown < t;
+    const max = e.totals[e.winner] * 1.04;
+
+    const rows = fixedOrder(cands).map(function (c) {
+      const v = tick.counted[c.id], pv = prev.counted[c.id];
+      const sum = Object.keys(tick.counted).reduce(function (a, k) { return a + tick.counted[k]; }, 0);
+      const stamp = called && c.id === e.winner ? '<span class="stamp' + (justCalled ? ' new' : '') + '">当確</span>' : '';
+      return '<div class="ct-row' + (c.player ? ' me' : '') + '" style="--pc:' + UI.color(c) + '">' +
+        '<div class="ct-name">' + UI.partyChip(c) + '<b>' + UI.esc(c.name) + '</b><span class="sub">' + Game.Data.ROLE_NAMES[c.role] + (c.player ? '・あなた' : '') + '</span>' + stamp + '</div>' +
+        '<div class="ct-bar"><i style="width:' + (pv / max * 100) + '%" data-w="' + (v / max * 100) + '"></i></div>' +
+        '<div class="ct-votes"><b data-from="' + pv + '" data-to="' + v + '">' + num(pv) + '</b>票<small>' + (sum ? (v / sum * 100).toFixed(1) + '%' : '—') + '</small></div></div>';
+    }).join('');
+
+    const fill = function (rid) {
+      if (!tick.regionPct[rid]) return null;
+      return UI.leadFill(cands, tick.byRegion[rid]);
+    };
+    const pins = Game.Data.DISTRICT.regions.map(function (r) {
+      const f = tick.regionPct[r.id];
+      let lead = '開票待ち';
+      if (f) {
+        const b = tick.byRegion[r.id];
+        const top = Object.keys(b).sort(function (x, y) { return b[y] - b[x]; })[0];
+        lead = UI.esc(byId(cands, top).short) + ' リード';
+      }
+      return '<div class="pin static" data-id="' + r.id + '" style="left:' + r.x + '%;top:' + r.y + '%"><b>' + r.name + '</b>' +
+        '<span class="mk">' + lead + '</span><span class="ct-open">開票率 ' + Math.round(f * 100) + '%</span></div>';
+    }).join('');
+
+    const canResult = called || t === last;
+    app.innerHTML = '<div class="count">' +
+      '<header class="ct-head panel"><span class="ct-live">開票速報</span><h1>' + UI.esc(Game.Data.DISTRICT.name) + '</h1>' +
+      '<span class="ct-clock">' + tick.time + '</span><span class="ct-pct">開票率 <b>' + Math.round(tick.pct * 100) + '</b>%</span></header>' +
+      '<div class="ct-body"><section class="ct-cands panel">' + rows + '</section>' +
+      '<div class="map-cell">' + UI.mapHtml(fill, null) + '</div></div>' +
+      '<div class="ct-ticker panel"><span class="tk-lab">速報</span><span>' + UI.esc(narration(s, t)) + '</span></div>' +
+      '<footer class="ct-btns">' +
+      (t < last ? '<button type="button" class="btn" id="auto">' + (auto ? '止める' : '自動で進める') + '</button>' +
+        '<button type="button" class="btn btn-primary btn-lg" id="next">' + e.ticks[t + 1].time + ' へ進む</button>' : '') +
+      (canResult ? '<button type="button" class="btn' + (t === last ? ' btn-primary btn-lg' : '') + '" id="result">結果を見る</button>' : '') +
+      '</footer></div>';
+    app.querySelector('#pins').innerHTML = pins;
+
+    // 棒と票数を、前の時刻からなめらかに動かす
+    requestAnimationFrame(function () {
+      app.querySelectorAll('.ct-bar i').forEach(function (i) { i.style.width = i.dataset.w + '%'; });
+    });
+    app.querySelectorAll('.ct-votes b').forEach(function (b) {
+      const from = +b.dataset.from, to = +b.dataset.to, t0 = performance.now();
+      if (from === to) return;
+      (function step(now) {
+        const k = Math.min(1, (now - t0) / 700);
+        b.textContent = num(from + (to - from) * k);
+        if (k < 1 && b.isConnected) requestAnimationFrame(step);
+      })(t0);
+    });
+    if (justCalled) UI.sound('stamp');
+    prevShown = t;
+
+    const advance = function () {
+      if (e.shown >= last) return;
+      e.shown += 1;
+      Game.save();
+      render(app);
+    };
+    clearTimeout(timer);
+    if (auto && t < last) {
+      timer = setTimeout(function () { if (Game.state && Game.state.screen === 'count') advance(); }, 1900);
+    } else {
+      auto = false;
+    }
+    const nextBtn = app.querySelector('#next');
+    if (nextBtn) nextBtn.onclick = function () { auto = false; advance(); };
+    const autoBtn = app.querySelector('#auto');
+    if (autoBtn) autoBtn.onclick = function () { auto = !auto; render(app); };
+    const resBtn = app.querySelector('#result');
+    if (resBtn) resBtn.onclick = function () {
+      auto = false; clearTimeout(timer); prevShown = -1;
+      e.shown = last;
+      s.screen = 'result';
+      Game.save();
+      Game.render();
+    };
+  }
+
+  function renderResult(app) {
+    const s = Game.state, e = s.election, camp = s.camp, cands = camp.cands;
+    const me = byId(cands, 'me'), w = byId(cands, e.winner);
+    const diff = e.totals[e.order[0]] - e.totals[e.order[1]];
+    let head, sub;
+    if (e.won) {
+      head = UI.esc(me.name) + '、初当選';
+      sub = num(e.totals.me) + '票。次点の' + UI.esc(byId(cands, e.order[1]).name) + '氏に ' + num(diff) + '票差。';
+    } else {
+      head = e.lossRatio >= 90 ? 'あと一歩、届かず' : '落選';
+      sub = num(e.totals.me) + '票。当選した' + UI.esc(w.name) + '氏に ' + num(e.totals[e.winner] - e.totals.me) + '票およばなかった(惜敗率 ' + e.lossRatio.toFixed(1) + '%)。';
+    }
+    const table = e.order.map(function (id, i) {
+      const c = byId(cands, id);
+      return '<div class="rs-row' + (c.player ? ' me' : '') + '" style="--pc:' + UI.color(c) + '"><span class="rs-mark">' + (i === 0 ? '当' : '') + '</span>' +
+        UI.partyChip(c) + '<b>' + UI.esc(c.name) + '</b><span class="sub">' + Game.Data.ROLE_NAMES[c.role] + '</span>' +
+        '<span class="rs-votes">' + num(e.totals[id]) + '票</span><span class="rs-pct">' + (e.totals[id] / e.total * 100).toFixed(1) + '%</span></div>';
+    }).join('');
+    const pins = Game.Data.DISTRICT.regions.map(function (r) {
+      const v = e.regions[r.id].votes;
+      const sum = Object.keys(v).reduce(function (a, k) { return a + v[k]; }, 0);
+      const top = Object.keys(v).sort(function (x, y) { return v[y] - v[x]; })[0];
+      return '<div class="pin static" data-id="' + r.id + '" style="left:' + r.x + '%;top:' + r.y + '%"><b>' + r.name + '</b>' +
+        '<span class="mk ' + (top === 'me' ? 'mk-good' : 'mk-bad') + '">' + UI.esc(byId(cands, top).short) + '</span>' +
+        '<span class="ct-open">あなた ' + (v.me / sum * 100).toFixed(0) + '%</span></div>';
+    }).join('');
+    const promises = camp.promises.map(function (id) {
+      const p = Game.Data.PROMISES[id];
+      return '<div class="pr-line"><span class="pr-dot">約</span><span><b>' + p.policy + '</b>(' + p.org + ')</span></div>';
+    }).join('');
+    const promiseText = !camp.promises.length ? '<p class="pr-note">誰にも約束をせずに戦い抜いた。</p>'
+      : e.won ? promises + '<p class="pr-note">この約束は、任期のあいだに果たすことになる。果たせなければ、次の選挙で返ってくる。</p>'
+        : promises + '<p class="pr-note">議席に届かず、約束を果たす場は得られなかった。</p>';
+
+    app.innerHTML = '<div class="result">' +
+      '<header class="rs-head ' + (e.won ? 'won' : 'lost') + '">' + (e.won ? '<span class="stamp big new">当選</span>' : '') +
+      '<h1>' + head + '</h1><p>' + sub + '</p>' +
+      '<p class="sub">投票日の天気は' + WEATHER[e.weather] + '、投票率 ' + turnoutAll(e).toFixed(1) + '%。' + (e.zeroCall ? '午後8時ちょうどに当確が出た。' : '当確が出たのは ' + e.ticks[e.callTick].time + '。') + '</p></header>' +
+      '<div class="rs-body"><div class="rs-left"><section class="panel"><h2>開票結果</h2>' + table + '</section>' +
+      '<section class="panel"><h2>背負った約束</h2>' + promiseText + '</section>' +
+      '<section class="panel"><h2>この先</h2><p class="pr-note">議員の任期・再選・党首・政権は、これから作っていく部分です。いまは選挙戦と開票までを遊べます。</p></section></div>' +
+      '<div class="map-cell">' + UI.mapHtml(function (rid) { return UI.leadFill(cands, e.regions[rid].votes); }, null) + '</div></div>' +
+      '<footer class="ct-btns"><button type="button" class="btn" id="title">タイトルへ</button>' +
+      '<button type="button" class="btn btn-primary btn-lg" id="again">もう一度立候補する</button></footer></div>';
+    app.querySelector('#pins').innerHTML = pins;
+    if (e.won && !e.resultSeen) UI.sound('stamp');
+    e.resultSeen = true;
+    Game.save();
+    app.querySelector('#title').onclick = Game.toTitle;
+    app.querySelector('#again').onclick = function () { Game.state = null; Game.view = 'setup'; Game.render(); };
+  }
+
+  return { render: render, renderResult: renderResult };
+})();

@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>当確! デザイン案(試作)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+/* ============================================================
+   作り直しのデザイン案(試作)。ゲーム本体からは読み込まない。
+   同じ画面(選挙区の選挙戦)を3通りの見た目で見比べる。
+   ============================================================ */
+
+/* ---------- 案A 開票特番の夜(いまの路線を磨く) ---------- */
+[data-theme="night"] {
+  --bg: radial-gradient(ellipse at 50% -10%, #1d3068 0%, #0b1433 55%, #060a1c 100%);
+  --panel: rgba(17, 28, 71, .86);
+  --panel-bd: 1px solid rgba(125, 149, 220, .28);
+  --panel-radius: 10px;
+  --panel-shadow: 0 10px 28px rgba(0, 0, 0, .4);
+  --ink: #eef2ff;
+  --sub: #a3b3df;
+  --accent: #e5383b;
+  --gold: #ffd23f;
+  --num: #ffd23f;
+  --on-accent: #ffffff;
+  --land: #1c2a5c;
+  --outland: #0f1838;
+  --sea: #060b22;
+  --tex-ink: rgba(255, 255, 255, .07);
+  --map-stroke: #7d95dc;
+  --map-sw: 1.5px;
+  --font-head: 'Shippori Mincho B1', 'Yu Mincho', serif;
+  --font-body: 'Zen Kaku Gothic New', 'Yu Gothic', sans-serif;
+  --head-weight: 800;
+  --p-me: #e5383b;
+  --p-r1: #3d7bff;
+  --p-r2: #f59e0b;
+  --pin-bg: rgba(8, 14, 40, .9);
+  --pin-ink: #ffffff;
+  --pin-bd: 1px solid rgba(125, 149, 220, .55);
+  --pin-radius: 6px;
+  --track: rgba(255, 255, 255, .12);
+  --card-bg: linear-gradient(180deg, #1b2b68, #101b47);
+  --card-ink: #eef2ff;
+  --card-sub: #a3b3df;
+  --card-bd: 1px solid #3c52a0;
+  --card-radius: 8px;
+  --card-shadow: 0 8px 18px rgba(0, 0, 0, .45);
+  --sea-tex: url(#scan);
+  --rg-tex: none;
+}
+/* ---------- 案B 選挙ボード(ボードゲーム風) ---------- */
+[data-theme="board"] {
+  --bg: repeating-linear-gradient(45deg, rgba(255, 255, 255, .03) 0 2px, transparent 2px 5px),
+        radial-gradient(circle at 50% 25%, #3d7d64, #23503e 75%);
+  --panel: #fdf6e3;
+  --panel-bd: 3px solid #2b2118;
+  --panel-radius: 16px;
+  --panel-shadow: 0 5px 0 #2b2118;
+  --ink: #2b2118;
+  --sub: #6b5a48;
+  --accent: #e4572e;
+  --gold: #f2b632;
+  --num: #d2401a;
+  --on-accent: #ffffff;
+  --land: #f3e7c2;
+  --outland: #cfbd8c;
+  --sea: #7cc6d2;
+  --tex-ink: rgba(255, 255, 255, .5);
+  --map-stroke: #2b2118;
+  --map-sw: 3px;
+  --font-head: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', sans-serif;
+  --font-body: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', sans-serif;
+  --head-weight: 900;
+  --p-me: #e4572e;
+  --p-r1: #2f7fd8;
+  --p-r2: #f2a516;
+  --pin-bg: #fffaf0;
+  --pin-ink: #2b2118;
+  --pin-bd: 2.5px solid #2b2118;
+  --pin-radius: 14px;
+  --track: rgba(43, 33, 24, .14);
+  --card-bg: #fffaf0;
+  --card-ink: #2b2118;
+  --card-sub: #6b5a48;
+  --card-bd: 3px solid #2b2118;
+  --card-radius: 16px;
+  --card-shadow: 0 5px 0 #2b2118;
+  --sea-tex: url(#waves);
+  --rg-tex: none;
+}
+/* ---------- 案C 号外(紙面・選挙ポスター風) ---------- */
+[data-theme="paper"] {
+  --bg: radial-gradient(rgba(22, 19, 15, .08) 1px, transparent 1.3px) 0 0 / 7px 7px, #f2eee3;
+  --panel: transparent;
+  --panel-bd: 0 solid transparent;
+  --panel-radius: 0px;
+  --panel-shadow: none;
+  --ink: #16130f;
+  --sub: #5d574c;
+  --accent: #d7261e;
+  --gold: #d7261e;
+  --num: #d7261e;
+  --on-accent: #ffffff;
+  --land: #fbf8f0;
+  --outland: #e4decd;
+  --sea: #f2eee3;
+  --tex-ink: rgba(22, 19, 15, .3);
+  --map-stroke: #16130f;
+  --map-sw: 2px;
+  --font-head: 'Shippori Mincho B1', 'Yu Mincho', serif;
+  --font-body: 'Zen Kaku Gothic New', 'Yu Gothic', sans-serif;
+  --head-weight: 800;
+  --p-me: #d7261e;
+  --p-r1: #1f4fa3;
+  --p-r2: #c98a00;
+  --pin-bg: #fffdf8;
+  --pin-ink: #16130f;
+  --pin-bd: 1.5px solid #16130f;
+  --pin-radius: 0px;
+  --track: rgba(22, 19, 15, .12);
+  --card-bg: #fffdf8;
+  --card-ink: #16130f;
+  --card-sub: #5d574c;
+  --card-bd: 2px solid #16130f;
+  --card-radius: 0px;
+  --card-shadow: 4px 4px 0 #16130f;
+  --sea-tex: url(#waves);
+  --rg-tex: url(#dots);
+}
+
+/* ---------- 共通の骨組み ---------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+  font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  color: var(--ink); background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; }
+
+.switch {
+  flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+  background: #101010; color: #e9e9e9; font: 500 12px/1.2 system-ui, sans-serif;
+}
+.switch .sw-title { margin-right: 4px; opacity: .7; white-space: nowrap; }
+.switch button {
+  border: 1px solid #555; background: #1c1c1c; color: #e9e9e9; border-radius: 999px;
+  padding: 5px 12px; cursor: pointer; white-space: nowrap;
+}
+.switch button[aria-pressed="true"] { background: #f4f4f4; color: #111; border-color: #f4f4f4; font-weight: 700; }
+.switch .sw-hint { margin-left: auto; opacity: .6; white-space: nowrap; }
+
+.game {
+  flex: 1; min-height: 0; width: 100%; max-width: 1360px; margin: 0 auto; padding: 10px 14px 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(220px, 1fr) auto; gap: 10px; overflow-y: auto;
+}
+.panel {
+  background: var(--panel); border: var(--panel-bd); border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow); padding: 10px 14px;
+}
+h2 { margin: 0 0 6px; font: var(--head-weight) 15px/1.3 var(--font-head); letter-spacing: .04em; }
+
+/* 上の帯 */
+.hud { display: flex; align-items: center; gap: 18px; padding: 8px 14px; }
+.who { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.seat { font-weight: 700; color: var(--gold); }
+.pchip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 12px; font-weight: 700; color: var(--on-accent); background: var(--pc, var(--p-me)); }
+.pname { font: var(--head-weight) 19px/1.2 var(--font-head); }
+.days { display: flex; align-items: center; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.days li {
+  display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; background: var(--track); color: var(--sub);
+}
+.days li.done { background: var(--sub); color: var(--pin-bg); opacity: .55; }
+.days li.now { background: var(--accent); color: var(--on-accent); transform: scale(1.2); }
+.days li.tag { width: auto; border-radius: 999px; padding: 0 8px 0 7px; gap: 4px; display: flex; }
+.days li.tag small { font-size: 10.5px; font-weight: 500; }
+.days-lab { font-size: 12px; color: var(--sub); white-space: nowrap; }
+.res { white-space: nowrap; }
+.res .lab { font-size: 12px; color: var(--sub); margin-right: 4px; }
+.res b { font: var(--head-weight) 20px/1 var(--font-head); }
+.res small { font-size: 11px; margin-left: 1px; }
+.ticker { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.tk-lab { flex: none; padding: 1px 8px; font-weight: 700; font-size: 12px; background: var(--accent); color: var(--on-accent); }
+#news { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* 全体の情勢 */
+.race { display: flex; align-items: center; gap: 12px; padding: 7px 14px; }
+.race-lab { flex: none; font: var(--head-weight) 13px/1 var(--font-head); letter-spacing: .06em; }
+.race-bar { flex: 1; display: flex; height: 24px; border-radius: 4px; overflow: hidden; }
+.seg {
+  display: flex; align-items: center; gap: 6px; padding: 0 8px; min-width: 0; overflow: hidden;
+  white-space: nowrap; font-size: 12px; color: #fff; transition: flex-grow .5s;
+}
+.seg b { font-weight: 700; }
+.race-mark { flex: none; font-weight: 700; white-space: nowrap; }
+
+/* 情勢の印 */
+.mk-good { color: #19a974; } .mk-even { color: var(--gold); } .mk-bad { color: var(--accent); }
+[data-theme="night"] .mk-good { color: #4ade80; }
+[data-theme="board"] .mk-even { color: #a86f00; }
+[data-theme="paper"] .mk-even { color: #16130f; }
+[data-theme="paper"] .mk-good { color: #0b6b4b; }
+
+/* 盤面 */
+.board { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; }
+.map-cell { container-type: size; min-width: 0; min-height: 0; display: grid; place-items: center; overflow: hidden; border-radius: var(--panel-radius); background: var(--outland); }
+.map { position: relative; width: min(100cqw, calc(100cqh * 600 / 430)); aspect-ratio: 600 / 430; }
+.map svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.sea { fill: var(--sea); }
+.sea-tex { fill: var(--sea-tex); pointer-events: none; }
+.outland { fill: var(--outland); }
+.rg {
+  fill: color-mix(in srgb, var(--lead) var(--mix), var(--land));
+  stroke: var(--map-stroke); stroke-width: var(--map-sw); stroke-linejoin: round; cursor: pointer;
+  transition: fill .45s;
+}
+.rg:hover { filter: brightness(1.08); }
+.rg-tex { fill: var(--rg-tex); opacity: .35; pointer-events: none; }
+.sel-ring { fill: none; stroke: var(--gold); stroke-width: calc(var(--map-sw) + 3px); stroke-linejoin: round; pointer-events: none; }
+.rail { fill: none; stroke: var(--map-stroke); stroke-width: 2; stroke-dasharray: 7 5; opacity: .55; pointer-events: none; }
+.map-lbl { fill: var(--sub); font: 600 15px var(--font-head); letter-spacing: .3em; pointer-events: none; }
+.map-lbl.small { font-size: 10.5px; letter-spacing: .1em; opacity: .7; }
+
+.pin {
+  position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 9px 5px; border: var(--pin-bd); border-radius: var(--pin-radius); background: var(--pin-bg); color: var(--pin-ink);
+  font-size: 12.5px; line-height: 1.25; white-space: nowrap; cursor: pointer;
+}
+.pin b { font: var(--head-weight) 14px/1.2 var(--font-head); }
+.pin .mk { font-size: 12px; font-weight: 700; }
+.pin .mini { display: flex; width: 58px; height: 5px; border-radius: 3px; overflow: hidden; background: var(--track); }
+.pin .mini i { display: block; height: 100%; transition: width .45s; }
+.pin.sel { outline: 3px solid var(--gold); outline-offset: 1px; }
+.pin .pred {
+  position: absolute; top: -13px; right: -12px; min-width: 26px; padding: 1px 6px; border-radius: 999px;
+  background: var(--gold); color: #16130f; font-weight: 900; font-size: 12.5px; text-align: center;
+  animation: pop .25s ease-out;
+}
+[data-theme="paper"] .pin .pred { color: #fff; border-radius: 0; }
+.pin .foe {
+  position: absolute; left: -10px; bottom: -12px; padding: 0 6px; border-radius: 999px; font-size: 10.5px; font-weight: 700;
+  color: #fff; background: var(--pc);
+}
+.float {
+  position: absolute; left: 50%; top: -6px; transform: translateX(-50%); pointer-events: none;
+  font: 900 22px/1 var(--font-body); color: var(--num); text-shadow: 0 1px 0 var(--pin-bg), 0 0 8px var(--pin-bg);
+  animation: rise 1.1s ease-out forwards;
+}
+@keyframes rise { from { opacity: 0; transform: translate(-50%, 6px) scale(.7); } 20% { opacity: 1; transform: translate(-50%, -8px) scale(1.15); } to { opacity: 0; transform: translate(-50%, -38px) scale(1); } }
+@keyframes pop { from { transform: scale(.4); } to { transform: scale(1); } }
+
+/* 右の列 */
+.side { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; padding-bottom: 6px; scrollbar-width: thin; }
+.side > .panel { padding: 8px 12px; }
+.d-head { display: flex; align-items: baseline; gap: 10px; }
+.d-head h2 { font-size: 22px; margin: 0; }
+.d-head .voters { margin-left: auto; font-size: 12px; color: var(--sub); }
+.d-desc { margin: 2px 0 5px; font-size: 12.5px; color: var(--sub); }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.tag-chip { padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1.5px solid currentColor; }
+.row { display: grid; grid-template-columns: auto 5.5em 1fr 2.6em; align-items: center; gap: 7px; margin-top: 5px; font-size: 13px; }
+.row .bar { height: 9px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.row .bar i { display: block; height: 100%; background: var(--pc); transition: width .45s; }
+.row .pct { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.row.me .nm { font-weight: 700; }
+.d-hint { margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--track); font-size: 12.5px; }
+.d-hint em { font-style: normal; font-weight: 900; color: var(--num); }
+.foe-line, .pr-line { display: flex; align-items: center; gap: 7px; margin-top: 5px; font-size: 13px; }
+.pr-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 900; background: var(--gold); color: #16130f; }
+[data-theme="paper"] .pr-dot { color: #fff; }
+.pr-note { margin: 5px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--sub); }
+
+/* 手札 */
+.hand { display: flex; gap: 12px; align-items: stretch; min-width: 0; }
+.turn { flex: none; width: 200px; display: flex; flex-direction: column; gap: 6px; }
+.energy { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sub); }
+.pip { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--accent); }
+.pip.on { background: var(--accent); }
+.prompt { flex: 1; font-size: 13px; }
+.prompt b { font-weight: 700; }
+.btn-main, .btn-go {
+  border: 0; cursor: pointer; padding: 9px 12px; font-weight: 700; border-radius: var(--pin-radius);
+  background: var(--accent); color: var(--on-accent);
+}
+.btn-go { background: var(--gold); color: #16130f; margin-top: 4px; }
+[data-theme="paper"] .btn-go { color: #fff; }
+.cards { flex: 1; min-width: 0; display: flex; gap: 12px; overflow-x: auto; padding: 13px 4px 7px; scrollbar-width: thin; }
+.card {
+  --lift: 0px; --rot: 0deg;
+  position: relative; flex: 0 0 clamp(132px, 15vw, 178px); min-height: 142px;
+  display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px 9px;
+  background: var(--card-bg); color: var(--card-ink); border: var(--card-bd); border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow); cursor: pointer; transform: translateY(var(--lift)) rotate(var(--rot));
+  transition: transform .15s, opacity .2s;
+}
+.card:hover { --lift: -5px; }
+.card.sel { --lift: -12px; outline: 3px solid var(--gold); outline-offset: 2px; }
+.card.off { opacity: .45; }
+.card[data-type="reach"] { --type: #3d7bff; }
+.card[data-type="solid"] { --type: #19a974; }
+.card[data-type="promise"] { --type: #e5a50a; }
+.card[data-type="boost"] { --type: #a855f7; }
+.card[data-type="fund"] { --type: #8a8f98; }
+.c-top { display: flex; align-items: center; gap: 6px; }
+.c-icon { display: grid; place-items: center; width: 30px; height: 30px; color: var(--type); }
+.c-icon svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.c-type { font-size: 11px; font-weight: 700; color: var(--type); white-space: nowrap; }
+.c-cost { margin-left: auto; display: flex; gap: 3px; }
+.c-cost i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.c-cost .free { font-size: 11px; font-weight: 700; color: var(--card-sub); }
+.c-name { font: var(--head-weight) 18px/1.25 var(--font-head); }
+.c-fx { font-size: 13px; }
+.c-fx em { font-style: normal; font-weight: 900; color: var(--num); }
+.c-note { font-size: 11.5px; color: var(--card-sub); }
+.c-money { margin-top: auto; font-size: 11.5px; font-weight: 700; color: var(--card-sub); }
+
+/* ---------- 案A だけの飾り ---------- */
+[data-theme="night"] .hud { border-bottom: 3px solid var(--accent); }
+[data-theme="night"] .race-lab { padding: 5px 9px; background: var(--gold); color: #0b1433; }
+[data-theme="night"] .panel h2 { padding-left: 9px; border-left: 4px solid var(--accent); }
+[data-theme="night"] .card { border-left: 6px solid var(--type); }
+[data-theme="night"] .card[data-type="promise"] { background: linear-gradient(180deg, #4a3a10, #1d1806); border-color: #a8842a; border-left-color: var(--gold); }
+[data-theme="night"] .sel-ring { filter: drop-shadow(0 0 7px rgba(255, 210, 63, .8)); }
+[data-theme="night"] .map-cell { border: 1px solid rgba(125, 149, 220, .35); }
+
+/* ---------- 案B だけの飾り ---------- */
+[data-theme="board"] .map-cell { border: 4px solid #2b2118; }
+[data-theme="board"] .sel-ring { stroke: #ffffff; stroke-width: 6px; filter: drop-shadow(0 0 1.5px #2b2118) drop-shadow(0 0 1.5px #2b2118); }
+[data-theme="board"] .race-bar { border: 2.5px solid #2b2118; border-radius: 999px; height: 26px; }
+[data-theme="board"] .card:nth-child(odd) { --rot: -1.4deg; }
+[data-theme="board"] .card:nth-child(even) { --rot: 1.1deg; }
+[data-theme="board"] .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 9px; background: var(--type); border-radius: 12px 12px 0 0; }
+[data-theme="board"] .card { padding-top: 16px; }
+[data-theme="board"] .c-type { padding: 0 8px; border-radius: 999px; background: var(--type); color: #fff; }
+[data-theme="board"] .btn-main, [data-theme="board"] .btn-go { border: 3px solid #2b2118; border-radius: 12px; box-shadow: 0 4px 0 #2b2118; }
+[data-theme="board"] .pin { box-shadow: 0 3px 0 #2b2118; }
+[data-theme="board"] .tk-lab { border-radius: 999px; }
+[data-theme="board"] .days li.now { box-shadow: 0 0 0 2.5px #2b2118; }
+
+/* ---------- 案C だけの飾り ---------- */
+[data-theme="paper"] .panel { border-top: 3px solid var(--ink); padding: 8px 2px 4px; }
+[data-theme="paper"] .hud { border-top-width: 5px; border-bottom: 1px solid var(--ink); padding: 8px 2px; }
+[data-theme="paper"] .seat { background: var(--ink); color: #f2eee3; padding: 1px 9px; font-family: var(--font-head); }
+[data-theme="paper"] .pchip { border-radius: 0; }
+[data-theme="paper"] .pname { font-size: 23px; }
+[data-theme="paper"] .race { border-top-width: 1px; }
+[data-theme="paper"] .race-bar { border: 2px solid var(--ink); border-radius: 0; }
+[data-theme="paper"] .race-lab { font-size: 15px; }
+[data-theme="paper"] .map-cell { border: 2px solid var(--ink); }
+[data-theme="paper"] .d-head h2 { font-size: 28px; }
+[data-theme="paper"] .c-name { font-size: 21px; }
+[data-theme="paper"] .c-type { padding: 0 6px; background: var(--ink); color: #fffdf8; }
+[data-theme="paper"] .card[data-type="promise"] .c-type { background: var(--accent); }
+[data-theme="paper"] .c-icon { color: var(--ink); }
+[data-theme="paper"] .tag-chip { border-radius: 0; }
+[data-theme="paper"] .btn-main { box-shadow: 3px 3px 0 var(--ink); }
+[data-theme="paper"] .turn { border-top: 0; }
+[data-theme="paper"] .row .bar, [data-theme="paper"] .pin .mini { border-radius: 0; }
+
+/* ---------- スマホ ---------- */
+@media (max-width: 760px) {
+  body { font-size: 13px; }
+  .switch { padding: 5px 8px; gap: 5px; }
+  .switch .sw-title, .switch .sw-hint { display: none; }
+  .switch button { flex: 1; padding: 6px 4px; font-size: 11.5px; }
+  .game { padding: 8px 8px 10px; gap: 7px; grid-template-rows: auto auto minmax(210px, 1fr) auto; }
+  .hud { flex-wrap: wrap; gap: 5px 12px; padding: 7px 10px; }
+  .who { flex: 1; }
+  .pname { font-size: 17px; }
+  .days li.tag small { display: none; }
+  .days li.tag { width: 22px; padding: 0; border-radius: 50%; display: grid; box-shadow: inset 0 0 0 2px var(--gold); }
+  .ticker { flex-basis: 100%; font-size: 12px; }
+  .race { padding: 6px 10px; gap: 8px; }
+  .race-bar { height: 22px; }
+  .seg b { display: none; }
+  .board { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(232px, 1fr) auto; gap: 7px; }
+  .side { flex-direction: row; overflow-x: auto; scroll-snap-type: x mandatory; gap: 8px; padding-bottom: 5px; }
+  .side > .panel { flex: 0 0 88%; scroll-snap-align: start; padding: 7px 10px; }
+  .d-head h2 { font-size: 18px; }
+  [data-theme="paper"] .d-head h2 { font-size: 21px; }
+  .d-desc, .d-hint, .c-note { display: none; }
+  .d-head .voters { font-size: 11px; }
+  .tags { margin: 3px 0 1px; }
+  .tag-chip { font-size: 11px; padding: 0 8px; }
+  .row { margin-top: 3px; }
+  .pin { font-size: 11px; padding: 2px 6px 3px; gap: 0; }
+  .pin b { font-size: 12.5px; }
+  .pin .mk { font-size: 11px; }
+  .pin .mini { display: none; }
+  .pin .foe { bottom: -11px; font-size: 10px; }
+  .hand { flex-direction: column; gap: 6px; }
+  .turn { width: auto; flex-direction: row; align-items: center; gap: 10px; padding: 6px 10px; }
+  .turn .energy span.e-lab { display: none; }
+  .prompt { font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .prompt:has(.btn-go) { display: flex; align-items: center; }
+  .btn-main { padding: 8px 10px; white-space: nowrap; }
+  .btn-go { margin: 0 0 0 6px; padding: 4px 10px; }
+  .cards { gap: 9px; padding: 11px 4px 5px; }
+  .card { flex-basis: 132px; min-height: 128px; padding: 8px 10px 7px; gap: 2px; }
+  .c-fx { font-size: 12.5px; }
+  .c-icon { width: 26px; height: 26px; }
+  .c-icon svg { width: 23px; height: 23px; }
+  .c-name { font-size: 16.5px; }
+  [data-theme="paper"] .c-name { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01s !important; transition-duration: .01s !important; }
+}
+</style>
+</head>
+<body data-theme="night">
+
+<nav class="switch" aria-label="デザイン案の切り替え">
+  <span class="sw-title">デザイン案(試作)</span>
+  <button type="button" data-set="night" aria-pressed="true">A 開票特番の夜</button>
+  <button type="button" data-set="board" aria-pressed="false">B 選挙ボード</button>
+  <button type="button" data-set="paper" aria-pressed="false">C 号外</button>
+  <span class="sw-hint">カードを選ぶ → 地区を選ぶ、で動きます</span>
+</nav>
+
+<div class="game">
+  <header class="hud panel">
+    <div class="who"><span class="seat">北陽3区</span><span class="pchip">民政</span><b class="pname">相田 翔</b></div>
+    <ol class="days" id="days" aria-label="選挙戦の日程"></ol>
+    <div class="res"><span class="lab">資金</span><b id="money">240</b><small>万円</small></div>
+    <div class="ticker"><span class="tk-lab">速報</span><span id="news"></span></div>
+  </header>
+
+  <section class="race panel" aria-label="全体の情勢">
+    <span class="race-lab">全体の情勢</span>
+    <div class="race-bar" id="raceBar"></div>
+    <span class="race-mark" id="raceMark"></span>
+  </section>
+
+  <main class="board">
+    <div class="map-cell">
+      <div class="map" id="map">
+        <svg viewBox="0 0 600 430" role="img" aria-label="北陽3区の地図">
+          <defs>
+            <pattern id="scan" width="6" height="6" patternUnits="userSpaceOnUse"><line x1="0" y1="1" x2="6" y2="1" style="stroke:var(--tex-ink)" stroke-width="1.5"/></pattern>
+            <pattern id="waves" width="30" height="14" patternUnits="userSpaceOnUse"><path d="M0 9 Q7.5 3 15 9 T30 9" fill="none" style="stroke:var(--tex-ink)" stroke-width="1.6"/></pattern>
+            <pattern id="dots" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.25" style="fill:var(--map-stroke)"/></pattern>
+          </defs>
+          <rect class="outland" x="-900" y="-600" width="2400" height="1630"/>
+          <polygon class="sea" points="312,-600 1500,-600 1500,1030 540,1030 548,430 560,350 578,300 570,250 520,190 458,196 430,170 400,120 372,72 330,45 320,0"/>
+          <polygon class="sea-tex" points="312,-600 1500,-600 1500,1030 540,1030 548,430 560,350 578,300 570,250 520,190 458,196 430,170 400,120 372,72 330,45 320,0"/>
+          <g id="regions"></g>
+          <path class="rail" d="M-900 360 L0 318 L120 300 L250 245 L335 232 L440 262 L520 300 L600 312 L1500 330"/>
+          <polygon class="sel-ring" id="selRing" points=""/>
+          <text class="map-lbl" x="505" y="92" text-anchor="middle">北陽湾</text>
+          <text class="map-lbl small" x="62" y="412" text-anchor="middle">北陽2区</text>
+          <text class="map-lbl small" x="262" y="22" text-anchor="middle">東沢1区</text>
+        </svg>
+        <div id="pins"></div>
+      </div>
+    </div>
+    <aside class="side">
+      <section class="panel" id="detail" aria-live="polite"></section>
+      <section class="panel" id="foe"></section>
+      <section class="panel" id="promise"></section>
+    </aside>
+  </main>
+
+  <footer class="hand">
+    <div class="turn panel">
+      <div class="energy"><span class="e-lab">今日の体力</span><span id="pips" style="display:flex;gap:4px"></span></div>
+      <div class="prompt" id="prompt"></div>
+      <button type="button" class="btn-main" id="endDay">この日を終える</button>
+    </div>
+    <div class="cards" id="cards" aria-label="手札"></div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const DAYS = 8, ENERGY = 3;
+  const SPECIAL = { 4: '情勢調査', 5: '討論会', 8: '最終日' };
+
+  const CAND = {
+    me: { name: '相田 翔', short: '相田', party: '民政', role: '新人・あなた', color: 'var(--p-me)' },
+    r1: { name: '早瀬 由紀子', short: '早瀬', party: '共和', role: '現職', color: 'var(--p-r1)' },
+    r2: { name: '桐生 蓮', short: '桐生', party: '未来', role: '新人', color: 'var(--p-r2)' },
+  };
+  const REGIONS = [
+    { id: 'rural', name: '農村', voters: 6.2, tags: ['高齢層', '組織票'], desc: '田畑と集落。顔の見える付き合いがものを言う。', x: 33.5, y: 26,
+      pts: '40,60 110,38 180,30 260,48 330,45 372,72 400,120 430,170 340,165 230,180 140,200 30,240 22,150', s: { me: 46, r1: 40, r2: 14 } },
+    { id: 'residential', name: '住宅地', voters: 10.8, tags: ['子育て世帯', '浮動票'], desc: '新しい団地と古い住宅街。いちばん票が多い。', x: 22.5, y: 66,
+      pts: '30,240 140,200 230,180 250,270 235,330 200,390 130,385 70,370 38,310', s: { me: 31, r1: 49, r2: 20 } },
+    { id: 'downtown', name: '市街地', voters: 9.2, tags: ['都市部', '浮動票'], desc: '駅前の商店街とオフィス街。街頭演説がよく届く。', x: 56, y: 50.5,
+      pts: '230,180 340,165 430,170 420,260 350,290 250,270', s: { me: 34, r1: 41, r2: 25 } },
+    { id: 'industrial', name: '工業地帯', voters: 7.8, tags: ['労働組合', '組織票'], desc: '工場と社宅の街。早瀬候補の地盤。', x: 82.5, y: 67,
+      pts: '430,170 458,196 520,190 570,250 578,300 560,350 470,395 410,340 420,260', s: { me: 25, r1: 60, r2: 15 } },
+    { id: 'campus', name: '学生街', voters: 6.0, tags: ['若者', '都市部'], desc: '大学と下宿の街。SNSが届きやすい。', x: 54.5, y: 82,
+      pts: '250,270 350,290 420,260 410,340 470,395 400,404 330,400 200,390 235,330', s: { me: 28, r1: 34, r2: 38 } },
+  ];
+  const BY_ID = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
+  const has = (r, t) => r.tags.includes(t);
+
+  const ICON = {
+    speech: '<path d="M3 10v4h3l6 4V6L6 10H3z"/><path d="M15.5 9a4 4 0 010 6M18 6.5a8 8 0 010 11"/>',
+    door: '<rect x="6" y="3" width="12" height="18" rx="1"/><circle cx="14.5" cy="12" r="1"/>',
+    sns: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+    rally: '<path d="M5 21V4M5 4h12l-2.5 4 2.5 4H5"/>',
+    promise: '<circle cx="12" cy="9.5" r="6"/><path d="M8.5 14.5L7 21l5-3 5 3-1.5-6.5"/>',
+    fund: '<circle cx="12" cy="12" r="8.5"/><path d="M9 8l3 4 3-4M12 12v5M9 13h6"/>',
+    star: '<path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.2 6-5.5-3-5.5 3 1.2-6L3.2 9.4l6.1-.8z"/>',
+  };
+  // target: 地区を選んで使う / all: 選ばずに使う(地区ごとの伸びを返す)
+  const CARDS = {
+    speech: { name: '街頭演説', type: 'reach', label: '広げる', icon: 'speech', cost: 1, money: 5, target: true,
+      fx: (r) => 4 + (has(r, '都市部') ? 2 : 0), text: '選んだ地区の支持 <em>+4</em>', note: '都市部なら +6' },
+    door: { name: '戸別訪問', type: 'solid', label: '固める', icon: 'door', cost: 2, money: 0, target: true,
+      fx: (r) => 3 + (has(r, '組織票') ? 3 : 0), text: '選んだ地区の支持 <em>+3</em>', note: '組織票の地区なら +6' },
+    rally: { name: '決起集会', type: 'reach', label: '広げる', icon: 'rally', cost: 2, money: 20, target: true,
+      fx: () => 6, text: '選んだ地区の支持 <em>+6</em>', note: 'どの地区でも同じだけ効く' },
+    sns: { name: 'SNS発信', type: 'reach', label: '広げる', icon: 'sns', cost: 1, money: 0,
+      all: (r) => (has(r, '若者') ? 3 : has(r, '浮動票') ? 1 : 0), text: '若者の地区 <em>+3</em>、浮動票の地区 <em>+1</em>', note: '地区を選ばずに使える' },
+    star: { name: '党幹部の応援', type: 'boost', label: '応援', icon: 'star', cost: 1, money: 0, target: true,
+      fx: () => 7, text: '選んだ地区の支持 <em>+7</em>', note: 'この選挙で1回だけ' },
+    fund: { name: '資金集め', type: 'fund', label: '資金', icon: 'fund', cost: 1, money: -40,
+      all: () => 0, text: '資金 <em>+40万円</em>', note: '支援者に頭を下げる' },
+    pAgri: { name: '農業団体に約束', type: 'promise', label: '約束', icon: 'promise', cost: 0, money: 0,
+      all: (r) => (r.id === 'rural' ? 8 : 0), text: '農村の支持 <em>+8</em>', note: '約束「農業支援」を背負う', promise: { policy: '農業支援', org: '農業団体' } },
+    pKids: { name: '子育て世帯に約束', type: 'promise', label: '約束', icon: 'promise', cost: 0, money: 0,
+      all: (r) => (r.id === 'residential' ? 7 : 0), text: '住宅地の支持 <em>+7</em>', note: '約束「教育の充実」を背負う', promise: { policy: '教育の充実', org: '子育て世帯' } },
+  };
+  const POOL = ['speech', 'speech', 'door', 'door', 'rally', 'sns', 'sns', 'fund', 'star', 'pKids'];
+
+  let uid = 0;
+  const mk = (key) => ({ key, uid: ++uid });
+  let S;
+  function fresh() {
+    return {
+      day: 3, energy: ENERGY, money: 240, sel: 'downtown', card: null,
+      hand: ['speech', 'door', 'sns', 'rally', 'pAgri'].map(mk),
+      shares: Object.fromEntries(REGIONS.map((r) => [r.id, Object.assign({}, r.s)])),
+      promises: [{ policy: '成長戦略', org: '公約' }],
+      foe: [{ who: 'r1', region: 'residential', what: '集会', g: 4 }, { who: 'r2', region: 'campus', what: 'SNSで攻勢', g: 3 }],
+      news: '3日目の朝。早瀬陣営は明日、住宅地で集会を開くもよう。',
+    };
+  }
+
+  // ---- 計算 ----
+  function gain(regionId, who, g) {
+    const s = S.shares[regionId];
+    const old = s[who], nw = Math.min(88, old + g);
+    const k = (100 - nw) / (100 - old);
+    Object.keys(s).forEach((c) => { s[c] = c === who ? nw : s[c] * k; });
+  }
+  function overall() {
+    const out = { me: 0, r1: 0, r2: 0 };
+    let total = 0;
+    REGIONS.forEach((r) => { total += r.voters; Object.keys(out).forEach((c) => { out[c] += S.shares[r.id][c] * r.voters; }); });
+    Object.keys(out).forEach((c) => { out[c] /= total; });
+    return out;
+  }
+  function margin(s) { return s.me - Math.max(s.r1, s.r2); }
+  function mark(m) {
+    if (m >= 10) return ['◎', '優勢', 'mk-good'];
+    if (m >= 3) return ['○', 'やや優勢', 'mk-good'];
+    if (m > -3) return ['▲', '接戦', 'mk-even'];
+    if (m > -10) return ['△', 'やや劣勢', 'mk-bad'];
+    return ['×', '劣勢', 'mk-bad'];
+  }
+  function leader(s) { return Object.keys(s).sort((a, b) => s[b] - s[a]); }
+  function predict(def, r) { return def.target ? def.fx(r) : def.all(r); }
+
+  // ---- 描画 ----
+  function renderHud() {
+    let h = '';
+    for (let d = 1; d <= DAYS; d++) {
+      const cls = d < S.day ? 'done' : d === S.day ? 'now' : 'todo';
+      h += SPECIAL[d] && d > S.day
+        ? `<li class="${cls} tag" title="${d}日目:${SPECIAL[d]}">${d}<small>${SPECIAL[d]}</small></li>`
+        : `<li class="${cls}" title="${d}日目">${d}</li>`;
+    }
+    $('#days').innerHTML = h;
+    $('#money').textContent = S.money;
+    $('#news').textContent = S.news;
+  }
+  function renderRace() {
+    const o = overall();
+    $('#raceBar').innerHTML = leader(o).map((c) =>
+      `<span class="seg" style="flex:${o[c].toFixed(1)} 1 0;background:${CAND[c].color}"><b>${CAND[c].short}</b>${Math.round(o[c])}%</span>`).join('');
+    const m = mark(margin(o));
+    $('#raceMark').innerHTML = `<span class="${m[2]}">${m[0]} ${m[1]}</span>`;
+  }
+  function renderMap() {
+    const def = S.card ? CARDS[S.card.key] : null;
+    $('#regions').innerHTML = REGIONS.map((r) => {
+      const s = S.shares[r.id], ord = leader(s);
+      const mix = Math.max(22, Math.min(82, 22 + (s[ord[0]] - s[ord[1]]) * 2.4));
+      return `<polygon class="rg" data-id="${r.id}" points="${r.pts}" style="--lead:${CAND[ord[0]].color};--mix:${mix.toFixed(0)}%"/>` +
+        `<polygon class="rg-tex" points="${r.pts}"/>`;
+    }).join('');
+    $('#selRing').setAttribute('points', BY_ID[S.sel].pts);
+    $('#pins').innerHTML = REGIONS.map((r) => {
+      const s = S.shares[r.id], m = mark(margin(s));
+      const top = s.r1 >= s.r2 ? 'r1' : 'r2';
+      const p = def ? predict(def, r) : 0;
+      const foe = S.foe.filter((f) => f.region === r.id).map((f) => `<span class="foe" style="--pc:${CAND[f.who].color}">${CAND[f.who].short} 明日</span>`).join('');
+      return `<button type="button" class="pin${r.id === S.sel ? ' sel' : ''}" data-id="${r.id}" style="left:${r.x}%;top:${r.y}%">` +
+        `<b>${r.name}</b><span class="mk ${m[2]}">${m[0]} ${m[1]}</span>` +
+        `<span class="mini"><i style="width:${s.me}%;background:${CAND.me.color}"></i><i style="width:${s[top]}%;background:${CAND[top].color};margin-left:auto"></i></span>` +
+        (p > 0 ? `<span class="pred">+${p}</span>` : '') + foe + `</button>`;
+    }).join('');
+  }
+  function renderSide() {
+    const r = BY_ID[S.sel], s = S.shares[r.id], m = mark(margin(s));
+    const def = S.card ? CARDS[S.card.key] : null;
+    let hint = '';
+    if (def && def.target) hint = `<div class="d-hint">「${def.name}」をここで使うと <em>+${def.fx(r)}</em></div>`;
+    $('#detail').innerHTML =
+      `<div class="d-head"><h2>${r.name}</h2><span class="mk ${m[2]}">${m[0]} ${m[1]}</span><span class="voters">有権者 ${r.voters.toFixed(1)}万人</span></div>` +
+      `<p class="d-desc">${r.desc}</p>` +
+      `<div class="tags">${r.tags.map((t) => `<span class="tag-chip">${t}</span>`).join('')}</div>` +
+      leader(s).map((c) => `<div class="row${c === 'me' ? ' me' : ''}" style="--pc:${CAND[c].color}"><span class="pchip" style="--pc:${CAND[c].color}">${CAND[c].party}</span><span class="nm">${CAND[c].short}</span><span class="bar"><i style="width:${s[c]}%"></i></span><span class="pct">${Math.round(s[c])}%</span></div>`).join('') +
+      hint;
+    $('#foe').innerHTML = '<h2>相手の動き(明日の予告)</h2>' + S.foe.map((f) =>
+      `<div class="foe-line"><span class="pchip" style="--pc:${CAND[f.who].color}">${CAND[f.who].party}</span><span>${CAND[f.who].short} → <b>${BY_ID[f.region].name}</b>で${f.what}</span></div>`).join('');
+    $('#promise').innerHTML = '<h2>背負っている約束</h2>' + S.promises.map((p) =>
+      `<div class="pr-line"><span class="pr-dot">約</span><span><b>${p.policy}</b>(${p.org})</span></div>`).join('') +
+      '<p class="pr-note">果たせなかった約束は、次の選挙で「破った約束」のカードになって手札に混ざる。</p>';
+  }
+  function affordable(def) { return S.energy >= def.cost && (def.money <= 0 || S.money >= def.money); }
+  function renderHand() {
+    $('#pips').innerHTML = Array.from({ length: ENERGY }, (_, i) => `<i class="pip${i < S.energy ? ' on' : ''}"></i>`).join('');
+    $('#cards').innerHTML = S.hand.map((c) => {
+      const d = CARDS[c.key];
+      const cost = d.cost ? Array.from({ length: d.cost }, () => '<i></i>').join('') : '<span class="free">体力0</span>';
+      const money = d.money > 0 ? `資金 ${d.money}万円` : d.money < 0 ? '' : '資金いらず';
+      return `<button type="button" class="card${S.card === c ? ' sel' : ''}${affordable(d) ? '' : ' off'}" data-type="${d.type}" data-uid="${c.uid}">` +
+        `<span class="c-top"><span class="c-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[d.icon]}</svg></span><span class="c-type">${d.label}</span><span class="c-cost" title="体力 ${d.cost}">${cost}</span></span>` +
+        `<b class="c-name">${d.name}</b><span class="c-fx">${d.text}</span><span class="c-note">${d.note}</span><span class="c-money">${money}</span></button>`;
+    }).join('');
+    const def = S.card ? CARDS[S.card.key] : null;
+    let p;
+    if (!def) p = S.energy > 0 && S.hand.length ? 'カードを選ぶと、どの地区でどれだけ伸びるかが地図に出る。' : '今日はここまで。この日を終えよう。';
+    else if (def.target) p = `<b>「${def.name}」</b>を使う地区を地図で選ぶ。`;
+    else p = `<b>「${def.name}」</b><button type="button" class="btn-go" id="playNow">使う</button>`;
+    $('#prompt').innerHTML = p;
+  }
+  function render() { renderHud(); renderRace(); renderMap(); renderSide(); renderHand(); }
+  function floatOn(regionId, g, who) {
+    const pin = document.querySelector(`.pin[data-id="${regionId}"]`);
+    if (!pin) return;
+    const el = document.createElement('span');
+    el.className = 'float';
+    el.textContent = '+' + g;
+    if (who && who !== 'me') el.style.color = CAND[who].color;
+    pin.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+
+  // ---- 操作 ----
+  function play(card, regionId) {
+    const def = CARDS[card.key];
+    if (S.energy < def.cost) { S.news = '体力が足りない。この日を終えると回復する。'; S.card = null; return render(); }
+    if (def.money > 0 && S.money < def.money) { S.news = '資金が足りない。「資金集め」のカードを待とう。'; S.card = null; return render(); }
+    const fx = [];
+    if (def.target) {
+      const g = def.fx(BY_ID[regionId]);
+      gain(regionId, 'me', g); fx.push([regionId, g]); S.sel = regionId;
+      S.news = `${BY_ID[regionId].name}で${def.name}。支持が ${g} ポイント伸びた。`;
+    } else {
+      REGIONS.forEach((r) => { const g = def.all(r); if (g) { gain(r.id, 'me', g); fx.push([r.id, g]); } });
+      S.news = def.promise ? `${def.promise.org}に「${def.promise.policy}」を約束した。票は固まったが、約束は任期までついてくる。` : `${def.name}。${def.money < 0 ? '資金が ' + (-def.money) + '万円集まった。' : '若い世代に届いた。'}`;
+    }
+    if (def.promise) S.promises.push(def.promise);
+    S.money -= def.money;
+    S.energy -= def.cost;
+    S.hand = S.hand.filter((c) => c !== card);
+    S.card = null;
+    render();
+    fx.forEach((f) => floatOn(f[0], f[1]));
+  }
+  function endDay() {
+    const fx = S.foe.map((f) => { gain(f.region, f.who, f.g); return [f.region, f.g, f.who]; });
+    if (S.day >= DAYS) {
+      S = fresh();
+      S.news = '投票箱が閉まった(試作はここまで。3日目に戻しました)。';
+      return render();
+    }
+    S.day += 1;
+    S.energy = ENERGY;
+    S.card = null;
+    const pool = POOL.slice().sort(() => Math.random() - 0.5);
+    S.hand = pool.slice(0, 5).map(mk);
+    const pick = () => REGIONS[Math.floor(Math.random() * REGIONS.length)].id;
+    S.foe = [{ who: 'r1', region: pick(), what: ['集会', '街頭演説', '戸別訪問'][S.day % 3], g: 4 }, { who: 'r2', region: pick(), what: 'SNSで攻勢', g: 3 }];
+    S.news = `${S.day}日目の朝。${SPECIAL[S.day] ? '今日は' + SPECIAL[S.day] + '。' : ''}早瀬陣営は明日、${BY_ID[S.foe[0].region].name}に入るもよう。`;
+    render();
+    fx.forEach((f) => floatOn(f[0], f[1], f[2]));
+  }
+  function onRegion(id) {
+    const def = S.card ? CARDS[S.card.key] : null;
+    if (def && def.target) return play(S.card, id);
+    S.sel = id;
+    render();
+  }
+
+  $('#map').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-id]');
+    if (t) onRegion(t.dataset.id);
+  });
+  $('#cards').addEventListener('click', (e) => {
+    const b = e.target.closest('.card');
+    if (!b) return;
+    const card = S.hand.find((c) => String(c.uid) === b.dataset.uid);
+    S.card = S.card === card ? null : card;
+    render();
+  });
+  $('#prompt').addEventListener('click', (e) => { if (e.target.id === 'playNow' && S.card) play(S.card, null); });
+  $('#endDay').addEventListener('click', endDay);
+
+  // ---- デザイン案の切り替え ----
+  function setTheme(t) {
+    if (!['night', 'board', 'paper'].includes(t)) t = 'night';
+    document.body.dataset.theme = t;
+    document.querySelectorAll('.switch button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.set === t)));
+    try { history.replaceState(null, '', '#' + t); } catch (e) { /* file:// でも動くように */ }
+  }
+  document.querySelector('.switch').addEventListener('click', (e) => { if (e.target.dataset.set) setTheme(e.target.dataset.set); });
+  setTheme(location.hash.slice(1));
+
+  S = fresh();
+  render();
+})();
+</script>
+</body>
+</html>

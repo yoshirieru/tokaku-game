@@ -1,353 +1,256 @@
-// 選挙戦(選挙区モード)の画面
+// 選挙戦の画面:上の帯、全体の情勢、地図、右の列(地区・相手の動き・約束)、手札。朝の知らせの窓もここ。
 window.Game = window.Game || {};
-Game.UI = Game.UI || {};
 
-(function (UI) {
-  const esc = (s) => UI.esc(s);
+Game.CampaignView = (function () {
+  const UI = Game.UI, C = Game.Campaign;
+  let pendingFx = [];   // 次に画面を描いたあと、地図の札の上に浮かべる数字
 
-  UI.renderCampaign = function (app, modalRoot) {
-    const st = Game.state;
-    const camp = st.campaign;
-    if (camp.mode === 'national') return UI.renderNationalCampaign(app, modalRoot);   // 全国モード(national-view.js)
-    const C = Game.Campaign;
-    if (!C.regionById(camp, st.ui.selectedRegion)) st.ui.selectedRegion = camp.regionList[0].id;
-    const me = camp.candidates.find((c) => c.isPlayer);
+  const man = function (n) { return (n / 10000).toFixed(1) + '万人'; };
 
-    app.innerHTML = `
-      <div class="campaign">
-        ${hud(camp, me)}
-        <div class="campaign-main">
-          <div class="col-left">
-            ${mapPanel(camp, st.ui.selectedRegion)}
-            ${candidatesPanel(camp)}
-            ${UI.snsPanel(camp.sns)}
-            ${camp.support ? UI.supportPanel(camp) : ''}
-          </div>
-          <div class="col-right">
-            ${regionPanel(camp, st.ui.selectedRegion)}
-            ${actionsPanel(camp, st.ui.selectedRegion)}
-          </div>
-        </div>
-        ${logPanel(camp, st.ui.lastResult)}
-      </div>`;
-
-    // 地区の選択
-    app.querySelectorAll('[data-region]').forEach((el) => {
-      el.onclick = () => {
-        st.ui.selectedRegion = el.dataset.region;
-        Game.commit();
-      };
-    });
-    // 行動(支援団体回りは行き先の団体を選ぶ)
-    app.querySelectorAll('[data-action]').forEach((el) => {
-      el.onclick = () => {
-        const aid = el.dataset.action;
-        const run = (target) => {
-          Game.pushUndo();   // その日のうちなら取り消せる
-          const res = C.doPlayerAction(camp, aid, target);
-          if (!res.ok) Game.dropUndo();
-          st.ui.lastResult = res.text;
-          Game.commit();
-        };
-        if (C.ACTIONS[aid].target === 'org') UI.openOrgModal({ camp, pick: run });
-        else if (C.ACTIONS[aid].target === 'post') UI.openPostModal({ sns: camp.sns, pledges: camp.support ? camp.support.pledges[camp.player.id] : [], pick: run });
-        else run(st.ui.selectedRegion);
-      };
-    });
-    // 支援団体の紹介
-    app.querySelectorAll('[data-org], [data-act="org-info"]').forEach((el) => {
-      el.onclick = () => UI.openOrgModal({ camp });
-    });
-    const endBtn = app.querySelector('[data-act="end-day"]');
-    if (endBtn) {
-      endBtn.onclick = () => {
-        if (camp.actionsLeft > 0 && !confirm(`行動があと${camp.actionsLeft}回残っています。1日を終えますか?`)) return;
-        C.endDay(camp);
-        Game.clearUndo();   // 日が変わったら取り消せない
-        st.ui.lastResult = null;
-        st.ui.showMorning = true;
-        Game.commit();
-      };
+  // ---------- 部品 ----------
+  function hudHtml(s) {
+    const camp = s.camp, B = Game.Balance, days = B.campaign.days;
+    const special = {};
+    special[B.pollDay] = '情勢調査'; special[B.debateDay] = '討論会'; special[days] = '最終日';
+    let dots = '';
+    for (let d = 1; d <= days; d++) {
+      const cls = d < camp.day ? 'done' : d === camp.day ? 'now' : 'todo';
+      dots += special[d] && d > camp.day
+        ? '<li class="' + cls + ' tag" title="' + d + '日目:' + special[d] + '">' + d + '<small>' + special[d] + '</small></li>'
+        : '<li class="' + cls + '" title="' + d + '日目"' + (d === camp.day ? ' aria-current="true"' : '') + '>' + d + '</li>';
     }
-    const undoBtn = app.querySelector('[data-act="undo"]');
-    if (undoBtn) undoBtn.onclick = () => Game.undo();
-    const menuBtn = app.querySelector('[data-act="menu"]');
-    if (menuBtn) {
-      menuBtn.onclick = () => {
-        Game.save();
-        Game.showScreen('title');
-      };
-    }
-
-    if (st.ui.showMorning && camp.morning) renderMorning(modalRoot, camp);
-  };
-
-  // ---------------- 上部の状況表示 ----------------
-  function hud(camp, me) {
-    const P = camp.player;
-    const B = Game.Balance.campaign;
-    const days = Array.from({ length: camp.days }, (_, i) => {
-      const d = i + 1;
-      const cls = d < camp.day ? 'past' : d === camp.day ? 'now' : '';
-      const poll = B.pollDays.includes(d) ? ' poll' : '';
-      return `<span class="day-dot ${cls}${poll}" title="${d}日目${poll ? '(夜に情勢調査)' : ''}"></span>`;
+    const me = C.cand(camp, 'me');
+    return '<header class="hud panel">' +
+      '<div class="who"><span class="seat">' + UI.esc(Game.Data.DISTRICT.name) + '</span>' + UI.partyChip(me) + '<b class="pname">' + UI.esc(me.name) + '</b></div>' +
+      '<ol class="days" aria-label="選挙戦の日程">' + dots + '</ol>' +
+      '<div class="res"><span class="lab">資金</span><b>' + camp.money + '</b><small>万円</small></div>' +
+      '<div class="ticker"><span class="tk-lab">速報</span><span id="news">' + UI.esc(camp.news) + '</span></div>' +
+      '<button type="button" class="icon-btn" id="menu" aria-label="メニュー">' + UI.icon('menu') + '</button>' +
+      '</header>';
+  }
+  function raceHtml(camp) {
+    const o = C.overall(camp);
+    const segs = C.ranking(o).map(function (id) {
+      const c = C.cand(camp, id);
+      return '<span class="seg" style="flex:' + o[id].toFixed(1) + ' 1 0;background:' + UI.color(c) + '"><b>' + UI.esc(c.short) + '</b>' + Math.round(o[id]) + '%</span>';
     }).join('');
-    const acts = Array.from({ length: B.actionsPerDay }, (_, i) => `<span class="act-pip ${i < camp.actionsLeft ? 'on' : ''}"></span>`).join('');
-    const mom = camp.momentum[P.id];
-    const momLabel = mom >= 1.08 ? '勢いあり ↑' : mom >= 1.02 ? 'やや上向き ↗' : mom <= 0.92 ? '失速 ↓' : mom <= 0.98 ? 'やや下向き ↘' : 'ふつう →';
-    const staminaPct = Math.round((P.stamina / B.staminaMax) * 100);
-    const party = UI.party(me.party);
-    const support = Game.Campaign.partySupport(camp, me.party);
-    return `
-      <header class="hud" style="--pc:${party.color}">
-        <div class="hud-title">
-          <span class="hud-district">${esc(camp.sub ? camp.sub.title : Game.Data.DISTRICT_NAME)}</span>
-          <span class="hud-name">${UI.partyChip(me.party)} ${esc(me.name)}</span>
-        </div>
-        <div class="hud-day">
-          <span class="hud-day-num">${camp.day}<small>日目 / ${camp.days}</small></span>
-          <span class="day-dots">${days}</span>
-        </div>
-        <div class="hud-stats">
-          <div class="stat"><span class="stat-label">行動</span><span class="act-pips">${acts}</span></div>
-          <div class="stat"><span class="stat-label">資金</span><span class="stat-val ${P.broke ? 'warn' : ''}">${Math.round(P.money)}<small>万円</small></span></div>
-          <div class="stat"><span class="stat-label">体力</span><span class="meter"><span class="meter-fill ${staminaPct < B.staminaLowThreshold ? 'low' : ''}" style="width:${staminaPct}%"></span></span><span class="stat-num">${Math.round(P.stamina)}</span></div>
-          <div class="stat"><span class="stat-label">勢い</span><span class="stat-val small">${momLabel}</span></div>
-          <div class="stat"><span class="stat-label">${esc(party.short)}支持率</span><span class="stat-val">${support.toFixed(1)}<small>%</small></span></div>
-        </div>
-        <button class="btn btn-ghost hud-menu" data-act="menu" title="メニュー(セーブしてタイトルへ・政界を引退する)">≡</button>
-      </header>`;
+    return '<section class="race panel" aria-label="全体の情勢"><span class="race-lab">全体の情勢</span><div class="race-bar">' + segs + '</div>' +
+      '<span class="race-mark">' + UI.markHtml(C.margin(o)) + '</span></section>';
   }
-
-  // ---------------- 地図 ----------------
-  function mapPanel(camp, selected) {
-    const O = camp.outlook;
-    const pid = camp.player.id;
-    const fest = camp.today.mods.festival;
-    // 地区は選挙戦が持っているもの(補選・首長選はほかの選挙区のこともある)。古いセーブは今の選挙区
-    const districts = camp.regionList[0] && camp.regionList[0].map ? camp.regionList : Game.Data.DISTRICTS;
-    const tiles = districts.map((d) => {
-      const o = O.regions[d.id];
-      const recog = Math.round(camp.regions[d.id].recog[pid]);
-      return `
-        <button class="map-tile outlook-${o.key} ${d.id === selected ? 'selected' : ''}" data-region="${d.id}"
-          style="grid-column:${d.map.x + 1} / span ${d.map.w};grid-row:${d.map.y + 1} / span ${d.map.h}">
-          <span class="tile-name">${esc(d.name)}${fest === d.id ? ' 🏮' : ''}</span>
-          <span class="tile-voters">有権者 ${(d.voters / 10000).toFixed(1)}万人</span>
-          <span class="tile-outlook"><b>${UI.OUTLOOK_MARK[o.key]}</b> ${o.label}</span>
-          <span class="tile-recog">知名度 ${recog}</span>
-        </button>`;
-    }).join('');
-    const src = O.source === 'poll' ? `情勢調査(${O.day}日目夜)` : '陣営の感触(誤差大)';
-    return `
-      <section class="panel map-panel">
-        <div class="panel-head">
-          <h3>選挙区の情勢</h3>
-          <span class="muted small">${src}</span>
-        </div>
-        <div class="district-map">
-          ${tiles}
-          <div class="map-sea" style="grid-column:3;grid-row:1">${esc(camp.sub && camp.sub.sea ? camp.sub.sea : Game.Data.SEA_NAME)}</div>
-        </div>
-        <div class="map-legend small muted">◎優勢 ○やや優勢 ▲接戦 △やや劣勢 ×劣勢</div>
-      </section>`;
+  // 相手の今日の動きが、いまのままだとどれだけ効くか(先回り・固い票を見込む)
+  function intentPreview(camp) {
+    const B = Game.Balance.campaign, left = Object.assign({}, camp.shields);
+    return camp.intents.map(function (it) {
+      if (camp.blocked[it.region]) return { it: it, gain: 0, state: 'blocked' };
+      let g = C.saturated(camp, it.region, it.who) ? Math.round(it.gain * B.saturatedMult) : it.gain, st = '';
+      if (left[it.region] > 0) { g = Math.round(g * (1 - B.shieldBlock)); left[it.region] -= 1; st = 'shield'; }
+      return { it: it, gain: g, state: st };
+    });
   }
-
-  // ---------------- 候補者 ----------------
-  function candidatesPanel(camp) {
-    const O = camp.outlook.overall;
-    const rows = camp.candidates
-      .slice()
-      .sort((a, b) => O.shares[b.id] - O.shares[a.id])
-      .map((c) => {
-        const p = UI.party(c.party);
-        const sup = Game.Campaign.localSupport(camp, c.party);   // 選挙区での党の地力を含む
-        return `
-          <li class="cand-row ${c.isPlayer ? 'me' : ''}" style="--pc:${p.color}">
-            <span class="cand-name">${UI.partyChip(c.party)} ${esc(c.name)}${c.isPlayer ? `<span class="you">${camp.sub && camp.sub.proxy ? '応援する候補' : 'あなた'}</span>` : ''}</span>
-            <span class="cand-meta muted small">${UI.ROLE_LABEL[c.role] || ''}・${esc(p.name)}(支持率 ${sup.toFixed(1)}%)</span>
-            <span class="cand-share">約${Math.round(O.shares[c.id] * 100)}%</span>
-          </li>`;
-      })
-      .join('');
-    return `
-      <section class="panel">
-        <div class="panel-head">
-          <h3>候補者</h3>
-          <span class="overall outlook-${O.key}">全体:<b>${UI.OUTLOOK_MARK[O.key]} ${O.label}</b></span>
-        </div>
-        ${UI.shareBar(O.shares, camp.candidates)}
-        <ul class="cand-list">${rows}</ul>
-      </section>`;
-  }
-
-  // ---------------- 選択中の地区 ----------------
-  function regionPanel(camp, rid) {
-    const d = (camp.regionList[0] && camp.regionList[0].map ? camp.regionList : Game.Data.DISTRICTS).find((x) => x.id === rid);
-    const o = camp.outlook.regions[rid];
-    const pid = camp.player.id;
-    const reg = camp.regions[rid];
-    const traits = Object.keys(UI.TRAIT_LABEL)
-      .map((k) => `<span class="trait"><span class="trait-label">${UI.TRAIT_LABEL[k]}</span><span class="trait-bar"><span style="width:${Math.round(d.traits[k] * 100)}%"></span></span></span>`)
-      .join('');
-    const shares = UI.byShare(camp.candidates, o.shares)
-      .map((c) => `<li style="--pc:${UI.party(c.party).color}"><span class="dot"></span>${esc(c.name)}<span class="num">約${Math.round(o.shares[c.id] * 100)}%</span></li>`)
-      .join('');
-    const turnout = Math.round(Game.Campaign.turnout(d) * 100);
-    return `
-      <section class="panel region-panel">
-        <div class="panel-head">
-          <h3>${esc(d.name)}</h3>
-          <span class="outlook-badge outlook-${o.key}">${UI.OUTLOOK_MARK[o.key]} ${o.label}</span>
-        </div>
-        <p class="region-desc">${esc(d.description)}</p>
-        <div class="region-facts small">
-          <span>有権者 <b>${UI.formatVotes(d.voters)}</b>人</span>
-          <span>投票率の見込み <b>${turnout}%</b></span>
-          <span>${camp.sub && camp.sub.proxy ? "候補" : "あなた"}の知名度 <b>${Math.round(reg.recog[pid])}</b></span>
-        </div>
-        <div class="traits">${traits}</div>
-        ${UI.shareBar(o.shares, camp.candidates)}
-        <ul class="share-legend small">${shares}</ul>
-      </section>`;
-  }
-
-  // ---------------- 行動 ----------------
-  function actionsPanel(camp, rid) {
-    const regName = Game.Campaign.regionById(camp, rid).name;
-    const acts = Game.Campaign.availableActions(camp);
-    const buttons = acts
-      .map((a) => {
-        const costs = [];
-        if (a.stamina) costs.push(`体力${a.stamina}`);
-        if (a.money) costs.push(`${a.money}万円`);
-        if (a.gain && a.id === 'fund') costs.push(`+${a.gain}万円`);
-        if (a.gain && a.id === 'rest') costs.push(`体力+${a.gain}`);
-        if (a.id === 'leader') costs.push(`残り${a.left}回`);
-        const target = a.target === 'region' ? `→ ${regName}` : a.target === 'all' ? '→ 全地区' : a.target === 'org' ? '→ 団体を選ぶ' : a.target === 'post' ? '→ 投稿を選ぶ' : '';
-        return `
-          <button class="action-btn" data-action="${a.id}" ${a.enabled ? '' : 'disabled'} title="${esc(a.desc)}">
-            <span class="action-icon">${a.icon}</span>
-            <span class="action-body">
-              <span class="action-name">${esc(a.name)} <span class="action-target">${target}</span></span>
-              <span class="action-desc">${esc(a.desc)}</span>
-              <span class="action-cost">${costs.join(' / ')}${!a.enabled && a.reason ? ` <em>${esc(a.reason)}</em>` : ''}</span>
-            </span>
-          </button>`;
-      })
-      .join('');
-    const done = camp.actionsLeft === 0;
-    const mods = camp.today.mods;
-    const todayNotes = [];
-    if (camp.day === 1) todayNotes.push('出陣式:効果アップ');
-    if (camp.day === camp.days) todayNotes.push('最終日:効果アップ');
-    if (mods.rain) todayNotes.push('☔ 雨:街頭演説・集会の効果ダウン');
-    if (mods.festival) todayNotes.push(`🏮 ${Game.Campaign.regionById(camp, mods.festival).name}で祭り`);
-    if (mods.heat) todayNotes.push('☀ 暑さ:体力消費アップ');
-    return `
-      <section class="panel actions-panel">
-        <div class="panel-head">
-          <h3>今日の行動 <span class="muted small">残り${camp.actionsLeft}回</span></h3>
-          ${todayNotes.length ? `<span class="today-notes small">${todayNotes.join(' ・ ')}</span>` : ''}
-        </div>
-        <div class="action-grid">${buttons}</div>
-        <div class="end-day">
-          <button class="btn" data-act="undo" ${Game.canUndo() ? '' : 'disabled'} title="今日の行動を1つ取り消す">↶ 取り消す</button>
-          <button class="btn ${done ? 'btn-primary btn-lg pulse' : ''}" data-act="end-day">
-            ${camp.day === camp.days ? '選挙戦を終える' : `${camp.day}日目を終える`}
-          </button>
-        </div>
-      </section>`;
-  }
-
-  // ---------------- ログ ----------------
-  function logPanel(camp, lastResult) {
-    const items = camp.log
-      .slice(-14)
-      .reverse()
-      .map((l) => `<li class="log-${l.kind}"><span class="log-day">${l.day}日目</span>${esc(l.text)}</li>`)
-      .join('');
-    return `
-      <section class="panel log-panel">
-        ${lastResult ? `<div class="last-result">${esc(lastResult)}</div>` : ''}
-        <ul class="log-list">${items}</ul>
-      </section>`;
-  }
-
-  // ---------------- 朝のニュース(モーダル) ----------------
-  UI.renderCampaignMorning = (root, camp) => renderMorning(root, camp);
-  function renderMorning(root, camp) {
-    const st = Game.state;
-    const m = camp.morning;
-    const ev = m.event;
-    const eventResult = st.ui.eventResult;
-    let eventHtml = '';
-    if (ev) {
-      let choices = '';
-      if (ev.choices && camp.pending) {
-        choices = `<div class="choices">${ev.choices
-          .map((c) => `<button class="btn choice-btn" data-choice="${c.id}" ${c.disabled ? 'disabled' : ''}><b>${esc(c.label)}</b><span class="small muted">${esc(c.note)}</span></button>`)
-          .join('')}</div>`;
-      } else if (ev.choices && eventResult) {
-        choices = `<p class="event-result">${esc(eventResult)}</p>`;
+  function pinsHtml(camp, selCard) {
+    const prev = intentPreview(camp);
+    return Game.Data.DISTRICT.regions.map(function (r) {
+      const s = camp.shares[r.id];
+      const top = C.ranking(s).filter(function (id) { return id !== 'me'; })[0];
+      let pred = '';
+      if (selCard) {
+        const g = C.cardGain(camp, selCard.id, r.id);
+        if (g > 0) pred = '<span class="pred' + (C.saturated(camp, r.id, 'me') ? ' half' : '') + '">+' + g + '</span>';
       }
-      eventHtml = `
-        <div class="event-card">
-          <span class="event-kicker">${ev.kicker ? esc(ev.kicker) : ev.org ? '支援団体' : ev.choices ? 'イベント' : 'ニュース'}</span>
-          <h4>${esc(ev.title)}</h4>
-          <p>${esc(ev.text)}</p>
-          ${choices}
-        </div>`;
+      const shield = camp.shields[r.id] > 0 ? '<span class="shield" title="固い票">' + UI.icon('shield') + camp.shields[r.id] + '</span>' : '';
+      const foes = prev.filter(function (p) { return p.it.region === r.id; }).map(function (p) {
+        const c = C.cand(camp, p.it.who);
+        return '<span class="foe' + (p.state === 'blocked' ? ' stopped' : '') + '" style="--pc:' + UI.color(c) + '">' + UI.esc(c.short) + '</span>';
+      }).join('');
+      return '<button type="button" class="pin' + (r.id === camp.sel ? ' sel' : '') + '" data-id="' + r.id + '" style="left:' + r.x + '%;top:' + r.y + '%">' +
+        '<b>' + r.name + '</b>' + UI.markHtml(C.margin(s)) +
+        '<span class="mini"><i style="width:' + s.me + '%;background:' + UI.color(C.cand(camp, 'me')) + '"></i><i style="width:' + s[top] + '%;background:' + UI.color(C.cand(camp, top)) + ';margin-left:auto"></i></span>' +
+        pred + shield + (foes ? '<span class="foes">' + foes + '</span>' : '') + '</button>';
+    }).join('');
+  }
+  function sideHtml(camp, selCard) {
+    const B = Game.Balance.campaign;
+    const r = Game.Data.REGION[camp.sel], s = camp.shares[r.id];
+    const sat = C.saturated(camp, r.id, 'me');
+    let hint = '';
+    if (selCard && C.isTarget(selCard.id)) {
+      hint = '「' + Game.Data.CARDS[selCard.id].name + '」をここで使うと <em>+' + C.cardGain(camp, selCard.id, r.id) + '</em>' + (sat ? '(◎優勢の地区なので半分)' : '');
+    } else if (sat) {
+      hint = '◎優勢の地区では、カードの効果が半分になる。';
     }
-    const lines = (m.lines || []).map((l) => `<p>${esc(l)}</p>`).join('');
-    const rivals = (m.rivals || []).length
-      ? `<details class="rival-moves"><summary>昨日のライバル陣営の動き</summary><ul>${m.rivals.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></details>`
-      : '';
-    let poll = '';
-    if (m.poll || m.final) {
-      const O = camp.outlook.overall;
-      const rows = camp.candidates
-        .slice()
-        .sort((a, b) => O.shares[b.id] - O.shares[a.id])
-        .map((c) => `<li style="--pc:${UI.party(c.party).color}"><span class="dot"></span>${esc(c.name)}<span class="num">約${Math.round(O.shares[c.id] * 100)}%</span></li>`)
-        .join('');
-      poll = `
-        <div class="poll-card">
-          <span class="event-kicker">${m.final ? '最終情勢' : '情勢調査'}</span>
-          <p>あなたの情勢:<b class="outlook-text outlook-${O.key}">${UI.OUTLOOK_MARK[O.key]} ${O.label}</b></p>
-          ${UI.shareBar(O.shares, camp.candidates)}
-          <ul class="share-legend small">${rows}</ul>
-        </div>`;
+    const tags = r.tags.map(function (t) { return '<span class="tag-chip">' + Game.Data.TAGS[t] + '</span>'; }).join('') +
+      (camp.shields[r.id] > 0 ? '<span class="tag-chip solid">' + UI.icon('shield') + '固い票 ' + camp.shields[r.id] + '</span>' : '');
+    const rows = C.ranking(s).map(function (id) {
+      const c = C.cand(camp, id);
+      return '<div class="row' + (c.player ? ' me' : '') + '" style="--pc:' + UI.color(c) + '">' + UI.partyChip(c) + '<span class="nm">' + UI.esc(c.short) + '</span>' +
+        '<span class="bar"><i style="width:' + s[id] + '%"></i></span><span class="pct">' + Math.round(s[id]) + '%</span></div>';
+    }).join('');
+    const detail = '<section class="panel" id="detail" aria-live="polite">' +
+      '<div class="d-head"><h2>' + r.name + '</h2>' + UI.markHtml(C.margin(s)) + '<span class="voters">有権者 ' + man(r.voters) + '</span></div>' +
+      '<p class="d-desc">' + r.desc + '</p><div class="tags">' + tags + '</div>' + rows +
+      (hint ? '<div class="d-hint">' + hint + '</div>' : '') + '</section>';
+
+    const foe = '<section class="panel" id="foe"><h2>相手の今日の動き<small>この日の終わりに効く</small></h2>' +
+      intentPreview(camp).map(function (p) {
+        const c = C.cand(camp, p.it.who);
+        const eff = p.state === 'blocked' ? '<span class="eff stop">止めた</span>'
+          : '<span class="eff">+' + p.gain + (p.state === 'shield' ? '<small>固い票で半減</small>' : '') + '</span>';
+        return '<div class="foe-line">' + UI.partyChip(c) + '<span>' + UI.esc(c.short) + ' → <b>' + Game.Data.REGION[p.it.region].name + '</b>で' + p.it.what + '</span>' + eff + '</div>';
+      }).join('') + '</section>';
+
+    const free = B.promiseFree - camp.promises.length;
+    const promise = '<section class="panel" id="promise"><h2>背負っている約束<small>' +
+      (free > 0 ? 'あと' + free + 'つまで不利なし' : 'これ以上は全地区 −' + B.promisePenalty) + '</small></h2>' +
+      (camp.promises.length ? camp.promises.map(function (id) {
+        const p = Game.Data.PROMISES[id];
+        return '<div class="pr-line"><span class="pr-dot">約</span><span><b>' + p.policy + '</b>(' + p.org + ')</span></div>';
+      }).join('') : '<p class="pr-note">まだ何も約束していない。</p>') +
+      '<p class="pr-note">約束は、当選したあとの任期までついてくる。</p></section>';
+    return detail + foe + promise;
+  }
+  function handHtml(camp, selCard) {
+    const B = Game.Balance;
+    let pips = '';
+    for (let i = 0; i < B.campaign.energy; i++) pips += '<i class="pip' + (i < camp.energy ? ' on' : '') + '"></i>';
+    const cards = camp.hand.map(function (c) {
+      const d = Game.Data.CARDS[c.id], b = B.cards[c.id], t = Game.Data.cardText(c.id);
+      let cost = '';
+      for (let i = 0; i < b.cost; i++) cost += '<i></i>';
+      if (!b.cost) cost = '<span class="free">体力0</span>';
+      const money = b.money > 0 ? '資金 ' + b.money + '万円' : b.money < 0 ? '' : '資金いらず';
+      return '<button type="button" class="card' + (selCard && selCard.uid === c.uid ? ' sel' : '') + (C.canPlay(camp, c.id).ok ? '' : ' off') + '" data-type="' + d.type + '" data-uid="' + c.uid + '">' +
+        '<span class="c-top"><span class="c-icon">' + UI.icon(d.icon) + '</span><span class="c-type">' + Game.Data.CARD_TYPES[d.type] + '</span>' +
+        '<span class="c-cost" title="体力 ' + b.cost + '">' + cost + '</span></span>' +
+        '<b class="c-name">' + d.name + '</b><span class="c-fx">' + t.fx + '</span><span class="c-note">' + t.note + '</span><span class="c-money">' + money + '</span></button>';
+    }).join('');
+    let prompt;
+    if (!selCard) {
+      const playable = camp.hand.some(function (c) { return C.canPlay(camp, c.id).ok; });
+      prompt = playable ? 'カードを選ぶと、どの地区でどれだけ伸びるかが地図に出る。' : '今日はここまで。この日を終えよう。';
+    } else if (C.isTarget(selCard.id)) {
+      prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b>を使う地区を地図で選ぶ。';
+    } else {
+      prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b><button type="button" class="btn-go" id="playNow">使う</button>';
     }
-    const blocked = !!camp.pending;
-    root.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal">
-          <p class="modal-kicker">${m.final ? '投票日前夜' : `${m.day}日目`}</p>
-          <h2>${esc(m.title)}</h2>
-          ${lines}
-          ${eventHtml}
-          ${poll}
-          ${rivals}
-          <div class="modal-actions">
-            <button class="btn btn-primary btn-lg" data-act="close-morning" ${blocked ? 'disabled' : ''}>
-              ${m.final ? '投票日へ' : '選挙戦へ'}
-            </button>
-          </div>
-        </div>
-      </div>`;
-    root.querySelectorAll('[data-choice]').forEach((b) => {
-      b.onclick = () => {
-        st.ui.eventResult = Game.Campaign.resolveEvent(camp, b.dataset.choice);
-        Game.commit();
-      };
-    });
-    root.querySelector('[data-act="close-morning"]').onclick = () => {
-      st.ui.showMorning = false;
-      st.ui.eventResult = null;
-      if (m.final) return Game.startElection();
-      Game.commit();
-    };
+    const last = camp.day >= B.campaign.days;
+    return '<footer class="hand"><div class="turn panel">' +
+      '<div class="energy"><span class="e-lab">今日の体力</span><span class="pips">' + pips + '</span><span class="deck-n">山札 ' + camp.deck.length + '・捨て札 ' + camp.discard.length + '</span></div>' +
+      '<div class="prompt" id="prompt">' + prompt + '</div>' +
+      '<div class="turn-btns"><button type="button" class="btn btn-undo" id="undo"' + (Game.canUndo() ? '' : ' disabled') + '>' + UI.icon('undo') + '<span>取り消す</span></button>' +
+      '<button type="button" class="btn-main" id="endDay">' + (last ? '投票日へ' : 'この日を終える') + '</button></div>' +
+      '</div><div class="cards" id="cards" aria-label="手札">' + cards + '</div></footer>';
   }
 
-})(Game.UI);
+  // ---------- 朝の知らせ ----------
+  function showPending(app) {
+    const s = Game.state, camp = s.camp, p = camp.pending[0], B = Game.Balance;
+    const next = function () { C.dismiss(s); Game.save(); render(app); };
+    if (p.type === 'intro') {
+      const rv = C.cand(camp, C.topRival(camp));
+      UI.modal('<p class="m-kicker">1日目・公示</p><h2>選挙戦が始まった</h2>' +
+        '<p>' + UI.esc(Game.Data.DISTRICT.name) + 'の議席を、' + UI.esc(rv.name) + '候補(' + Game.Data.PARTIES[rv.party].short + '・' + Game.Data.ROLE_NAMES[rv.role] + ')たちと争う。いまは大きく離されている。</p>' +
+        '<ul class="m-list"><li>手札のカードを選び、地図の地区を押して使う。1日の体力は' + B.campaign.energy + '。</li>' +
+        '<li>相手の今日の動きは、地図の札の下と右の欄に出ている。</li><li>使ったカードは、その日のうちなら取り消せる。</li></ul>',
+        [{ label: '選挙戦へ', primary: true, onClick: next }]);
+    } else if (p.type === 'poll') {
+      const rows = C.ranking(p.overall).map(function (id) {
+        const c = C.cand(camp, id);
+        return '<div class="row" style="--pc:' + UI.color(c) + '">' + UI.partyChip(c) + '<span class="nm">' + UI.esc(c.short) + '</span><span class="bar"><i style="width:' + p.overall[id] + '%"></i></span><span class="pct">' + Math.round(p.overall[id]) + '%</span></div>';
+      }).join('');
+      UI.modal('<p class="np-name">北陽新聞<span>' + camp.day + '日目・朝刊</span></p><h2 class="np-head">' + UI.esc(p.headline) + '</h2>' +
+        '<p class="np-sub">' + UI.esc(Game.Data.DISTRICT.name) + ' 中盤の情勢調査</p>' + rows +
+        '<p class="np-foot">投票日には、どの候補にも地区ごとに数ポイントのぶれが出る。</p>',
+        [{ label: '新聞を閉じる', primary: true, onClick: next }], 'paper');
+    } else if (p.type === 'debate') {
+      const D = B.debate, rv = C.cand(camp, C.topRival(camp));
+      const choose = function (opt) { return function () { C.chooseDebate(s, opt); Game.clearUndo(); Game.save(); render(app); }; };
+      UI.modal('<p class="m-kicker">' + camp.day + '日目・公開討論会</p><h2>何を前に出して話す?</h2>' +
+        '<p>候補者がそろう討論会。会場とテレビの前で、有権者が見ている。</p>',
+        [
+          { label: '<b>相手の弱点を突く</b><span>' + Math.round(D.attack.chance * 100) + '%で' + UI.esc(rv.short) + '候補が全地区 ' + D.attack.hit + '。外すと自分が全地区 ' + D.attack.miss + '</span>', onClick: choose('attack') },
+          { label: '<b>政策を語る</b><span>確実に、全地区で +' + D.policy.all + '</span>', onClick: choose('policy') },
+          { label: '<b>地元の暮らしを語る</b><span>高齢層・子育て世帯の地区で +' + D.local.gain + '</span>', onClick: choose('local') },
+        ], 'choices');
+    } else {
+      UI.modal('<p class="m-kicker">' + camp.day + '日目</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
+        [{ label: 'わかった', primary: true, onClick: function () { pendingFx = pendingFx.concat(p.fx || []); next(); } }]);
+    }
+  }
+  function flushFx(camp) {
+    const seen = {};
+    pendingFx.forEach(function (f) {
+      const n = seen[f.region] = (seen[f.region] || 0) + 1;
+      const c = C.cand(camp, f.who);
+      const text = f.blocked ? '止めた' : UI.signed(f.gain);
+      setTimeout(function () { UI.floatOn(f.region, text, c.player ? null : UI.color(c)); }, (n - 1) * 380);
+    });
+    pendingFx = [];
+  }
+
+  // ---------- 操作 ----------
+  function render(app) {
+    const s = Game.state, camp = s.camp;
+    const selCard = camp.hand.filter(function (c) { return c.uid === Game.ui.card; })[0] || null;
+    app.innerHTML = '<div class="game">' + hudHtml(s) + raceHtml(camp) +
+      '<main class="board"><div class="map-cell">' +
+      UI.mapHtml(function (rid) { return UI.leadFill(camp.cands, camp.shares[rid]); }, camp.sel) +
+      '</div><aside class="side">' + sideHtml(camp, selCard) + '</aside></main>' + handHtml(camp, selCard) + '</div>';
+    app.querySelector('#pins').innerHTML = pinsHtml(camp, selCard);
+
+    const say = function (text) { camp.news = text; Game.ui.card = null; render(app); };
+    const doPlay = function (regionId) {
+      const ok = C.canPlay(camp, selCard.id);
+      if (!ok.ok) return say(ok.reason);
+      Game.pushUndo();
+      const res = C.play(s, selCard.uid, regionId);
+      Game.ui.card = null;
+      pendingFx = res.fx || [];
+      Game.save();
+      render(app);
+    };
+    app.querySelector('.map').addEventListener('click', function (e) {
+      const t = e.target.closest('[data-id]');
+      if (!t) return;
+      if (selCard && C.isTarget(selCard.id)) return doPlay(t.dataset.id);
+      camp.sel = t.dataset.id;
+      render(app);
+    });
+    app.querySelector('#cards').addEventListener('click', function (e) {
+      const b = e.target.closest('.card');
+      if (!b) return;
+      const uid = +b.dataset.uid;
+      const card = camp.hand.filter(function (c) { return c.uid === uid; })[0];
+      const ok = C.canPlay(camp, card.id);
+      if (!ok.ok) return say(ok.reason);
+      Game.ui.card = Game.ui.card === uid ? null : uid;
+      render(app);
+    });
+    const now = app.querySelector('#playNow');
+    if (now) now.onclick = function () { doPlay(null); };
+    app.querySelector('#undo').onclick = function () { pendingFx = []; Game.undo(); };
+    const finish = function () {
+      const res = C.endDay(s);
+      if (!res.ok) return;
+      Game.clearUndo();
+      Game.ui.card = null;
+      pendingFx = res.over ? [] : res.fx;
+      Game.save();
+      Game.render();
+    };
+    app.querySelector('#endDay').onclick = function () {
+      const idle = camp.energy > 0 && camp.hand.some(function (c) { return C.canPlay(camp, c.id).ok && Game.Balance.cards[c.id].cost <= camp.energy; });
+      if (!idle) return finish();
+      UI.modal('<h2>まだ動ける</h2><p>体力が ' + camp.energy + ' 残っていて、使えるカードがある。この日を終える?</p>',
+        [{ label: 'もどる' }, { label: '終える', primary: true, onClick: finish }]);
+    };
+    app.querySelector('#menu').onclick = function () {
+      UI.modal('<h2>メニュー</h2><p>ここまでの選挙戦は自動で記録されている。タイトルの「つづきから」で再開できる。</p>',
+        [{ label: 'とじる' }, { label: 'タイトルへ', primary: true, onClick: Game.toTitle }]);
+    };
+
+    if (camp.pending.length) showPending(app);
+    else flushFx(camp);
+  }
+
+  return { render: render };
+})();

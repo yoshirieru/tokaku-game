@@ -1,6 +1,6 @@
 // タイトル画面の演出(開票特番の夜)。絵は SVG と CSS だけで描き、音は Web Audio API で合成する。
 // ゲームの状態には触らない。画面の切り替えは呼び出し側(screens.js の renderTitle)から渡された関数で行う。
-//   Game.Effects.Title.render(app, { hasSave, onNew, onContinue, onVersus, onScenario, onHall, onOrgs, note })
+//   Game.Effects.Title.render(app, { hasSave, onNew, onContinue, onLegacy, note })
 // 演出の設定(通常 / 速い / スキップ、BGM、効果音)はこの画面だけのもので、localStorage に別に保存する。
 window.Game = window.Game || {};
 Game.Effects = Game.Effects || {};
@@ -347,9 +347,7 @@ Game.Effects.Title = (function () {
     const buttons = [
       { id: 'new', label: 'はじめから', nav: true },
       opts.hasSave ? { id: 'continue', label: 'つづきから', nav: true } : null,
-      { id: 'versus', label: '対戦モード', nav: true },
-      opts.onScenario ? { id: 'scenario', label: '史実モード', nav: true } : null,
-      opts.onHall ? { id: 'hall', label: '殿堂', nav: true } : null,
+      opts.onLegacy ? { id: 'legacy', label: '旧版で遊ぶ', nav: true } : null,
       { id: 'settings', label: '設定' },
     ].filter(Boolean);
     const tickerText = TICKER.map((t) => `<span>${esc(t)}</span>`).join('<i>◆</i>');
@@ -362,7 +360,6 @@ Game.Effects.Title = (function () {
             <p class="tl-note">${esc(opts.note || '')}</p>
             <div class="tl-top-actions">
               <span class="tl-sound-hint" ${Audio.playing() || !settings.bgm ? 'hidden' : ''}>♪ クリックかキーで音が鳴ります</span>
-              <button class="tl-mini" data-act="orgs">支援団体の紹介</button>
             </div>
           </div>
           <div class="tl-logo-wrap">
@@ -420,12 +417,8 @@ Game.Effects.Title = (function () {
     stage.querySelector('[data-act="new"]').onclick = leave(opts.onNew);
     const cont = stage.querySelector('[data-act="continue"]');
     if (cont) cont.onclick = leave(opts.onContinue);
-    stage.querySelector('[data-act="versus"]').onclick = leave(opts.onVersus);
-    const scb = stage.querySelector('[data-act="scenario"]');
-    if (scb) scb.onclick = leave(opts.onScenario);
-    const hb = stage.querySelector('[data-act="hall"]');
-    if (hb) hb.onclick = leave(opts.onHall);
-    stage.querySelector('[data-act="orgs"]').onclick = () => { sfx(Audio.decide); opts.onOrgs(); };
+    const lg = stage.querySelector('[data-act="legacy"]');
+    if (lg) lg.onclick = leave(opts.onLegacy);
     stage.querySelector('[data-act="settings"]').onclick = () => { sfx(Audio.decide); openSettings(stage); };
   }
 
@@ -466,5 +459,11 @@ Game.Effects.Title = (function () {
     panel.querySelector('.tl-opt.on').focus();
   }
 
-  return { render };
+  // ゲーム中の効果音(開票特番の当確のハンコなど)。設定で効果音を切っていれば鳴らさない
+  function sound(name) {
+    if (!loadSettings().sfx || !Audio.ensure()) return;
+    if (name === 'stamp') Audio.stamp(); else Audio.decide();
+  }
+
+  return { render, sound };
 })();
