@@ -8,10 +8,13 @@ Game.Campaign = (function () {
   const regions = function () { return Game.Data.DISTRICT.regions; };
 
   // ---------- 始まり ----------
+  // 2回目からの選挙は、任期の結果(state.career。career.js)が返ってくる:
+  //   立場(現職・元職)、地盤、守った約束の推薦、破った約束、持ち越した約束、党幹部の応援、資金
   function newCampaign(state) {
-    const B = bal(), party = state.player.party;
-    const roles = Game.Data.ROLES[party];
-    const cands = [{ id: 'me', party: party, name: state.player.name, short: state.player.name.split(/[ 　]/)[0], role: 'newcomer', player: true }];
+    const B = bal(), CB = B.comeback, party = state.player.party;
+    const cr = state.career || null;
+    const roles = (cr && cr.rivalRoles) || Game.Data.ROLES[party];
+    const cands = [{ id: 'me', party: party, name: state.player.name, short: state.player.name.split(/[ 　]/)[0], role: cr ? cr.role : 'newcomer', player: true }];
     Object.keys(roles).forEach(function (p) {
       const who = Game.Data.PEOPLE[p];
       cands.push({ id: p, party: p, name: who.name, short: who.short, role: roles[p] });
@@ -21,7 +24,7 @@ Game.Campaign = (function () {
       const raw = {};
       let sum = 0;
       cands.forEach(function (c) {
-        raw[c.id] = B.partyBase[r.id][c.party] * B.roles[c.player ? 'player' : c.role].mult;
+        raw[c.id] = B.partyBase[r.id][c.party] * (c.player ? B.playerRoles[c.role] : B.roles[c.role].mult);
         sum += raw[c.id];
       });
       shares[r.id] = {};
@@ -30,9 +33,37 @@ Game.Campaign = (function () {
     const camp = {
       day: 0, energy: 0, money: B.campaign.startMoney, sel: 'downtown',
       cands: cands, shares: shares, shields: {}, promises: [],
-      deck: R.shuffle(state, B.deck.concat(B.partyPromises[party])), discard: [], hand: [], uid: 0,
-      intents: [], blocked: {}, today: {}, pending: [], news: '', played: 0,
+      deck: [], discard: [], hand: [], uid: 0,
+      intents: [], blocked: {}, today: {}, pending: [], news: '', played: 0, comeback: null,
     };
+    let deck = B.deck.slice();
+    if (!cr) {
+      deck = deck.concat(B.partyPromises[party]);
+    } else {
+      const N = cr.next;
+      const stars = Game.Career.extraStars(cr);
+      for (let i = 0; i < stars; i++) deck.push('star');
+      // 約束のカード:持ち越した約束・破った約束の団体には、今回は約束できない
+      const closed = {};
+      N.carried.concat(N.broken, N.light).forEach(function (id) { closed[id] = true; });
+      B.partyPromises[party].forEach(function (id) { if (!closed[B.cards[id].promise]) deck.push(id); });
+      N.endorse.forEach(function (id) { deck.push('e_' + id); });
+      N.broken.forEach(function (id) { deck.push('b_' + id); });
+      camp.promises = N.carried.slice();
+      const carryMoney = Math.min(CB.moneyCarryMax, cr.money);
+      camp.money += carryMoney;
+      // 始まりの支持:議席を守り続けている相手の現職は、地盤を固めている
+      cands.forEach(function (c) {
+        if (!c.player && (cr.rivalSolid || {})[c.party]) regions().forEach(function (r) { applyGain(camp, r.id, c.id, CB.rivalBase); });
+      });
+      // こちらは地盤のぶん上がり、破った約束の団体の地区は下がる
+      let baseSum = 0;
+      regions().forEach(function (r) { const n = cr.base[r.id] || 0; if (n) { applyGain(camp, r.id, 'me', n); baseSum += n; } });
+      N.broken.forEach(function (id) { applyGain(camp, Game.Data.PROMISES[id].region, 'me', CB.brokenStart); });
+      N.light.forEach(function (id) { applyGain(camp, Game.Data.PROMISES[id].region, 'me', CB.lightStart); });
+      camp.comeback = { stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney };
+    }
+    camp.deck = R.shuffle(state, deck);
     state.camp = camp;
     startDay(state);
     return camp;
@@ -88,6 +119,7 @@ Game.Campaign = (function () {
   function cardGain(camp, id, regionId) {
     const B = bal(), b = B.cards[id], r = Game.Data.REGION[regionId];
     let g = 0;
+    if (b.curse) return 0;
     if (b.all) {
       r.tags.forEach(function (t) { g = Math.max(g, b.all[t] || 0); });
     } else if (b.region) {
@@ -145,7 +177,11 @@ Game.Campaign = (function () {
         const g = cardGain(camp, id, r.id);
         if (g) fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', g)) });
       });
-      if (b.promise) {
+      if (b.curse) {
+        msg = Game.Data.PROMISES[b.curse].org + 'に頭を下げに行った。許されたわけではないが、「破った約束」は手札から消えた。';
+      } else if (b.endorse) {
+        msg = Game.Data.PROMISES[b.endorse].org + 'の推薦を受けた。約束を守ったことが、票になって返ってきた。';
+      } else if (b.promise) {
         const p = Game.Data.PROMISES[b.promise];
         camp.promises.push(b.promise);
         msg = p.org + 'に「' + p.policy + '」を約束した。票は固まったが、約束は任期までついてくる。';
@@ -255,7 +291,7 @@ Game.Campaign = (function () {
     const first = cand(camp, camp.intents[0].who);
     camp.news = camp.day + '日目の朝。' + first.short + '陣営は今日、' + Game.Data.REGION[camp.intents[0].region].name + 'に入るもよう。';
     if (camp.day === 1) {
-      camp.pending.push({ type: 'intro' });
+      camp.pending.push({ type: state.career ? 'again' : 'intro' });
     } else if (camp.day === B.pollDay) {
       camp.pending.push({ type: 'poll', headline: pollHeadline(camp), overall: overall(camp) });
     } else if (camp.day === B.debateDay) {

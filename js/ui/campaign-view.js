@@ -105,7 +105,7 @@ Game.CampaignView = (function () {
         const p = Game.Data.PROMISES[id];
         return '<div class="pr-line"><span class="pr-dot">約</span><span><b>' + p.policy + '</b>(' + p.org + ')</span></div>';
       }).join('') : '<p class="pr-note">まだ何も約束していない。</p>') +
-      '<p class="pr-note">約束は、当選したあとの任期までついてくる。</p></section>';
+      '<p class="pr-note">約束は、当選したあとの任期までついてくる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。</p></section>';
     return detail + foe + promise;
   }
   function handHtml(camp, selCard) {
@@ -130,7 +130,7 @@ Game.CampaignView = (function () {
     } else if (C.isTarget(selCard.id)) {
       prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b>を使う地区を地図で選ぶ。';
     } else {
-      prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b><button type="button" class="btn-go" id="playNow">使う</button>';
+      prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b><button type="button" class="btn-go" id="playNow">' + (B.cards[selCard.id].curse ? '謝りに行く' : '使う') + '</button>';
     }
     const last = camp.day >= B.campaign.days;
     return '<footer class="hand"><div class="turn panel">' +
@@ -151,6 +151,22 @@ Game.CampaignView = (function () {
         '<p>' + UI.esc(Game.Data.DISTRICT.name) + 'の議席を、' + UI.esc(rv.name) + '候補(' + Game.Data.PARTIES[rv.party].short + '・' + Game.Data.ROLE_NAMES[rv.role] + ')たちと争う。いまは大きく離されている。</p>' +
         '<ul class="m-list"><li>手札のカードを選び、地図の地区を押して使う。1日の体力は' + B.campaign.energy + '。</li>' +
         '<li>相手の今日の動きは、地図の札の下と右の欄に出ている。</li><li>使ったカードは、その日のうちなら取り消せる。</li></ul>',
+        [{ label: '選挙戦へ', primary: true, onClick: next }]);
+    } else if (p.type === 'again') {
+      // 2回目からの選挙:任期の結果が返ってくる
+      const cr = s.career, cb = camp.comeback, me = C.cand(camp, 'me');
+      const org = function (id) { return Game.Data.PROMISES[id].org; };
+      const li = [];
+      li.push(['', '今回は<b>' + Game.Data.ROLE_NAMES[me.role] + '</b>として戦う。']);
+      if (cb.base) li.push(['kept', '任期のあいだに固めた地盤が、始まりの支持になった(地区の合計 +' + cb.base + ')。']);
+      cb.endorse.forEach(function (id) { li.push(['kept', org(id) + 'との約束を守った。<b>推薦のカード</b>が山札に入っている。']); });
+      cb.broken.forEach(function (id) { li.push(['broken', org(id) + 'との約束を破った。' + Game.Data.REGION[Game.Data.PROMISES[id].region].name + 'の支持が下がり、<b>「破った約束」のカード</b>が山札に混ざっている。']); });
+      cb.light.forEach(function (id) { li.push(['light', org(id) + 'との約束は途中までだった。' + Game.Data.REGION[Game.Data.PROMISES[id].region].name + 'の支持が少し下がっている。']); });
+      cb.carried.forEach(function (id) { li.push(['carried', org(id) + 'との約束は、持ち越したまま背負っている。']); });
+      if (cb.stars) li.push(['kept', '党への貢献が認められ、党幹部の応援が ' + cb.stars + '枚 増えた。']);
+      if (cb.money) li.push(['', '任期で集めた資金 ' + cb.money + '万円を持ち込んだ。']);
+      UI.modal('<p class="m-kicker">' + (cr.elections + 1) + '回目の選挙・公示</p><h2>' + (cr.status === 'member' ? '議席を守る戦い' : '議席を取り戻す戦い') + '</h2>' +
+        '<ul class="m-lines">' + li.map(function (x) { return '<li class="ml-' + x[0] + '">' + x[1] + '</li>'; }).join('') + '</ul>',
         [{ label: '選挙戦へ', primary: true, onClick: next }]);
     } else if (p.type === 'poll') {
       const rows = C.ranking(p.overall).map(function (id) {

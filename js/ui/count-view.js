@@ -129,8 +129,10 @@ Game.CountView = (function () {
     const me = byId(cands, 'me'), w = byId(cands, e.winner);
     const diff = e.totals[e.order[0]] - e.totals[e.order[1]];
     let head, sub;
+    // 結果の画面のあいだ、s.career はまだこの選挙を数えていない(「任期へ」を押したときに afterElection が数える)
+    const winsBefore = s.career ? s.career.wins : 0;
     if (e.won) {
-      head = UI.esc(me.name) + '、初当選';
+      head = UI.esc(me.name) + '、' + (winsBefore === 0 ? '初当選' : me.role === 'incumbent' ? (winsBefore + 1) + '回目の当選' : '返り咲き');
       sub = num(e.totals.me) + '票。次点の' + UI.esc(byId(cands, e.order[1]).name) + '氏に ' + num(diff) + '票差。';
     } else {
       head = e.lossRatio >= 90 ? 'あと一歩、届かず' : '落選';
@@ -155,7 +157,7 @@ Game.CountView = (function () {
       return '<div class="pr-line"><span class="pr-dot">約</span><span><b>' + p.policy + '</b>(' + p.org + ')</span></div>';
     }).join('');
     const promiseText = !camp.promises.length ? '<p class="pr-note">誰にも約束をせずに戦い抜いた。</p>'
-      : e.won ? promises + '<p class="pr-note">この約束は、任期のあいだに果たすことになる。果たせなければ、次の選挙で返ってくる。</p>'
+      : e.won ? promises + '<p class="pr-note">この約束は、任期のあいだに果たすことになる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。</p>'
         : promises + '<p class="pr-note">議席に届かず、約束を果たす場は得られなかった。</p>';
 
     app.innerHTML = '<div class="result">' +
@@ -164,16 +166,16 @@ Game.CountView = (function () {
       '<p class="sub">投票日の天気は' + WEATHER[e.weather] + '、投票率 ' + turnoutAll(e).toFixed(1) + '%。' + (e.zeroCall ? '午後8時ちょうどに当確が出た。' : '当確が出たのは ' + e.ticks[e.callTick].time + '。') + '</p></header>' +
       '<div class="rs-body"><div class="rs-left"><section class="panel"><h2>開票結果</h2>' + table + '</section>' +
       '<section class="panel"><h2>背負った約束</h2>' + promiseText + '</section>' +
-      '<section class="panel"><h2>この先</h2><p class="pr-note">議員の任期・再選・党首・政権は、これから作っていく部分です。いまは選挙戦と開票までを遊べます。</p></section></div>' +
+      '<section class="panel"><h2>この先</h2><p class="pr-note">' + (e.won ? '議員として任期に入る。約束を果たし、地盤を固め、次の選挙に備える。' : '浪人として地元を歩き、次の解散を待つ。') + '</p></section></div>' +
       '<div class="map-cell">' + UI.mapHtml(function (rid) { return UI.leadFill(cands, e.regions[rid].votes); }, null) + '</div></div>' +
       '<footer class="ct-btns"><button type="button" class="btn" id="title">タイトルへ</button>' +
-      '<button type="button" class="btn btn-primary btn-lg" id="again">もう一度立候補する</button></footer></div>';
+      '<button type="button" class="btn btn-primary btn-lg" id="again">' + (e.won ? '議員の任期へ' : '浪人として次をめざす') + '</button></footer></div>';
     app.querySelector('#pins').innerHTML = pins;
     if (e.won && !e.resultSeen) UI.sound('stamp');
     e.resultSeen = true;
     Game.save();
     app.querySelector('#title').onclick = Game.toTitle;
-    app.querySelector('#again').onclick = function () { Game.state = null; Game.view = 'setup'; Game.render(); };
+    app.querySelector('#again').onclick = function () { Game.Career.afterElection(s); Game.ui.card = null; Game.clearUndo(); Game.save(); Game.render(); };
   }
 
   return { render: render, renderResult: renderResult };

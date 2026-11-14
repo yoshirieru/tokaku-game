@@ -32,21 +32,25 @@ Game.Data.ROLES = {
   kyowa:  { minsei: 'incumbent', mirai: 'newcomer' },
   mirai:  { minsei: 'former', kyowa: 'newcomer' },
 };
-Game.Data.ROLE_NAMES = { incumbent: '現職', former: '元職', newcomer: '新人' };
-Game.Data.ROLE_ORDER = ['incumbent', 'former', 'newcomer'];   // 開票特番の並び(テレビと同じ)
+Game.Data.ROLE_NAMES = { incumbent: '現職', former: '元職', challenger: '元職', newcomer: '新人' };
+Game.Data.ROLE_ORDER = ['incumbent', 'former', 'challenger', 'newcomer'];   // 開票特番の並び(テレビと同じ)
 
 // 地区の性格(カードの効き方に出る)
 Game.Data.TAGS = {
   urban: '都市部', float: '浮動票', org: '組織票', elder: '高齢層', family: '子育て世帯', youth: '若者', union: '労働組合',
 };
 
-// 約束(約束カードで背負う)
+// 約束(約束カードで背負う)。region はその団体の地区。任期の結果は、その地区に返ってくる
 Game.Data.PROMISES = {
-  agri:    { policy: '農業支援', org: '農業団体' },
-  wage:    { policy: '賃上げ', org: '労働組合' },
-  family:  { policy: '子育て支援', org: '子育て世帯の会' },
-  taxcut:  { policy: '減税', org: '商店会' },
-  tuition: { policy: '学費の負担軽減', org: '学生団体' },
+  agri:    { policy: '農業支援', org: '農業団体', region: 'rural' },
+  wage:    { policy: '賃上げ', org: '労働組合', region: 'industrial' },
+  family:  { policy: '子育て支援', org: '子育て世帯の会', region: 'residential' },
+  taxcut:  { policy: '減税', org: '商店会', region: 'downtown' },
+  tuition: { policy: '学費の負担軽減', org: '学生団体', region: 'campus' },
+};
+// 任期の会期の名前(1ターン = 半年)
+Game.Data.sessionName = function (turn) {
+  return Math.ceil(turn / 2) + '年目・' + (turn % 2 ? '通常国会' : '臨時国会');
 };
 
 // 選挙区。地図は viewBox 0 0 600 430 の多角形(pts)。x・y は地区の札を置く位置(%)

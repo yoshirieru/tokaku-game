@@ -32,11 +32,13 @@ Game.Balance = {
   },
   roles: {
     // gain 1回の動きで伸びる支持 / actions 日ごとの動きの回数
-    player:    { mult: 0.69 },
     newcomer:  { mult: 0.85, gain: 4, actions: [1, 1, 1, 1, 1, 2, 2, 2] },
     former:    { mult: 1.1,  gain: 4, actions: [2, 2, 2, 2, 2, 2, 2, 2] },
     incumbent: { mult: 1.25, gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },
+    challenger: { mult: 1.2,  gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },   // プレイヤーに議席を奪われた前の現職(画面では元職)。巻き返しをねらう
   },
+  // プレイヤーの立場ごとの、始まりの支持の倍率(新人 / 当選して現職 / 落選した元職)
+  playerRoles: { newcomer: 0.69, incumbent: 0.72, former: 0.66 },
   // 相手が入る地区の選び方:有権者の多さ × 競り合い × 党との相性。守りは、こちらに迫られた地区を重く見る
   rivalAI: { closeScale: 8, defendWithin: 10, defendMult: 1.6, affinityBase: 35 },
 
@@ -64,6 +66,51 @@ Game.Balance = {
     minsei: ['pAgri', 'pShop', 'pFamily'],
     kyowa:  ['pUnion', 'pFamily', 'pStudent'],
     mirai:  ['pStudent', 'pShop', 'pFamily'],
+  },
+
+  // 任期の結果が、次の選挙に返ってくる(推薦・破った約束のカードは cards.js が約束ごとに作る)
+  comeback: {
+    endorse: { cost: 0, money: 0, gain: 5 },   // 守った約束 → その団体の「推薦」のカード(その地区の支持が伸びる。1回だけ)
+    curse: { cost: 1, money: 0 },              // 破った約束 → 使えないカード。体力を払って謝りに行くと取り除ける
+    rivalBase: 5,        // 議席を守り続けている相手の現職は、任期のあいだに地盤を固めている(全地区の始まりの支持)
+    brokenStart: -8,     // 破った約束:その団体の地区の、始まりの支持
+    lightStart: -2,      // 少しは進めていた約束(破った約束のカードは出ない)
+    baseMax: 3,          // 地盤の上限(地区ごと。1につき、始まりの支持 +1)
+    baseCarry: 0.5,      // 選挙のあと、次の任期に残る地盤の割合
+    starPer: 4,          // 党への貢献がこれだけたまるごとに、次の選挙で「党幹部の応援」が1枚増える
+    starExtraMax: 2,     // 増える枚数の上限
+    moneyCarryMax: 100,  // 任期の資金のうち、選挙戦に持ち込める上限(万円)
+  },
+
+  // 議員の任期。1ターン = 国会の1会期(半年)。8ターン(4年)で任期満了
+  term: {
+    turns: 8, energy: 3, handSize: 5, startMoney: 20,
+    // その会期の終わりに解散する見込み(ターンごと)。最初の会期は解散しない。最後は任期満了
+    dissolve: [0, 0.05, 0.1, 0.15, 0.25, 0.35, 0.5, 1],
+    dissolveMin: 0.02, dissolveMax: 0.9,
+    promiseGoal: 2,      // 約束を果たすのに要る進み
+    graceTurns: 2,       // 約束してからの会期がこれ未満で解散になったら、破ったことにせず持ち越す
+    keptBase: 2,         // 約束を果たしたとき、その団体の地区の地盤
+    cards: {
+      question: { cost: 1, money: 0,   promise: 1, contrib: 1 },   // 委員会質問(約束がなければ党への貢献)
+      bill:     { cost: 2, money: 10,  promise: 2, contrib: 2 },   // 議員立法
+      local:    { cost: 1, money: 0,   base: 1 },                  // 地元回り
+      report:   { cost: 2, money: 10,  base: 2 },                  // 国政報告会
+      party:    { cost: 1, money: 0,   contrib: 2 },               // 党の仕事
+      media:    { cost: 2, money: 0,   baseAll: 1 },               // メディア出演
+      fund:     { cost: 1, money: -40 },                           // 資金パーティー
+    },
+    deck: {
+      member: ['question', 'question', 'question', 'bill', 'bill', 'local', 'local', 'local', 'report', 'party', 'party', 'media', 'fund'],
+      ronin: ['local', 'local', 'local', 'local', 'report', 'report', 'media', 'media', 'fund', 'fund'],   // 浪人は国会で動けない
+    },
+    // 会期の始まりの出来事(最初の会期には起きない)
+    events: {
+      chance: 0.5,
+      petition: { weight: 3, base: 3, refuse: -2, maxOpen: 3 },   // 団体からの要望:受ければ新しい約束と地盤、断れば地盤が下がる
+      windUp:   { weight: 2, wind: 0.1 },                         // 内閣支持率が上がり、解散風が強まる
+      windDown: { weight: 2, wind: -0.1 },                        // 解散風が弱まる
+    },
   },
 
   // 朝の出来事(初日・情勢調査の日・討論会の日には起きない)

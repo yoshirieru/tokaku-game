@@ -14,7 +14,7 @@ Game.Effects.Title = (function () {
   const TICKER = [
     '本日投開票', '午後8時、投票が締め切られました', '北陽3区、現職に新人が挑む', '出口調査では大接戦',
     '開票は農村部から進む見込み', '各陣営の事務所に支持者が集まっています', '投票率は前回をやや上回る見込み',
-    '約束は、当選のあともついてくる',
+    '約束は、次の選挙で返ってくる',
   ];
 
   let started = false;     // このページで一度でも演出を見せたか(2回目以降はすぐに最後の形で出す)
@@ -355,7 +355,7 @@ Game.Effects.Title = (function () {
     const buttons = [
       { id: 'new', label: 'はじめから', nav: true },
       opts.hasSave ? { id: 'continue', label: 'つづきから', nav: true } : null,
-      opts.onLegacy ? { id: 'legacy', label: '旧版で遊ぶ', nav: true } : null,
+      opts.onLegacy ? { id: 'legacy', label: '前作で遊ぶ', nav: true } : null,
       { id: 'settings', label: '設定' },
     ].filter(Boolean);
     const tickerText = TICKER.map((t) => `<span>${esc(t)}</span>`).join('<i>◆</i>');
@@ -367,7 +367,7 @@ Game.Effects.Title = (function () {
         ${boardHtml()}
         <div class="tl-main">
           <p class="tl-kicker" ${d(T.kicker)}>衆議院総選挙 開票特番</p>
-          <h1 class="tl-logo"><span class="tl-logo-text" ${d(T.logo)}>当確<i>!</i></span><span class="tl-pin" ${d(T.pin)}>${rosetteSvg()}</span></h1>
+          <h1 class="tl-logo"><span class="tl-logo-text" ${d(T.logo)}>当確<i>!</i><b class="tl-two">2</b></span><span class="tl-pin" ${d(T.pin)}>${rosetteSvg()}</span></h1>
           <p class="tl-sub"><span ${d(T.sub)}>新人候補から総理へ</span></p>
           <nav class="tl-menu" aria-label="メニュー">
             ${buttons.map((b, i) => `<button type="button" class="tl-btn" data-act="${b.id}" ${b.nav ? 'data-nav' : ''} ${d(T.menu + i * T.menuStep)}>${esc(b.label)}</button>`).join('')}
