@@ -3,7 +3,7 @@ window.Game = window.Game || {};
 
 Game.CountView = (function () {
   const UI = Game.UI;
-  let auto = false, timer = null, prevShown = -1;
+  let auto = false, timer = null, prevShown = -1, prJust = false;
 
   const num = function (n) { return Math.round(n).toLocaleString('ja-JP'); };
   const WEATHER = { sunny: '晴れ', cloudy: 'くもり', rain: '雨' };
@@ -41,6 +41,20 @@ Game.CountView = (function () {
     const called = t >= e.callTick;
     const justCalled = t === e.callTick && prevShown < t;
     const max = e.totals[e.winner] * 1.04;
+    // 比例代表:小選挙区で負けたときだけ、開票のあと(午前1時30分)に復活できたかが分かる
+    const pr = !e.won && e.pr ? e.pr : null;
+    const prShown = !!pr && !!e.prShown;
+    let prBox = '', prText = '';
+    if (prShown) {
+      const me = byId(cands, 'me');
+      const pos = function (v) { return Math.max(0, Math.min(100, (v - 80) / 20 * 100)); };
+      prBox = '<div class="pr-box' + (pr.revived ? ' ok' : '') + '"><div class="pr-head"><span class="ct-live">比例代表</span><b>' + Game.Data.DISTRICT.block + '</b>' +
+        '<span class="sub">' + Game.Data.PARTIES[s.player.party].name + 'の復活ライン</span>' + (pr.revived ? '<span class="stamp' + (prJust ? ' new' : '') + '">比例復活</span>' : '') + '</div>' +
+        '<div class="pr-meter"><i style="width:' + pos(e.lossRatio) + '%"></i><span class="pr-mark" style="left:' + pos(pr.line) + '%"></span></div>' +
+        '<p class="pr-text">あなたの惜敗率 <b>' + e.lossRatio.toFixed(1) + '%</b> / 復活ライン <b>' + pr.line.toFixed(1) + '%</b></p></div>';
+      prText = pr.revived ? '午前1時30分。比例代表の議席が決まり、' + me.name + '氏が復活当選を果たしました。'
+        : '午前1時30分。比例代表の議席が決まりました。' + me.name + '氏の惜敗率は、復活ラインに届きませんでした。';
+    }
 
     const rows = fixedOrder(cands).map(function (c) {
       const v = tick.counted[c.id], pv = prev.counted[c.id];
@@ -71,14 +85,14 @@ Game.CountView = (function () {
     const canResult = called || t === last;
     app.innerHTML = '<div class="count">' +
       '<header class="ct-head panel"><span class="ct-live">開票速報</span><h1>' + UI.esc(Game.Data.DISTRICT.name) + '</h1>' +
-      '<span class="ct-clock">' + tick.time + '</span><span class="ct-pct">開票率 <b>' + Math.round(tick.pct * 100) + '</b>%</span></header>' +
-      '<div class="ct-body"><section class="ct-cands panel">' + rows + '</section>' +
+      '<span class="ct-clock">' + (prShown ? '1:30' : tick.time) + '</span><span class="ct-pct">開票率 <b>' + Math.round(tick.pct * 100) + '</b>%</span></header>' +
+      '<div class="ct-body"><section class="ct-cands panel">' + rows + prBox + '</section>' +
       '<div class="map-cell">' + UI.mapHtml(fill, null) + '</div></div>' +
-      '<div class="ct-ticker panel"><span class="tk-lab">速報</span><span>' + UI.esc(narration(s, t)) + '</span></div>' +
+      '<div class="ct-ticker panel"><span class="tk-lab">速報</span><span>' + UI.esc(prShown ? prText : narration(s, t)) + '</span></div>' +
       '<footer class="ct-btns">' +
       (t < last ? '<button type="button" class="btn" id="auto">' + (auto ? '止める' : '自動で進める') + '</button>' +
         '<button type="button" class="btn btn-primary btn-lg" id="next">' + e.ticks[t + 1].time + ' へ進む</button>' : '') +
-      (canResult ? '<button type="button" class="btn' + (t === last ? ' btn-primary btn-lg' : '') + '" id="result">結果を見る</button>' : '') +
+      (canResult ? '<button type="button" class="btn' + (t === last ? ' btn-primary btn-lg' : '') + '" id="result">' + (pr && !prShown ? '比例代表の結果へ' : '結果を見る') + '</button>' : '') +
       '</footer></div>';
     app.querySelector('#pins').innerHTML = pins;
 
@@ -95,7 +109,8 @@ Game.CountView = (function () {
         if (k < 1 && b.isConnected) requestAnimationFrame(step);
       })(t0);
     });
-    if (justCalled) UI.sound('stamp');
+    if (justCalled || (prJust && pr && pr.revived)) UI.sound('stamp');
+    prJust = false;
     prevShown = t;
 
     const advance = function () {
@@ -116,7 +131,13 @@ Game.CountView = (function () {
     if (autoBtn) autoBtn.onclick = function () { auto = !auto; render(app); };
     const resBtn = app.querySelector('#result');
     if (resBtn) resBtn.onclick = function () {
-      auto = false; clearTimeout(timer); prevShown = -1;
+      auto = false; clearTimeout(timer);
+      if (pr && !e.prShown) {   // 先に比例代表の結果を見せる
+        e.shown = last; e.prShown = true; prJust = true;
+        Game.save();
+        return render(app);
+      }
+      prevShown = -1;
       e.shown = last;
       s.screen = 'result';
       Game.save();
@@ -131,16 +152,19 @@ Game.CountView = (function () {
     let head, sub;
     // 結果の画面のあいだ、s.career はまだこの選挙を数えていない(「任期へ」を押したときに afterElection が数える)
     const winsBefore = s.career ? s.career.wins : 0;
+    const got = Game.Career.seated(e), revived = got && !e.won;
+    const willDrop = !got && (s.career ? s.career.lossStreak || 0 : 0) + 1 >= Game.Balance.retire.lossStreak;
     if (e.won) {
       head = UI.esc(me.name) + '、' + (winsBefore === 0 ? '初当選' : me.role === 'incumbent' ? (winsBefore + 1) + '回目の当選' : '返り咲き');
       sub = num(e.totals.me) + '票。次点の' + UI.esc(byId(cands, e.order[1]).name) + '氏に ' + num(diff) + '票差。';
     } else {
-      head = e.lossRatio >= 90 ? 'あと一歩、届かず' : '落選';
+      head = revived ? UI.esc(me.name) + '、比例復活' : e.lossRatio >= 90 ? 'あと一歩、届かず' : '落選';
       sub = num(e.totals.me) + '票。当選した' + UI.esc(w.name) + '氏に ' + num(e.totals[e.winner] - e.totals.me) + '票およばなかった(惜敗率 ' + e.lossRatio.toFixed(1) + '%)。';
+      if (e.pr) sub += revived ? '比例代表の復活ライン(' + e.pr.line.toFixed(1) + '%)を上回り、議席を得た。' : '比例代表の復活ライン(' + e.pr.line.toFixed(1) + '%)にも届かなかった。';
     }
     const table = e.order.map(function (id, i) {
       const c = byId(cands, id);
-      return '<div class="rs-row' + (c.player ? ' me' : '') + '" style="--pc:' + UI.color(c) + '"><span class="rs-mark">' + (i === 0 ? '当' : '') + '</span>' +
+      return '<div class="rs-row' + (c.player ? ' me' : '') + '" style="--pc:' + UI.color(c) + '"><span class="rs-mark' + (c.player && revived ? ' pr' : '') + '">' + (i === 0 ? '当' : c.player && revived ? '比' : '') + '</span>' +
         UI.partyChip(c) + '<b>' + UI.esc(c.name) + '</b><span class="sub">' + Game.Data.ROLE_NAMES[c.role] + '</span>' +
         '<span class="rs-votes">' + num(e.totals[id]) + '票</span><span class="rs-pct">' + (e.totals[id] / e.total * 100).toFixed(1) + '%</span></div>';
     }).join('');
@@ -157,21 +181,21 @@ Game.CountView = (function () {
       return '<div class="pr-line"><span class="pr-dot">約</span><span><b>' + p.policy + '</b>(' + p.org + ')</span></div>';
     }).join('');
     const promiseText = !camp.promises.length ? '<p class="pr-note">誰にも約束をせずに戦い抜いた。</p>'
-      : e.won ? promises + '<p class="pr-note">この約束は、任期のあいだに果たすことになる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。</p>'
+      : got ? promises + '<p class="pr-note">この約束は、任期のあいだに果たすことになる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。</p>'
         : promises + '<p class="pr-note">議席に届かず、約束を果たす場は得られなかった。</p>';
 
     app.innerHTML = '<div class="result">' +
-      '<header class="rs-head ' + (e.won ? 'won' : 'lost') + '">' + (e.won ? '<span class="stamp big new">当選</span>' : '') +
+      '<header class="rs-head ' + (got ? 'won' : 'lost') + '">' + (got ? '<span class="stamp big new">' + (e.won ? '当選' : '比例復活') + '</span>' : '') +
       '<h1>' + head + '</h1><p>' + sub + '</p>' +
       '<p class="sub">投票日の天気は' + WEATHER[e.weather] + '、投票率 ' + turnoutAll(e).toFixed(1) + '%。' + (e.zeroCall ? '午後8時ちょうどに当確が出た。' : '当確が出たのは ' + e.ticks[e.callTick].time + '。') + '</p></header>' +
       '<div class="rs-body"><div class="rs-left"><section class="panel"><h2>開票結果</h2>' + table + '</section>' +
       '<section class="panel"><h2>背負った約束</h2>' + promiseText + '</section>' +
-      '<section class="panel"><h2>この先</h2><p class="pr-note">' + (e.won ? '議員として任期に入る。約束を果たし、地盤を固め、次の選挙に備える。' : '浪人として地元を歩き、次の解散を待つ。') + '</p></section></div>' +
+      '<section class="panel"><h2>この先</h2><p class="pr-note">' + (e.won ? '議員として任期に入る。約束を果たし、地盤を固め、次の選挙に備える。' : revived ? '比例復活の議員として任期に入る。次の選挙でも、選挙区には現職の相手がいる。' : willDrop ? '続けて' + Game.Balance.retire.lossStreak + '回、議席を得られなかった。党は、次の選挙に別の候補を立てる。' : '浪人として地元を歩き、次の解散を待つ。') + '</p></section></div>' +
       '<div class="map-cell">' + UI.mapHtml(function (rid) { return UI.leadFill(cands, e.regions[rid].votes); }, null) + '</div></div>' +
       '<footer class="ct-btns"><button type="button" class="btn" id="title">タイトルへ</button>' +
-      '<button type="button" class="btn btn-primary btn-lg" id="again">' + (e.won ? '議員の任期へ' : '浪人として次をめざす') + '</button></footer></div>';
+      '<button type="button" class="btn btn-primary btn-lg" id="again">' + (got ? '議員の任期へ' : willDrop ? '政界を去る' : '浪人として次をめざす') + '</button></footer></div>';
     app.querySelector('#pins').innerHTML = pins;
-    if (e.won && !e.resultSeen) UI.sound('stamp');
+    if (got && !e.resultSeen) UI.sound('stamp');
     e.resultSeen = true;
     Game.save();
     app.querySelector('#title').onclick = Game.toTitle;

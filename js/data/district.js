@@ -32,8 +32,8 @@ Game.Data.ROLES = {
   kyowa:  { minsei: 'incumbent', mirai: 'newcomer' },
   mirai:  { minsei: 'former', kyowa: 'newcomer' },
 };
-Game.Data.ROLE_NAMES = { incumbent: '現職', former: '元職', challenger: '元職', newcomer: '新人' };
-Game.Data.ROLE_ORDER = ['incumbent', 'former', 'challenger', 'newcomer'];   // 開票特番の並び(テレビと同じ)
+Game.Data.ROLE_NAMES = { incumbent: '現職', revived: '現職(比例)', former: '元職', challenger: '元職', newcomer: '新人' };
+Game.Data.ROLE_ORDER = ['incumbent', 'revived', 'former', 'challenger', 'newcomer'];   // 開票特番の並び(テレビと同じ)
 
 // 地区の性格(カードの効き方に出る)
 Game.Data.TAGS = {
@@ -55,7 +55,7 @@ Game.Data.sessionName = function (turn) {
 
 // 選挙区。地図は viewBox 0 0 600 430 の多角形(pts)。x・y は地区の札を置く位置(%)
 Game.Data.DISTRICT = {
-  id: 'hokuyo3', name: '北陽3区', sea: '北陽湾',
+  id: 'hokuyo3', name: '北陽3区', sea: '北陽湾', block: '北関東ブロック',
   viewBox: [600, 430],
   seaPts: '312,-600 1500,-600 1500,1030 540,1030 548,430 560,350 578,300 570,250 520,190 458,196 430,170 400,120 372,72 330,45 320,0',
   rail: 'M-900 360 L0 318 L120 300 L250 245 L335 232 L440 262 L520 300 L600 312 L1500 330',

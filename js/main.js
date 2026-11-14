@@ -70,6 +70,7 @@ window.Game = window.Game || {};
     if (s.screen === 'count') return Game.CountView.render(app);
     if (s.screen === 'result') return Game.CountView.renderResult(app);
     if (s.screen === 'term') return Game.TermView.render(app);
+    if (s.screen === 'ending') return Game.EndingView.render(app);
     return Game.CampaignView.render(app);
   };
 

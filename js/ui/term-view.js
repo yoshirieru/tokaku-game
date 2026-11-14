@@ -12,7 +12,7 @@ Game.TermView = (function () {
     return h;
   };
   const P = function (id) { return Game.Data.PROMISES[id]; };
-  const ROLE_TEXT = { incumbent: '現職として', former: '元職として', newcomer: '新人として' };
+  const ROLE_TEXT = { incumbent: '現職として', revived: '比例復活の現職として', former: '元職として', newcomer: '新人として' };
 
   // ---------- 部品 ----------
   function hudHtml(s) {
@@ -25,7 +25,7 @@ Game.TermView = (function () {
     const me = { party: s.player.party };
     return '<header class="hud panel">' +
       '<div class="who"><span class="seat">' + UI.esc(Game.Data.DISTRICT.name) + '</span>' + UI.partyChip(me) + '<b class="pname">' + UI.esc(s.player.name) + '</b>' +
-      '<span class="hud-badge">' + (cr.status === 'member' ? '当選' + cr.wins + '回' : '浪人中') + '</span></div>' +
+      '<span class="hud-badge">' + (cr.status === 'member' ? Game.Balance.ranks[cr.rank || 0].name + '・当選' + cr.wins + '回' : '浪人中') + '</span></div>' +
       '<ol class="days" aria-label="任期の会期">' + dots + '</ol>' +
       '<div class="res"><span class="lab">資金</span><b>' + cr.money + '</b><small>万円</small></div>' +
       '<div class="ticker"><span class="tk-lab">' + UI.esc(Game.Data.sessionName(cr.turn)) + '</span><span id="news">' + UI.esc(cr.news) + '</span></div>' +
@@ -80,7 +80,11 @@ Game.TermView = (function () {
     // 次の選挙への備え
     const stars = K.extraStars(cr), toNext = CB.starPer - (cr.contrib % CB.starPer);
     const baseSum = Game.Data.DISTRICT.regions.reduce(function (a, r) { return a + (cr.base[r.id] || 0); }, 0);
+    const nx = K.nextRank(cr);
+    const need = nx ? [nx.wins ? '当選あと' + nx.wins + '回' : '', nx.merit ? '評価あと' + nx.merit : ''].filter(Boolean).join('・') : '';
+    const rankNote = cr.status !== 'member' ? '議席を取り戻せば、また人事がある' : !nx ? 'いちばん上の役職にいる' : '次は' + nx.rank.name + '(' + (need || '次の人事で') + ')';
     const prep = '<section class="panel" id="prep"><h2>次の選挙への備え<small>' + ROLE_TEXT[cr.role] + '戦う</small></h2>' +
+      '<div class="prep-row"><span>党内評価</span><b>' + (cr.merit || 0) + '</b><small>' + rankNote + '</small></div>' +
       '<div class="prep-row"><span>地盤の合計</span><b>' + baseSum + '</b><small>始まりの支持に、地区ごとに足される</small></div>' +
       '<div class="prep-row"><span>推薦のカード</span><b>' + cr.next.endorse.length + '枚</b><small>守った約束の数</small></div>' +
       '<div class="prep-row"><span>党幹部の応援</span><b>' + (1 + stars) + '枚</b><small>' +
@@ -133,7 +137,7 @@ Game.TermView = (function () {
         const list = cr.promises.length ? '<ul class="m-list">' + cr.promises.map(function (x) {
           return '<li><b>' + P(x.id).policy + '</b>(' + P(x.id).org + ')' + (x.progress ? ' — 前の任期からの持ち越し' : '') + '</li>';
         }).join('') + '</ul>' : '<p>背負っている約束はない。地元と党のために動ける。</p>';
-        UI.modal('<p class="m-kicker">' + (cr.wins === 1 ? '初登院' : cr.wins + '回目の当選') + '</p><h2>議員の任期が始まる</h2>' +
+        UI.modal('<p class="m-kicker">' + (cr.role === 'revived' ? '比例復活・' : '') + (cr.wins === 1 ? '初登院' : cr.wins + '回目の当選') + '</p><h2>議員の任期が始まる</h2>' +
           '<p>選挙で背負った約束を、この任期のうちに果たす。</p>' + list +
           '<ul class="m-list"><li>1会期(半年)に体力は' + T.energy + '。会期の終わりに、上の帯の見込みで衆議院が解散する。</li>' +
           '<li>約束してから' + T.graceTurns + '会期たたないうちの解散なら、破ったことにはならず持ち越せる。</li></ul>',
@@ -144,6 +148,15 @@ Game.TermView = (function () {
           '<ul class="m-list"><li>浪人中は国会で動けない(約束を進めるカードは出ない)。</li><li>解散の見込みは、上の帯に出ている。</li></ul>',
           [{ label: '地元へ', primary: true, onClick: next }]);
       }
+    } else if (p.type === 'promotion') {
+      const rk = Game.Balance.ranks[p.rank], li = [];
+      if (rk.startAll) li.push('役職の重みで、次の選挙は全地区の始まりの支持が +' + rk.startAll + '。');
+      const dutyAdd = rk.duty - Game.Balance.ranks[p.rank - 1].duty;
+      if (dutyAdd > 0) li.push('公務が増える。山札の「地元回り」' + dutyAdd + '枚が「公務」に入れ替わり、地元に帰る時間が減る。');
+      if (!Game.Balance.ranks[p.rank + 1]) li.push('党三役。次にめざすのは党首の座だ(党首選は、これから作っていく部分)。');
+      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・人事</p><h2>' + rk.name + 'に就任</h2>' +
+        '<p>当選を重ね、党のために働いてきたことが認められた。</p>' + (li.length ? '<ul class="m-list">' + li.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' : ''),
+        [{ label: '拝命する', primary: true, onClick: next }]);
     } else if (p.type === 'petition') {
       const q = P(p.id), E = T.events.petition, reg = Game.Data.REGION[q.region].name;
       const answer = function (yes) { return function () { const r = K.respond(s, yes); Game.clearUndo(); pendingFx = r.fx; Game.save(); render(app); }; };
@@ -232,8 +245,12 @@ Game.TermView = (function () {
         [{ label: 'もどる' }, { label: '終える', primary: true, onClick: finish }]);
     };
     app.querySelector('#menu').onclick = function () {
+      const askRetire = function () {
+        UI.modal('<h2>政界を引退する</h2><p>ここで政治家としての歩みを終え、評価を受ける。取り消すことはできない。</p>',
+          [{ label: 'やめておく' }, { label: '引退する', primary: true, onClick: function () { K.retire(s, 'retire'); Game.clearUndo(); Game.ui.card = null; Game.save(); Game.render(); } }]);
+      };
       UI.modal('<h2>メニュー</h2><p>ここまでは自動で記録されている。タイトルの「つづきから」で再開できる。</p>',
-        [{ label: 'とじる' }, { label: 'タイトルへ', primary: true, onClick: Game.toTitle }]);
+        [{ label: 'とじる' }, { label: '政界を引退する', onClick: askRetire }, { label: 'タイトルへ', primary: true, onClick: Game.toTitle }]);
     };
 
     if (cr.pending.length) showPending(app);

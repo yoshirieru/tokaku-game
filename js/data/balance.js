@@ -38,7 +38,8 @@ Game.Balance = {
     challenger: { mult: 1.2,  gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },   // プレイヤーに議席を奪われた前の現職(画面では元職)。巻き返しをねらう
   },
   // プレイヤーの立場ごとの、始まりの支持の倍率(新人 / 当選して現職 / 落選した元職)
-  playerRoles: { newcomer: 0.69, incumbent: 0.72, former: 0.66 },
+  // revived は、小選挙区で負けて比例復活した現職(議席はあるが、選挙区には勝った相手がいる)
+  playerRoles: { newcomer: 0.69, incumbent: 0.72, revived: 0.7, former: 0.66 },
   // 相手が入る地区の選び方:有権者の多さ × 競り合い × 党との相性。守りは、こちらに迫られた地区を重く見る
   rivalAI: { closeScale: 8, defendWithin: 10, defendMult: 1.6, affinityBase: 35 },
 
@@ -68,10 +69,33 @@ Game.Balance = {
     mirai:  ['pStudent', 'pShop', 'pFamily'],
   },
 
+  // 比例復活:小選挙区で負けても、惜敗率(自分の票 ÷ 当選者の票)が党の復活ラインに届けば、比例代表で議席を得る(重複立候補)
+  pr: {
+    line: { minsei: 97, kyowa: 96.5, mirai: 98 },   // 復活ライン(%)の基準。議席の多い党ほど届きやすい
+    noise: 1.5,                                     // 選挙ごとのぶれ(標準偏差)
+  },
+  // 出世:当選回数と党内評価(党への貢献の積み重ね)で役職が上がる。人事は任期の始まりと reshuffleTurn の会期
+  //   startAll 選挙の始まりの支持(全地区)/ duty 任期の山札で「地元回り」と入れ替わる「公務」の枚数
+  ranks: [
+    { name: '平議員', wins: 0, merit: 0,  startAll: 0, duty: 0 },
+    { name: '政務官', wins: 2, merit: 8,  startAll: 0, duty: 0 },
+    { name: '副大臣', wins: 3, merit: 20, startAll: 1, duty: 1 },
+    { name: '大臣',   wins: 4, merit: 36, startAll: 2, duty: 1 },
+    { name: '党三役', wins: 5, merit: 56, startAll: 2, duty: 2 },
+  ],
+  reshuffleTurn: 5,
+  // 党内評価の増減(党への貢献は、そのまま党内評価にも足す)
+  merit: { winDistrict: 3, winPr: 1, kept: 1, broken: -2 },
+  // 続けてこの回数、議席を得られないと、党の公認を失って引退になる
+  retire: { lossStreak: 3 },
+  // 引退したときの評価(点数)。grades は [評価, 点数の下限]
+  legacy: { win: 4, winMax: 40, rank: 9, kept: 2, keptMax: 20, broken: -4, grades: [['S', 85], ['A', 62], ['B', 42], ['C', 20]] },
+
   // 任期の結果が、次の選挙に返ってくる(推薦・破った約束のカードは cards.js が約束ごとに作る)
   comeback: {
     endorse: { cost: 0, money: 0, gain: 5 },   // 守った約束 → その団体の「推薦」のカード(その地区の支持が伸びる。1回だけ)
     curse: { cost: 1, money: 0 },              // 破った約束 → 使えないカード。体力を払って謝りに行くと取り除ける
+    windSd: 3, windMax: 6,   // 2回目からの選挙の「党への風」:全地区の始まりの支持が上下する(標準偏差と上限。1未満は風なし)
     rivalBase: 5,        // 議席を守り続けている相手の現職は、任期のあいだに地盤を固めている(全地区の始まりの支持)
     brokenStart: -8,     // 破った約束:その団体の地区の、始まりの支持
     lightStart: -2,      // 少しは進めていた約束(破った約束のカードは出ない)
@@ -99,6 +123,7 @@ Game.Balance = {
       party:    { cost: 1, money: 0,   contrib: 2 },               // 党の仕事
       media:    { cost: 2, money: 0,   baseAll: 1 },               // メディア出演
       fund:     { cost: 1, money: -40 },                           // 資金パーティー
+      duty:     { cost: 1, money: 0,   contrib: 1 },               // 公務(役職が上がると「地元回り」と入れ替わる)
     },
     deck: {
       member: ['question', 'question', 'question', 'bill', 'bill', 'local', 'local', 'local', 'report', 'party', 'party', 'media', 'fund'],

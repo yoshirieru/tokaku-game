@@ -336,6 +336,38 @@ h1, h2, p { margin: 0; }
 .ct-ticker { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 14px; }
 .ct-btns { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 @keyframes blink { 50% { opacity: .55; } }
+/* 比例代表の結果(小選挙区で負けたときだけ) */
+.pr-box { margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(4, 8, 26, .5); animation: fade .4s ease-out; }
+.pr-box.ok { border-color: var(--gold); }
+.pr-head { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.pr-head .ct-live { animation: none; font-size: 12px; }
+.pr-meter { position: relative; height: 12px; margin: 8px 0 6px; border-radius: 6px; background: var(--track); }
+.pr-meter i { display: block; height: 100%; border-radius: 6px; background: var(--accent); }
+.pr-box.ok .pr-meter i { background: var(--gold); }
+.pr-mark { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--ink); }
+.pr-text { font-size: 13px; color: var(--sub); }
+.pr-text b { color: var(--ink); font-size: 15px; }
+.rs-mark.pr { background: var(--gold); color: var(--on-gold); }
+
+/* エンディング */
+.ending { flex: 1; min-height: 0; width: 100%; max-width: 980px; margin: 0 auto; padding: 18px 14px; display: flex; flex-direction: column; gap: 12px; }
+.en-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.en-head h1 { font: 800 30px/1.35 var(--font-head); }
+.en-grade { display: flex; align-items: baseline; gap: 10px; padding: 4px 22px; border-top: 3px solid var(--accent); border-bottom: 3px solid var(--accent); }
+.en-grade span { font-size: 13px; color: var(--sub); letter-spacing: .2em; }
+.en-grade b { font: 800 64px/1.1 var(--font-head); color: var(--gold); }
+.en-grade small { font-size: 15px; color: var(--sub); }
+.en-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; overflow: auto; }
+.en-row { display: grid; grid-template-columns: 7.5em 1fr 3em; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--track); font-size: 14px; }
+.en-row > span:first-child { color: var(--sub); }
+.en-pts { text-align: right; font-weight: 900; color: var(--gold); font-variant-numeric: tabular-nums; }
+.en-pts.minus { color: var(--accent); }
+.en-history { margin: 0; padding: 0; list-style: none; }
+.en-history li { display: grid; grid-template-columns: 4em 1fr auto 6.5em; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--track); font-size: 14px; }
+.en-no { font-weight: 700; }
+.en-res.won { color: var(--gold); } .en-res.pr { color: var(--good); } .en-res.lost { color: var(--accent); }
+.en-votes { text-align: right; font-variant-numeric: tabular-nums; color: var(--sub); }
+
 /* 当確・当選のハンコ(白い紙に朱) */
 .stamp {
   margin-left: auto; padding: 1px 12px; border: 3px solid var(--accent); border-radius: 6px; background: var(--paper); color: var(--accent);
@@ -422,6 +454,12 @@ h1, h2, p { margin: 0; }
   .ct-votes b { font-size: 18px; }
   .ct-ticker { font-size: 12.5px; padding: 7px 10px; }
   .rs-head h1 { font-size: 26px; }
+  .ending { padding: 12px 8px; gap: 8px; }
+  .en-head h1 { font-size: 21px; }
+  .en-grade b { font-size: 48px; }
+  .en-body { grid-template-columns: minmax(0, 1fr); }
+  .pr-box { padding: 8px 10px; }
+  .pr-head { flex-wrap: wrap; }
   .rs-body { display: flex; flex-direction: column; overflow: auto; }
   .rs-left { overflow: visible; }
   .rs-body .map-cell { min-height: 230px; }

@@ -1,8 +1,9 @@
-// 議員の任期(と、落選したあとの浪人)。選挙で背負った約束を果たし、地盤を耕し、次の選挙に備える。DOM には触らない。
+// 議員の任期(と、落選したあとの浪人)。選挙で背負った約束を果たし、地盤を耕し、党で働いて、次の選挙に備える。DOM には触らない。
 // 1ターン = 国会の1会期(半年)。会期の終わりに、見えている確率で衆議院が解散する。8ターンで任期満了。
 // 任期の結果は state.career.next にまとめ、次の選挙戦(campaign.js の newCampaign)が読む:
 //   endorse 守った約束 → 推薦のカード / broken 破った約束 → 使えないカードと始まりの支持の低下
 //   light 少しは進めた約束 → 小さな低下だけ / carried 果たす時間がなかった約束 → 持ち越し
+// 出世(R3):党内評価(merit)と当選回数で役職(rank)が上がる。引退・公認を失うとエンディング(state.ending)。
 window.Game = window.Game || {};
 
 Game.Career = (function () {
@@ -12,15 +13,23 @@ Game.Career = (function () {
   const regions = function () { return Game.Data.DISTRICT.regions; };
   const P = function (id) { return Game.Data.PROMISES[id]; };
 
-  // ---------- 選挙のあと:任期を始める ----------
+  // 議席を得たか(小選挙区の当選か、比例復活)
+  function seated(e) { return e.won || !!(e.pr && e.pr.revived); }
+
+  // ---------- 選挙のあと:任期を始める(続けて落選すると、ここで引退になる) ----------
   function afterElection(state) {
-    const e = state.election, camp = state.camp;
+    const B = Game.Balance, e = state.election, camp = state.camp;
     const cr = state.career || { wins: 0, elections: 0, kept: 0, broken: 0, base: {}, history: [] };
-    const won = e.won;
+    ['districtWins', 'prWins', 'lossStreak', 'merit', 'rank', 'bestRank'].forEach(function (k) { cr[k] = cr[k] || 0; });   // R2 までのセーブにも足す
+    const got = seated(e);
     cr.elections += 1;
-    if (won) cr.wins += 1;
-    cr.status = won ? 'member' : 'ronin';
-    cr.role = won ? 'incumbent' : (cr.wins > 0 ? 'former' : 'newcomer');   // 次の選挙での自分の立場
+    if (got) cr.wins += 1;
+    if (e.won) cr.districtWins += 1; else if (got) cr.prWins += 1;
+    cr.lossStreak = got ? 0 : cr.lossStreak + 1;
+    cr.merit += e.won ? B.merit.winDistrict : got ? B.merit.winPr : 0;
+    cr.status = got ? 'member' : 'ronin';
+    // 次の選挙での自分の立場:小選挙区で勝てば現職、比例復活なら「比例復活の現職」、落選した元議員は元職
+    cr.role = e.won ? 'incumbent' : got ? 'revived' : (cr.wins > 0 ? 'former' : 'newcomer');
     // 次の選挙での相手の立場:勝った人は現職。議席を失った現職は、巻き返しをねらう元職(challenger)
     cr.rivalRoles = {};
     cr.rivalSolid = {};   // 現職のまま勝った相手は、次の選挙までに地盤を固める
@@ -36,21 +45,53 @@ Game.Career = (function () {
       const sum = Object.keys(v).reduce(function (a, k) { return a + v[k]; }, 0);
       cr.lastShare[r.id] = v.me / sum * 100;
     });
-    // 約束:当選すれば任期に持ち込む(持ち越していた約束は進み具合もそのまま)。落選すれば白紙
+    // 約束:議席を得れば任期に持ち込む(持ち越していた約束は進み具合もそのまま)。落選すれば白紙
     const old = {};
     ((cr.next && cr.next.carriedFull) || []).forEach(function (p) { old[p.id] = p; });
-    cr.promises = won ? camp.promises.map(function (id) { return old[id] ? { id: id, progress: old[id].progress, turns: old[id].turns } : { id: id, progress: 0, turns: 0 }; }) : [];
-    cr.dropped = won ? 0 : camp.promises.length;
+    cr.promises = got ? camp.promises.map(function (id) { return old[id] ? { id: id, progress: old[id].progress, turns: old[id].turns } : { id: id, progress: 0, turns: 0 }; }) : [];
+    cr.dropped = got ? 0 : camp.promises.length;
     cr.next = { endorse: [], broken: [], light: [], carried: [], carriedFull: [] };
-    cr.history.push({ won: won, votes: e.totals.me, lossRatio: e.lossRatio });
-    cr.turn = 0; cr.wind = 0; cr.contrib = 0; cr.money = T().startMoney; cr.sel = cr.sel || 'downtown';
-    cr.deck = R.shuffle(state, T().deck[cr.status]); cr.discard = []; cr.hand = []; cr.uid = 0;
-    cr.pending = [{ type: 'start' }]; cr.news = ''; cr.over = false;
+    cr.history.push({ won: e.won, revived: got && !e.won, votes: e.totals.me, lossRatio: e.lossRatio, role: camp.cands[0].role });
     state.career = cr;
+
+    // 続けて議席を得られなければ、党の公認を失って引退
+    if (!got && cr.lossStreak >= B.retire.lossStreak) return retire(state, 'dropped');
+
+    if (!got) cr.rank = 0;   // 落選すると役職は外れる(党内評価は残る)
+    cr.turn = 0; cr.wind = 0; cr.contrib = 0; cr.money = T().startMoney; cr.sel = cr.sel || 'downtown';
+    cr.discard = []; cr.hand = []; cr.uid = 0;
+    cr.pending = [{ type: 'start' }]; cr.news = ''; cr.over = false;
+    if (got) personnel(cr);
+    cr.deck = R.shuffle(state, termDeck(cr));
     state.screen = 'term';
     startTurn(state);
     return cr;
   }
+
+  // ---------- 出世 ----------
+  // 次の役職と、足りないもの
+  function nextRank(cr) {
+    const ranks = Game.Balance.ranks, nx = ranks[cr.rank + 1];
+    if (!nx) return null;
+    return { rank: nx, wins: Math.max(0, nx.wins - cr.wins), merit: Math.max(0, nx.merit - cr.merit) };
+  }
+  // 人事:条件(当選回数と党内評価)を満たしていれば、1つ上の役職に就く
+  function personnel(cr) {
+    const nx = nextRank(cr);
+    if (cr.status !== 'member' || !nx || nx.wins > 0 || nx.merit > 0) return false;
+    cr.rank += 1;
+    cr.bestRank = Math.max(cr.bestRank, cr.rank);
+    cr.pending.push({ type: 'promotion', rank: cr.rank });
+    return true;
+  }
+  // 任期の山札。役職が上がると、公務が「地元回り」と入れ替わる(地元に帰る時間が減る)
+  function termDeck(cr) {
+    const deck = T().deck[cr.status].slice();
+    let duty = cr.status === 'member' ? Game.Balance.ranks[cr.rank].duty : 0;
+    for (let i = 0; i < deck.length && duty > 0; i++) if (deck[i] === 'local') { deck[i] = 'duty'; duty -= 1; }
+    return deck;
+  }
+  function addMerit(cr, n) { cr.merit = Math.max(0, cr.merit + n); }
 
   // ---------- 計算 ----------
   function dissolveChance(cr) {
@@ -84,6 +125,7 @@ Game.Career = (function () {
     cr.base[regionId] = Math.max(0, Math.min(CB().baseMax, old + n));
     return cr.base[regionId] - old;
   }
+  function addContrib(cr, n) { cr.contrib += n; addMerit(cr, n); }
 
   // ---------- カード ----------
   // target は、約束を選ぶカードなら約束の id、地区を選ぶカードなら地区の id
@@ -106,6 +148,7 @@ Game.Career = (function () {
         cr.promises = cr.promises.filter(function (x) { return x !== p; });
         cr.next.endorse.push(p.id);
         cr.kept += 1;
+        addMerit(cr, Game.Balance.merit.kept);
         const d = addBase(cr, P(p.id).region, T().keptBase);
         if (d) fx.push({ region: P(p.id).region, gain: d });
         msg = name + '。' + P(p.id).org + 'との約束「' + P(p.id).policy + '」を果たした。次の選挙で推薦がもらえる。';
@@ -117,13 +160,13 @@ Game.Career = (function () {
       cr.sel = target;
       msg = Game.Data.REGION[target].name + 'で' + name + '。地盤が ' + d + ' 固まった。';
     } else if (b.promise) {
-      cr.contrib += b.contrib;
+      addContrib(cr, b.contrib);
       msg = name + '。果たすべき約束がないので、党の方針に沿って働いた(党への貢献 +' + b.contrib + ')。';
     } else if (b.baseAll) {
       regions().forEach(function (r) { const d = addBase(cr, r.id, b.baseAll); if (d) fx.push({ region: r.id, gain: d }); });
       msg = name + '。地元でも顔が売れた。';
     } else if (b.contrib) {
-      cr.contrib += b.contrib;
+      addContrib(cr, b.contrib);
       msg = name + '。党への貢献が ' + b.contrib + ' 増えた。';
     } else {
       msg = name + '。' + (-b.money) + '万円が集まった。';
@@ -175,6 +218,13 @@ Game.Career = (function () {
     cr.turn += 1;
     cr.energy = T().energy;
     draw(state);
+    // 任期の途中の人事(内閣改造)。役職が変わると、公務のカードが山札に入る
+    if (cr.turn === Game.Balance.reshuffleTurn && personnel(cr)) {
+      let duty = Game.Balance.ranks[cr.rank].duty - Game.Balance.ranks[cr.rank - 1].duty;
+      ['deck', 'discard'].forEach(function (pile) {
+        for (let i = 0; i < cr[pile].length && duty > 0; i++) if (cr[pile][i] === 'local') { cr[pile][i] = 'duty'; duty -= 1; }
+      });
+    }
     if (cr.turn > 1) rollEvent(state);
     const pct = Math.round(dissolveChance(cr) * 100);
     cr.news = Game.Data.sessionName(cr.turn) + '。' + (cr.turn >= T().turns ? 'この会期で任期満了。総選挙になる。' : pct ? 'この会期のあとに解散する見込みは ' + pct + '%。' : '選挙が終わったばかりで、解散はまだない。');
@@ -211,10 +261,12 @@ Game.Career = (function () {
       } else if (p.progress > 0) {
         cr.next.light.push(p.id);
         cr.broken += 1;
+        addMerit(cr, Game.Balance.merit.broken);
         lines.push({ kind: 'light', text: name + 'は、途中までしか進められなかった。' + Game.Data.REGION[P(p.id).region].name + 'の支持が少し下がる。' });
       } else {
         cr.next.broken.push(p.id);
         cr.broken += 1;
+        addMerit(cr, Game.Balance.merit.broken);
         lines.push({ kind: 'broken', text: name + 'に、手をつけられなかった。次の選挙で「破った約束」として返ってくる。' });
       }
     });
@@ -248,8 +300,32 @@ Game.Career = (function () {
     state.screen = 'campaign';
   }
 
+  // ---------- 引退とエンディング ----------
+  // reason: 'retire' 自分で引退 / 'dropped' 続けて落選し、党の公認を失った
+  function retire(state, reason) {
+    const cr = state.career, B = Game.Balance, L = B.legacy;
+    const rank = B.ranks[cr.bestRank || 0];
+    const lines = [
+      { label: '当選回数', value: cr.wins + '回(小選挙区 ' + (cr.districtWins || 0) + '・比例復活 ' + (cr.prWins || 0) + ')', pts: Math.min(L.winMax, cr.wins * L.win) },
+      { label: '到達した役職', value: cr.wins ? rank.name : '—', pts: (cr.bestRank || 0) * L.rank },
+      { label: '守った約束', value: cr.kept + '個', pts: Math.min(L.keptMax, cr.kept * L.kept) },
+      { label: '破った約束', value: cr.broken + '個', pts: cr.broken * L.broken },
+    ];
+    const score = Math.max(0, lines.reduce(function (a, l) { return a + l.pts; }, 0));
+    let grade = 'D';
+    for (let i = 0; i < L.grades.length; i++) if (score >= L.grades[i][1]) { grade = L.grades[i][0]; break; }
+    const title = !cr.wins ? '国会に届かないまま、政界を去る'
+      : (cr.bestRank || 0) >= 4 ? '党の重鎮として、政界を去る'
+        : cr.bestRank === 3 ? '大臣を務めあげて、政界を去る'
+          : cr.bestRank >= 1 ? rank.name + 'まで務めて、政界を去る' : '陣笠議員のまま、政界を去る';
+    state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice() };
+    state.screen = 'ending';
+    return state.ending;
+  }
+
   return {
     afterElection: afterElection, play: play, canPlay: canPlay, endTurn: endTurn, dismiss: dismiss, respond: respond, toCampaign: toCampaign,
     dissolveChance: dissolveChance, extraStars: extraStars, targetKind: targetKind, baseGain: baseGain,
+    seated: seated, nextRank: nextRank, retire: retire,
   };
 })();

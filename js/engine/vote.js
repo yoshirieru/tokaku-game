@@ -71,10 +71,16 @@ Game.Vote = (function () {
       }
     }
 
+    // 比例復活:惜敗率が、その選挙での党の復活ラインに届いたか(乱数は開票の計算のあとに引く)
+    const lossRatio = totals.me / totals[winner] * 100;
+    const prLine = B.pr.line[state.player.party] + R.normal(state) * B.pr.noise;
+    const pr = { line: prLine, revived: winner !== 'me' && lossRatio >= prLine };
+
     state.election = {
       weather: weather.id, regions: regions, totals: totals, total: total, order: order,
       winner: winner, won: winner === 'me', marginPct: marginPct,
-      lossRatio: totals.me / totals[winner] * 100,   // 惜敗率
+      lossRatio: lossRatio,   // 惜敗率
+      pr: pr,
       ticks: ticks, callTick: callTick, zeroCall: callTick === 0, shown: 0,
     };
     return state.election;

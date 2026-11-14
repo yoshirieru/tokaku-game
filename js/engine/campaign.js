@@ -61,7 +61,13 @@ Game.Campaign = (function () {
       regions().forEach(function (r) { const n = cr.base[r.id] || 0; if (n) { applyGain(camp, r.id, 'me', n); baseSum += n; } });
       N.broken.forEach(function (id) { applyGain(camp, Game.Data.PROMISES[id].region, 'me', CB.brokenStart); });
       N.light.forEach(function (id) { applyGain(camp, Game.Data.PROMISES[id].region, 'me', CB.lightStart); });
-      camp.comeback = { stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney };
+      // 党への風:政権や党への評価で、選挙ごとに追い風にも逆風にもなる
+      let wind = Math.round(Math.max(-CB.windMax, Math.min(CB.windMax, R.normal(state) * CB.windSd)));
+      if (wind) regions().forEach(function (r) { applyGain(camp, r.id, 'me', wind); });
+      // 役職の重み:顔が売れているぶん、全地区で少し上がる
+      const rk = cr.status === 'member' ? B.ranks[cr.rank || 0] : null;
+      if (rk && rk.startAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', rk.startAll); });
+      camp.comeback = { wind: wind, rank: rk && rk.startAll ? { name: rk.name, gain: rk.startAll } : null, stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney };
     }
     camp.deck = R.shuffle(state, deck);
     state.camp = camp;

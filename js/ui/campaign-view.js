@@ -158,6 +158,8 @@ Game.CampaignView = (function () {
       const org = function (id) { return Game.Data.PROMISES[id].org; };
       const li = [];
       li.push(['', '今回は<b>' + Game.Data.ROLE_NAMES[me.role] + '</b>として戦う。']);
+      if (cb.wind) li.push([cb.wind > 0 ? 'kept' : 'broken', '今回の選挙は、' + Game.Data.PARTIES[me.party].name + 'に<b>' + (cb.wind > 0 ? '追い風' : '逆風') + '</b>が吹いている(全地区 ' + UI.signed(cb.wind) + ')。']);
+      if (cb.rank) li.push(['kept', cb.rank.name + 'の重みで、全地区の支持が +' + cb.rank.gain + '。']);
       if (cb.base) li.push(['kept', '任期のあいだに固めた地盤が、始まりの支持になった(地区の合計 +' + cb.base + ')。']);
       cb.endorse.forEach(function (id) { li.push(['kept', org(id) + 'との約束を守った。<b>推薦のカード</b>が山札に入っている。']); });
       cb.broken.forEach(function (id) { li.push(['broken', org(id) + 'との約束を破った。' + Game.Data.REGION[Game.Data.PROMISES[id].region].name + 'の支持が下がり、<b>「破った約束」のカード</b>が山札に混ざっている。']); });
@@ -165,7 +167,7 @@ Game.CampaignView = (function () {
       cb.carried.forEach(function (id) { li.push(['carried', org(id) + 'との約束は、持ち越したまま背負っている。']); });
       if (cb.stars) li.push(['kept', '党への貢献が認められ、党幹部の応援が ' + cb.stars + '枚 増えた。']);
       if (cb.money) li.push(['', '任期で集めた資金 ' + cb.money + '万円を持ち込んだ。']);
-      UI.modal('<p class="m-kicker">' + (cr.elections + 1) + '回目の選挙・公示</p><h2>' + (cr.status === 'member' ? '議席を守る戦い' : '議席を取り戻す戦い') + '</h2>' +
+      UI.modal('<p class="m-kicker">' + (cr.elections + 1) + '回目の選挙・公示</p><h2>' + (me.role === 'revived' ? '選挙区を取りにいく戦い' : cr.status === 'member' ? '議席を守る戦い' : '議席を取り戻す戦い') + '</h2>' +
         '<ul class="m-lines">' + li.map(function (x) { return '<li class="ml-' + x[0] + '">' + x[1] + '</li>'; }).join('') + '</ul>',
         [{ label: '選挙戦へ', primary: true, onClick: next }]);
     } else if (p.type === 'poll') {

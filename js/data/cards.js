@@ -42,6 +42,7 @@ Game.Data.TERM_CARDS = {
   party:    { name: '党の仕事', type: 'party', icon: 'party' },
   media:    { name: 'メディア出演', type: 'reach', icon: 'media' },
   fund:     { name: '資金パーティー', type: 'fund', icon: 'fund' },
+  duty:     { name: '公務', type: 'party', icon: 'flyer' },
 };
 Game.Data.termCardText = function (id) {
   const b = Game.Balance.term.cards[id], CB = Game.Balance.comeback;
