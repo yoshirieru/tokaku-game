@@ -15,7 +15,7 @@ const root = path.resolve(__dirname, '..');
 const sandbox = { console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/engine/career.js'].forEach((f) => {
+['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/engine/career.js', 'js/data/achievements.js', 'js/engine/hall.js'].forEach((f) => {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 });
 const Game = sandbox.Game;
@@ -211,6 +211,7 @@ if (process.env.NATION) {
     const ranks = B.ranks.map(() => 0), grades = {};
     let inc = 0, incSeat = 0, out = 0, outSeat = 0, kept = 0, broken = 0, light = 0, carried = 0, turns = 0, terms = 0, base = 0, stars = 0, dropped = 0, score = 0;
     let natN = 0, natSeats = 0, natMaj = 0, resigned = 0, pmEver = 0, pmTurns = 0, ousted = 0;
+    const ach = {};   // 1回の歩みで達成した実績(セーブデータをまたぐものは数えない)
     stats.races = 0; stats.raceWins = 0;
     for (let i = 0; i < N; i++) {
       const seed = (i + 1) * 7919 + p.length * 104729;
@@ -240,6 +241,7 @@ if (process.env.NATION) {
       }
       const end = state.ending || Game.Career.retire(state, 'retire');
       ranks[state.career.bestRank || 0]++; grades[end.grade] = (grades[end.grade] || 0) + 1; score += end.score;
+      Game.Hall.earned(Game.Hall.facts(state), Game.Hall.empty()).forEach((id) => { ach[id] = (ach[id] || 0) + 1; });
       if (state.career.wasPM) { pmEver++; pmTurns += state.career.pmTurns || 0; }
     }
     console.log(`${Game.Data.PARTIES[p].short}: 回ごとの議席 ${seat.map((w) => pct(w, N)).join(' / ')}(うち小選挙区 ${dist.map((w) => pct(w, N)).join(' / ')})`);
@@ -248,6 +250,7 @@ if (process.env.NATION) {
     console.log(`      到達した役職 ${B.ranks.map((r, k) => r.name + ' ' + pct(ranks[k], N)).join(' / ')}  評価 ${['S', 'A', 'B', 'C', 'D'].map((g) => g + ' ' + pct(grades[g] || 0, N)).join(' ')}(平均 ${(score / N).toFixed(0)}点)`);
     console.log(`      党首選 ${stats.races}回のうち勝ち ${pct(stats.raceWins, stats.races)}  党首としての総選挙 ${natN}回:平均 ${natN ? (natSeats / natN).toFixed(0) : '—'}議席・過半数 ${pct(natMaj, natN)}  議席を減らして辞任 ${pct(resigned, N)}`);
     console.log(`      首相になった ${pct(pmEver, N)}(平均の在任 ${pmEver ? (pmTurns / pmEver / 2).toFixed(1) : '—'}年)  支持率の低迷で退陣 ${pct(ousted, N)}`);
+    console.log(`      実績 ${Game.Data.ACHIEVEMENTS.filter((a) => !a.cross).map((a) => a.title + ' ' + pct(ach[a.id] || 0, N)).join(' / ')}`);
   });
 } else {
   // ---- 最初の選挙 ----

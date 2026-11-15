@@ -124,18 +124,18 @@ Game.TermView = (function () {
     }).join('');
     let prompt;
     if (!sel) {
-      prompt = cr.hand.some(function (c) { return K.canPlay(cr, c.id).ok; }) ? (Game.GovView.active(cr) ? 'カードを選ぶ。' + (cr.gov.role === 'opposition' ? '政権を追及するか、党をまとめるか。' : '公約を進めるか、支持率を上げるか、党をまとめるか。') : 'カードを選ぶ。約束を進めるか、地元を固めるか、党で働くか。') : 'この会期はここまで。会期を終えよう。';
+      prompt = cr.hand.some(function (c) { return K.canPlay(cr, c.id).ok; }) ? (Game.GovView.active(cr) ? 'カードを選ぶ。' + (cr.gov.role === 'opposition' ? '政権を追及するか、党をまとめるか。' : '公約を進めるか、支持率を上げるか、党をまとめるか。') : 'カードを選ぶ。約束を進めるか、地元を固めるか、党で働くか。') + 'ダブルクリックですぐ使える。' : 'この会期はここまで。会期を終えよう。';
     } else if (kind === 'promise') {
-      prompt = '<b>「' + Game.Data.TERM_CARDS[sel.id].name + '」</b>で進める約束を、右の欄から選ぶ。';
+      prompt = '<b>「' + Game.Data.TERM_CARDS[sel.id].name + '」</b>で進める約束を、右の欄から選ぶ。<small>ダブルクリックなら「' + Game.Data.PROMISES[K.autoPromise(cr)].policy + '」を進める</small>';
     } else if (kind === 'region') {
-      prompt = '<b>「' + Game.Data.TERM_CARDS[sel.id].name + '」</b>で回る地区を地図で選ぶ。';
+      prompt = '<b>「' + Game.Data.TERM_CARDS[sel.id].name + '」</b>で回る地区を地図で選ぶ。<small>ダブルクリックなら' + Game.Data.REGION[cr.sel].name + 'を回る</small>';
     } else {
       prompt = '<b>「' + Game.Data.TERM_CARDS[sel.id].name + '」</b><button type="button" class="btn-go" id="playNow">使う</button>';
     }
     return '<footer class="hand"><div class="turn panel">' +
       '<div class="energy"><span class="e-lab">この会期の体力</span><span class="pips">' + pips(cr.energy, T.energy, 'pip') + '</span><span class="deck-n">山札 ' + cr.deck.length + '・捨て札 ' + cr.discard.length + '</span></div>' +
       '<div class="prompt" id="prompt">' + prompt + '</div>' +
-      '<div class="turn-btns"><button type="button" class="btn btn-undo" id="undo"' + (Game.canUndo() ? '' : ' disabled') + '>' + UI.icon('undo') + '<span>取り消す</span></button>' +
+      '<div class="turn-btns"><button type="button" class="btn btn-undo" id="undo" title="カードを使う前に戻す(Ctrl+Z)"' + (Game.canUndo() ? '' : ' disabled') + '>' + UI.icon('undo') + '<span>取り消す</span></button>' +
       '<button type="button" class="btn-main" id="endTurn">会期を終える</button></div>' +
       '</div><div class="cards" id="cards" aria-label="手札">' + cards + '</div></footer>';
   }
@@ -239,11 +239,13 @@ Game.TermView = (function () {
     app.querySelector('#pins').innerHTML = pinsHtml(cr, sel, kind);
 
     const say = function (text) { cr.news = text; Game.ui.card = null; render(app); };
-    const doPlay = function (target) {
-      const ok = K.canPlay(cr, sel.id);
+    // card を使う(ダブルクリックでは選んでいるカードでなくてもよい)。使う前の state を取り消し用に積む
+    const doPlay = function (target, card) {
+      card = card || sel;
+      const ok = K.canPlay(cr, card.id);
       if (!ok.ok) return say(ok.reason);
       Game.pushUndo();
-      const res = K.play(s, sel.uid, target);
+      const res = K.play(s, card.uid, target);
       Game.ui.card = null;
       pendingFx = res.fx || [];
       Game.save();
@@ -264,8 +266,14 @@ Game.TermView = (function () {
       if (!b) return;
       const uid = +b.dataset.uid;
       const card = cr.hand.filter(function (c) { return c.uid === uid; })[0];
+      const dbl = UI.doubleTap('term' + uid);
       const ok = K.canPlay(cr, card.id);
       if (!ok.ok) return say(ok.reason);
+      // ダブルクリック:地区を選ぶカードは、いま選んでいる地区で。約束を選ぶカードは、果たすのにいちばん近い約束で使う
+      if (dbl) {
+        const k = K.targetKind(cr, card.id);
+        return doPlay(k === 'region' ? cr.sel : k === 'promise' ? K.autoPromise(cr) : null, card);
+      }
       Game.ui.card = Game.ui.card === uid ? null : uid;
       render(app);
     });

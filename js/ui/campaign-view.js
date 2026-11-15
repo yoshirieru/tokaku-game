@@ -137,9 +137,9 @@ Game.CampaignView = (function () {
     let prompt;
     if (!selCard) {
       const playable = camp.hand.some(function (c) { return C.canPlay(camp, c.id).ok; });
-      prompt = playable ? 'カードを選ぶと、どの地区でどれだけ伸びるかが地図に出る。' : '今日はここまで。この日を終えよう。';
+      prompt = playable ? 'カードを選ぶと、どの地区でどれだけ伸びるかが地図に出る。ダブルクリックですぐ使える。' : '今日はここまで。この日を終えよう。';
     } else if (C.isTarget(selCard.id)) {
-      prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b>を使う地区を地図で選ぶ。';
+      prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b>を使う地区を地図で選ぶ。<small>ダブルクリックなら' + Game.Data.REGION[camp.sel].name + 'で使う</small>';
     } else {
       prompt = '<b>「' + Game.Data.CARDS[selCard.id].name + '」</b><button type="button" class="btn-go" id="playNow">' + (B.cards[selCard.id].curse ? '謝りに行く' : '使う') + '</button>';
     }
@@ -147,7 +147,7 @@ Game.CampaignView = (function () {
     return '<footer class="hand"><div class="turn panel">' +
       '<div class="energy"><span class="e-lab">今日の体力</span><span class="pips">' + pips + '</span><span class="deck-n">山札 ' + camp.deck.length + '・捨て札 ' + camp.discard.length + '</span></div>' +
       '<div class="prompt" id="prompt">' + prompt + '</div>' +
-      '<div class="turn-btns"><button type="button" class="btn btn-undo" id="undo"' + (Game.canUndo() ? '' : ' disabled') + '>' + UI.icon('undo') + '<span>取り消す</span></button>' +
+      '<div class="turn-btns"><button type="button" class="btn btn-undo" id="undo" title="カードを使う前に戻す(Ctrl+Z)"' + (Game.canUndo() ? '' : ' disabled') + '>' + UI.icon('undo') + '<span>取り消す</span></button>' +
       '<button type="button" class="btn-main" id="endDay">' + (last ? '投票日へ' : 'この日を終える') + '</button></div>' +
       '</div><div class="cards" id="cards" aria-label="手札">' + cards + '</div></footer>';
   }
@@ -246,11 +246,13 @@ Game.CampaignView = (function () {
     app.querySelector('#pins').innerHTML = pinsHtml(camp, selCard);
 
     const say = function (text) { camp.news = text; Game.ui.card = null; render(app); };
-    const doPlay = function (regionId) {
-      const ok = C.canPlay(camp, selCard.id);
+    // card を使う(ダブルクリックでは選んでいるカードでなくてもよい)。使う前の state を取り消し用に積む
+    const doPlay = function (regionId, card) {
+      card = card || selCard;
+      const ok = C.canPlay(camp, card.id);
       if (!ok.ok) return say(ok.reason);
       Game.pushUndo();
-      const res = C.play(s, selCard.uid, regionId);
+      const res = C.play(s, card.uid, regionId);
       Game.ui.card = null;
       pendingFx = res.fx || [];
       Game.save();
@@ -268,8 +270,11 @@ Game.CampaignView = (function () {
       if (!b) return;
       const uid = +b.dataset.uid;
       const card = camp.hand.filter(function (c) { return c.uid === uid; })[0];
+      const dbl = UI.doubleTap('camp' + uid);
       const ok = C.canPlay(camp, card.id);
       if (!ok.ok) return say(ok.reason);
+      // ダブルクリック:地区を選ぶカードは、いま選んでいる地区(金の枠)で使う
+      if (dbl) return doPlay(C.isTarget(card.id) ? camp.sel : null, card);
       Game.ui.card = Game.ui.card === uid ? null : uid;
       render(app);
     });

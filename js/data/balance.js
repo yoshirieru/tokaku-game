@@ -19,6 +19,9 @@ Game.Balance = {
     saturatedMult: 0.5,  // そのときの効果の倍率(プレイヤーも相手も同じ)
   },
 
+  // 画面の操作:同じカードをこの時間(ミリ秒)のうちに2回押すと、ダブルクリックとしてすぐ使う(スマホのダブルタップも同じ)
+  ui: { doubleClick: 400 },
+
   // 情勢の印:いちばん強い相手との差(ポイント)。strong 以上で ◎、lean 以上で ○、± lean の内は ▲
   marks: { strong: 10, lean: 3 },
 
@@ -300,6 +303,11 @@ Game.Balance = {
     dissolveFrom: 2,          // 首相は、この会期から解散できる
     events: { chance: 0.4, up: 5, down: -5 },   // 首相の会期の始まりの出来事(外交の成果、閣僚の不祥事)
   },
+
+  // ---- 殿堂・実績(R7。js/engine/hall.js)----
+  //   maxRecords 歴代の記録に残す数 / veteranSeats「ベテラン議員」の議席の回数 / hardGuide「逆風を越えて」:選挙区の難しさの目安(guide)がこれ未満
+  //   keeperKept「約束を守り抜く」の守った約束の数 / longPMTurns「長期政権」の首相の会期(半年)の数
+  hall: { maxRecords: 50, veteranSeats: 5, hardGuide: 35, keeperKept: 5, longPMTurns: 12 },
 
   // ---- 党首選(党三役になると、任期の2会期目に立候補できる)----
   leaderRace: {

@@ -167,6 +167,7 @@ Game.Career = (function () {
     const won = winner === 'me';
     if (won) {
       cr.leader = true;
+      cr.raceWon = true;   // 党首選に勝った(殿堂の実績)
       cr.rank = Game.Balance.ranks.length - 1;
       cr.bestRank = Math.max(cr.bestRank, cr.rank);
       cr.partySeats = Game.Balance.nation.startSeats[state.player.party];
@@ -194,6 +195,7 @@ Game.Career = (function () {
       partySeats: B.nation.startSeats[state.player.party],
       next: { endorse: [], broken: [], light: [], carried: [], carriedFull: [] },
     };
+    state.career.quickStart = { wins: state.career.wins, kept: state.career.kept };   // はじめから持っている分(殿堂の実績では数えない)
     state.career.gov = Game.Gov.initial(state);
     if (state.career.gov.role === 'pm') { state.career.wasPM = true; state.career.pmTerms = 1; }
     return state.career;
@@ -250,6 +252,11 @@ Game.Career = (function () {
     const b = T().cards[id];
     if (b.promise) return cr.promises.length ? 'promise' : 'none';
     return b.base ? 'region' : 'none';
+  }
+  // ダブルクリックで約束を選ぶカードを使うとき、進める約束:いちばん進んでいるもの(同じなら、背負ってから長いもの)
+  function autoPromise(cr) {
+    const list = cr.promises.slice().sort(function (a, b) { return (b.progress - a.progress) || (b.turns - a.turns); });
+    return list.length ? list[0].id : null;
   }
   // 地区を選ぶカードの、実際に伸びる地盤(上限で止まる)
   function baseGain(cr, id, regionId) {
@@ -552,14 +559,15 @@ Game.Career = (function () {
     for (let i = 0; i < L.grades.length; i++) if (score >= L.grades[i][1]) { grade = L.grades[i][0]; break; }
     const pmNow = isPM(cr);
     const title = reason === 'ousted' ? '支持を失い、首相の座を追われる'
-      : pmNow ? (cr.gov.approval >= 50 ? '名宰相として惜しまれつつ、政界を去る' : '首相を務めあげて、政界を去る')
+      : pmNow ? (reason !== 'ousted' && cr.gov.approval >= 50 ? '名宰相として惜しまれつつ、政界を去る' : '首相を務めあげて、政界を去る')
       : cr.wasPM ? '元首相として、政界を去る'
       : cr.leader ? (cr.wonMajority ? '総選挙に勝った党首として、政界を去る' : '党首として、政界を去る')
       : !cr.wins ? '国会に届かないまま、政界を去る'
       : (cr.bestRank || 0) >= 4 ? '党の重鎮として、政界を去る'
         : cr.bestRank === 3 ? '大臣を務めあげて、政界を去る'
           : cr.bestRank >= 1 ? rank.name + 'まで務めて、政界を去る' : '陣笠議員のまま、政界を去る';
-    state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice() };
+    const great = !!(pmNow && reason !== 'ousted' && cr.gov.approval >= 50);   // 名宰相として惜しまれつつ
+    state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice(), great: great };
     state.screen = 'ending';
     return state.ending;
   }
@@ -567,7 +575,7 @@ Game.Career = (function () {
   return {
     afterElection: afterElection, play: play, canPlay: canPlay, endTurn: endTurn, dismiss: dismiss, respond: respond, toCampaign: toCampaign,
     dissolveChance: dissolveChance, extraStars: extraStars, targetKind: targetKind, baseGain: baseGain,
-    seated: seated, nextRank: nextRank, retire: retire, raceStrength: raceStrength, runRace: runRace, quickLeader: quickLeader,
+    autoPromise: autoPromise, seated: seated, nextRank: nextRank, retire: retire, raceStrength: raceStrength, runRace: runRace, quickLeader: quickLeader,
     isPM: isPM, canDissolve: canDissolve, dissolve: dissolve,
   };
 })();

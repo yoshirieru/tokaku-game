@@ -10,6 +10,7 @@ Game.Screens = (function () {
       hasSave: Game.hasSave(),
       onNew: function () { Game.view = 'setup'; Game.render(); },
       onContinue: function () { Game.continueGame(); },
+      onHall: function () { Game.view = 'hall'; Game.render(); },
       onLegacy: function () { location.href = 'legacy/index.html'; },
       note: '登場する政党・政治家・選挙区はすべて架空です',
     });

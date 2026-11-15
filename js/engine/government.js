@@ -68,6 +68,7 @@ Game.Gov = (function () {
     }
     gov.lostPower = wasPM && gov.role !== 'pm';
     cr.pmStreak = gov.role === 'pm' ? (wasPM ? (cr.pmStreak || 1) + 1 : 1) : 0;   // 続けて首相を務めている回数
+    if (gov.role === 'pm' && gov.partner) cr.coalPM = true;   // 連立を組んで首相になった(殿堂の実績)
     cr.gov = gov;
     cr.govFresh = true;
     return gov;

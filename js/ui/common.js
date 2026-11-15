@@ -22,6 +22,14 @@ Game.UI = Game.UI || {};
   };
   UI.signed = function (n) { return (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n); };
 
+  // 同じもの(key)を続けて2回押したか(ダブルクリック・ダブルタップ)。描き直しで要素が入れ替わっても数えられるよう、自分で時間を測る
+  let lastTap = { key: null, at: 0 };
+  UI.doubleTap = function (key) {
+    const now = Date.now(), hit = lastTap.key === key && now - lastTap.at <= Game.Balance.ui.doubleClick;
+    lastTap = hit ? { key: null, at: 0 } : { key: key, at: now };
+    return hit;
+  };
+
   // 選挙区の地図。fill(regionId) は { color, mix(%) } を返す(color がなければ地の色)
   // sel は金色の枠で囲む地区。札(pins)は呼び出し側が #pins に入れる
   UI.mapHtml = function (fill, sel) {

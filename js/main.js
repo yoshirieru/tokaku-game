@@ -7,7 +7,7 @@ window.Game = window.Game || {};
   const SAVE_VERSION = 2;
 
   Game.state = null;
-  Game.view = 'title';      // ゲームを始める前の画面:'title' | 'setup'
+  Game.view = 'title';      // ゲームを始める前の画面:'title' | 'setup' | 'hall'
   Game.ui = { card: null }; // 保存しない画面だけの状態(選んでいるカードなど)
   let undoStack = [];       // 行動の直前の state(その日のうちだけ)
 
@@ -23,6 +23,26 @@ window.Game = window.Game || {};
     } catch (e) { return null; }
   };
   Game.hasSave = function () { return !!Game.loadSave(); };
+
+  // ---- 殿堂(R7):セーブデータとは別に残す。セーブを消しても、はじめから遊んでも消えない ----
+  const HALL_KEY = 'tokaku2-hall';
+  Game.loadHall = function () {
+    try { return Game.Hall.normalize(JSON.parse(localStorage.getItem(HALL_KEY))); } catch (e) { return Game.Hall.empty(); }
+  };
+  Game.saveHall = function (h) {
+    try { localStorage.setItem(HALL_KEY, JSON.stringify(h)); } catch (e) { console.warn('殿堂を保存できませんでした', e); }
+  };
+  Game.clearHall = function () {
+    try { localStorage.removeItem(HALL_KEY); } catch (e) { /* 消せなくても遊べる */ }
+  };
+  // エンディングを迎えたら、殿堂に1件記録する。結果は state.ending.hall に持ち、読み直しても二重に記録しない
+  function recordHall(s) {
+    if (!s || s.screen !== 'ending' || !s.ending || s.ending.hall) return;
+    const h = Game.loadHall();
+    s.ending.hall = Game.Hall.record(h, s, Date.now());
+    Game.saveHall(h);
+    Game.save();
+  }
 
   Game.startNew = function (name, party, seat) {
     const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) | 0;
@@ -86,6 +106,7 @@ window.Game = window.Game || {};
     const s = Game.state;
     if (!s) {
       if (Game.view === 'setup') return Game.Screens.renderSetup(app);
+      if (Game.view === 'hall') return Game.HallView.render(app);
       return Game.Screens.renderTitle(app);
     }
     const nat = s.election && s.election.national;
@@ -93,9 +114,19 @@ window.Game = window.Game || {};
     if (s.screen === 'result') return nat ? Game.NationalView.renderResult(app) : Game.CountView.renderResult(app);
     if (s.screen === 'coalition') return Game.GovView.renderCoalition(app);
     if (s.screen === 'term') return Game.TermView.render(app);
-    if (s.screen === 'ending') return Game.EndingView.render(app);
+    if (s.screen === 'ending') { recordHall(s); return Game.EndingView.render(app); }
     return Game.CampaignView.render(app);
   };
+
+  // Ctrl+Z(Mac は ⌘+Z)で「取り消す」。知らせの窓が出ているときと、文字を打っているときは効かない
+  window.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+    if (document.querySelector('.modal-back') || /^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName)) return;
+    const b = document.getElementById('undo');
+    if (!b || b.disabled) return;
+    e.preventDefault();
+    b.click();
+  });
 
   window.addEventListener('DOMContentLoaded', function () { Game.render(); });
 })();
