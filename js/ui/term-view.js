@@ -25,7 +25,7 @@ Game.TermView = (function () {
     const me = { party: s.player.party };
     return '<header class="hud panel">' +
       '<div class="who"><span class="seat">' + UI.esc(Game.Data.DISTRICT.name) + '</span>' + UI.partyChip(me) + '<b class="pname">' + UI.esc(s.player.name) + '</b>' +
-      '<span class="hud-badge">' + (cr.status === 'member' ? Game.Balance.ranks[cr.rank || 0].name + '・当選' + cr.wins + '回' : '浪人中') + '</span></div>' +
+      '<span class="hud-badge">' + (Game.GovView.active(cr) ? Game.GovView.badge(cr) : cr.status === 'member' ? Game.Balance.ranks[cr.rank || 0].name + '・当選' + cr.wins + '回' : '浪人中') + '</span></div>' +
       '<ol class="days" aria-label="任期の会期">' + dots + '</ol>' +
       '<div class="res"><span class="lab">資金</span><b>' + cr.money + '</b><small>万円</small></div>' +
       '<div class="ticker"><span class="tk-lab">' + UI.esc(Game.Data.sessionName(cr.turn)) + '</span><span id="news">' + UI.esc(cr.news) + '</span></div>' +
@@ -33,6 +33,7 @@ Game.TermView = (function () {
       '</header>';
   }
   function windHtml(cr) {
+    if (Game.GovView.active(cr)) return Game.GovView.barHtml(Game.state);   // 党首:内閣支持率の帯
     const T = Game.Balance.term, pct = Math.round(K.dissolveChance(cr) * 100), left = T.turns - cr.turn;
     const text = cr.turn >= T.turns ? 'この会期で<b>任期満了</b>。総選挙になる'
       : pct ? 'この会期のあとに解散する見込み <b>' + pct + '%</b>' : '選挙の直後。この会期のあとの解散は<b>ない</b>';
@@ -41,6 +42,7 @@ Game.TermView = (function () {
       '<span class="wind-text">' + text + '</span><span class="wind-left">' + (left > 0 ? '任期満了まで あと' + left + '会期' : '') + '</span></section>';
   }
   function pinsHtml(cr, sel, kind) {
+    if (Game.GovView.active(cr)) return Game.GovView.pinsHtml(Game.state);
     const max = Game.Balance.comeback.baseMax;
     return Game.Data.DISTRICT.regions.map(function (r) {
       const n = cr.base[r.id] || 0;
@@ -54,6 +56,7 @@ Game.TermView = (function () {
     }).join('');
   }
   function sideHtml(s, sel, kind) {
+    if (Game.GovView.active(s.career)) return Game.GovView.sideHtml(s, sel, kind);
     const cr = s.career, T = Game.Balance.term, CB = Game.Balance.comeback;
     // 約束
     let pr;
@@ -83,13 +86,22 @@ Game.TermView = (function () {
     const nx = K.nextRank(cr);
     const need = nx ? [nx.wins ? '当選あと' + nx.wins + '回' : '', nx.merit ? '評価あと' + nx.merit : ''].filter(Boolean).join('・') : '';
     const rankNote = cr.status !== 'member' ? '議席を取り戻せば、また人事がある' : !nx ? 'いちばん上の役職にいる' : '次は' + nx.rank.name + '(' + (need || '次の人事で') + ')';
-    const prep = '<section class="panel" id="prep"><h2>次の選挙への備え<small>' + ROLE_TEXT[cr.role] + '戦う</small></h2>' +
+    let prep = '<section class="panel" id="prep"><h2>次の選挙への備え<small>' + ROLE_TEXT[cr.role] + '戦う</small></h2>' +
       '<div class="prep-row"><span>党内評価</span><b>' + (cr.merit || 0) + '</b><small>' + rankNote + '</small></div>' +
       '<div class="prep-row"><span>地盤の合計</span><b>' + baseSum + '</b><small>始まりの支持に、地区ごとに足される</small></div>' +
       '<div class="prep-row"><span>推薦のカード</span><b>' + cr.next.endorse.length + '枚</b><small>守った約束の数</small></div>' +
       '<div class="prep-row"><span>党幹部の応援</span><b>' + (1 + stars) + '枚</b><small>' +
       (stars >= CB.starExtraMax ? 'これ以上は増えない' : '党への貢献 ' + cr.contrib + '(あと' + toNext + 'で +1枚)') + '</small></div>' +
       '<div class="prep-row"><span>持ち込む資金</span><b>' + Math.min(CB.moneyCarryMax, cr.money) + '万円</b><small>上限 ' + CB.moneyCarryMax + '万円</small></div></section>';
+    if (cr.leader) {   // 党首:次は全国の総選挙。党をまとめ、約束を守ることが全ブロックの支持になる
+      const NB = Game.Balance.nation, unity = Math.min(NB.unityMax, Math.floor(cr.contrib / NB.unityPer));
+      prep = '<section class="panel" id="prep"><h2>次の総選挙への備え<small>党首として全国を戦う</small></h2>' +
+        '<div class="prep-row"><span>党の議席</span><b>' + cr.partySeats + '</b><small>過半数は ' + NB.majority + '</small></div>' +
+        '<div class="prep-row"><span>党の結束</span><b>+' + unity + '</b><small>' + (unity >= NB.unityMax ? 'これ以上は増えない' : '党への貢献 ' + cr.contrib + '(あと' + (NB.unityPer - cr.contrib % NB.unityPer) + 'で +1)') + '</small></div>' +
+        '<div class="prep-row"><span>守った約束</span><b>+' + Math.min(NB.keptMax, cr.next.endorse.length) * NB.keptAll + '</b><small>1つにつき全ブロック +' + NB.keptAll + '</small></div>' +
+        '<div class="prep-row"><span>破ると</span><b>' + NB.brokenAll + '</b><small>党首の約束破りは、全ブロックに響く</small></div>' +
+        '<div class="prep-row"><span>持ち込む資金</span><b>' + Math.min(CB.moneyCarryMax, cr.money) + '万円</b><small>上限 ' + CB.moneyCarryMax + '万円</small></div></section>';
+    }
 
     // 地区
     const r = Game.Data.REGION[cr.sel], n = cr.base[r.id] || 0;
@@ -112,7 +124,7 @@ Game.TermView = (function () {
     }).join('');
     let prompt;
     if (!sel) {
-      prompt = cr.hand.some(function (c) { return K.canPlay(cr, c.id).ok; }) ? 'カードを選ぶ。約束を進めるか、地元を固めるか、党で働くか。' : 'この会期はここまで。会期を終えよう。';
+      prompt = cr.hand.some(function (c) { return K.canPlay(cr, c.id).ok; }) ? (Game.GovView.active(cr) ? 'カードを選ぶ。' + (cr.gov.role === 'opposition' ? '政権を追及するか、党をまとめるか。' : '公約を進めるか、支持率を上げるか、党をまとめるか。') : 'カードを選ぶ。約束を進めるか、地元を固めるか、党で働くか。') : 'この会期はここまで。会期を終えよう。';
     } else if (kind === 'promise') {
       prompt = '<b>「' + Game.Data.TERM_CARDS[sel.id].name + '」</b>で進める約束を、右の欄から選ぶ。';
     } else if (kind === 'region') {
@@ -132,13 +144,14 @@ Game.TermView = (function () {
   function showPending(app) {
     const s = Game.state, cr = s.career, p = cr.pending[0], T = Game.Balance.term;
     const next = function () { K.dismiss(s); Game.save(); render(app); };
+    if (Game.GovView.active(cr) && Game.GovView.pending(app, p, next, render)) return;   // 党首の任期の始まり・解散
     if (p.type === 'start') {
       if (cr.status === 'member') {
         const list = cr.promises.length ? '<ul class="m-list">' + cr.promises.map(function (x) {
           return '<li><b>' + P(x.id).policy + '</b>(' + P(x.id).org + ')' + (x.progress ? ' — 前の任期からの持ち越し' : '') + '</li>';
         }).join('') + '</ul>' : '<p>背負っている約束はない。地元と党のために動ける。</p>';
         UI.modal('<p class="m-kicker">' + (cr.role === 'revived' ? '比例復活・' : '') + (cr.wins === 1 ? '初登院' : cr.wins + '回目の当選') + '</p><h2>議員の任期が始まる</h2>' +
-          '<p>選挙で背負った約束を、この任期のうちに果たす。</p>' + list +
+          '<p>' + (cr.leader ? '党首として国会に戻った。党をまとめ、次の総選挙に備える。' : '選挙で背負った約束を、この任期のうちに果たす。') + '</p>' + list +
           '<ul class="m-list"><li>1会期(半年)に体力は' + T.energy + '。会期の終わりに、上の帯の見込みで衆議院が解散する。</li>' +
           '<li>約束してから' + T.graceTurns + '会期たたないうちの解散なら、破ったことにはならず持ち越せる。</li></ul>',
           [{ label: '国会へ', primary: true, onClick: next }]);
@@ -148,6 +161,33 @@ Game.TermView = (function () {
           '<ul class="m-list"><li>浪人中は国会で動けない(約束を進めるカードは出ない)。</li><li>解散の見込みは、上の帯に出ている。</li></ul>',
           [{ label: '地元へ', primary: true, onClick: next }]);
       }
+    } else if (p.type === 'leaderRace') {
+      const L = Game.Balance.leaderRace, top = Math.max(p.me, p.rivals[0].str, p.rivals[1].str);
+      const bar = function (name, sub, v, me) {
+        return '<div class="row' + (me ? ' me' : '') + '" style="--pc:' + (me ? 'var(--gold)' : 'var(--sub)') + '"><span class="pchip" style="--pc:' + (me ? 'var(--accent)' : 'var(--panel-2)') + '">' + sub + '</span><span class="nm">' + UI.esc(name) + '</span><span class="bar"><i style="width:' + (v / top * 100) + '%"></i></span><span class="pct">' + v + '</span></div>';
+      };
+      const third = p.rivals[0].str <= p.rivals[1].str ? p.rivals[0] : p.rivals[1];
+      const pick = function (a) { return function () { K.runRace(s, a); Game.clearUndo(); Game.save(); render(app); }; };
+      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・党首選</p><h2>党首選に立つか</h2>' +
+        '<p>党三役として、党首の座に挑める。いまの票読み(強さ)はこうだ。過半数を取る人がいなければ、上位2人の決選投票になる。</p>' +
+        bar(s.player.name, 'あなた', p.me, true) + bar(p.rivals[0].name, p.rivals[0].title, p.rivals[0].str) + bar(p.rivals[1].name, p.rivals[1].title, p.rivals[1].str),
+        [
+          { label: '<b>党内融和を訴える</b><span>確実に、強さ +' + L.unity + '</span>', onClick: pick('unity') },
+          { label: '<b>世代交代を訴える</b><span>' + Math.round(L.reform.chance * 100) + '%で強さ +' + L.reform.hit + '。外すと ' + L.reform.miss + '</span>', onClick: pick('reform') },
+          { label: '<b>' + UI.esc(third.short) + '陣営と組む</b><span>' + UI.esc(third.short) + '氏の強さの ' + Math.round(L.deal.share * 100) + '% を受け取る。ポストの約束で党内評価 ' + L.deal.merit + '</span>', onClick: pick('deal') },
+          { label: '<b>今回は見送る</b><span>次の総選挙のあとに、また機会がある</span>', onClick: pick('skip') },
+        ], 'choices');
+    } else if (p.type === 'leaderResult') {
+      const nm = { me: s.player.name, r0: p.rivals[0].name, r1: p.rivals[1].name };
+      const row = function (k, v, digits) {   // 決選投票は僅差になるので、小数1けたまで出す
+        return '<div class="row' + (k === 'me' ? ' me' : '') + '" style="--pc:' + (k === 'me' ? 'var(--gold)' : 'var(--sub)') + '"><span class="pchip" style="--pc:' + (k === 'me' ? 'var(--accent)' : 'var(--panel-2)') + '">' + (k === 'me' ? 'あなた' : '相手') + '</span><span class="nm">' + UI.esc(nm[k]) + '</span><span class="bar"><i style="width:' + v + '%"></i></span><span class="pct">' + v.toFixed(digits || 0) + '%</span></div>';
+      };
+      const firstRows = ['me', 'r0', 'r1'].sort(function (a, b) { return p.first[b] - p.first[a]; }).map(function (k) { return row(k, p.first[k]); }).join('');
+      const runoff = p.runoff ? '<p class="m-kicker">決選投票</p>' + row(p.runoff.a, p.runoff.pa, 1) + row(p.runoff.b, p.runoff.pb, 1) : '';
+      UI.modal('<p class="m-kicker">党首選・開票</p><h2>' + (p.won ? '新しい党首に選ばれた' : '党首選に敗れた') + '</h2>' +
+        '<p>' + UI.esc(p.note) + '</p><p class="m-kicker">1回目の投票' + (p.runoff ? '(過半数なし)' : '') + '</p>' + firstRows + runoff +
+        '<p>' + (p.won ? '次の総選挙は、党首として全国の11ブロックを戦う。公務が増え、地元に帰る時間は減る。' : '党内評価が ' + Game.Balance.leaderRace.loseMerit + '。次の総選挙のあとに、また機会がある。') + '</p>',
+        [{ label: p.won ? '党首として立つ' : '出直す', primary: true, onClick: function () { if (p.won) UI.sound('stamp'); next(); } }]);
     } else if (p.type === 'promotion') {
       const rk = Game.Balance.ranks[p.rank], li = [];
       if (rk.startAll) li.push('役職の重みで、次の選挙は全地区の始まりの支持が +' + rk.startAll + '。');
@@ -171,7 +211,8 @@ Game.TermView = (function () {
         : '<p>背負った約束は残っていない。</p>';
       UI.modal('<p class="m-kicker">' + UI.esc(p.session) + '</p><h2>' + (p.full ? '任期満了' : '衆議院解散') + '</h2>' +
         '<p>' + (p.full ? '4年の任期が終わった。総選挙が行われる。' : '首相が衆議院を解散した。総選挙が始まる。') + '</p>' + lines +
-        (p.stars ? '<p>党への貢献が認められ、党幹部の応援が ' + p.stars + '枚 増える。</p>' : ''),
+        (p.stars ? '<p>党への貢献が認められ、党幹部の応援が ' + p.stars + '枚 増える。</p>' : '') +
+        (p.unity ? '<p>党のために働いてきたことで、党がまとまっている。総選挙は全ブロックの支持が +' + p.unity + ' から始まる。</p>' : ''),
         [{ label: '選挙戦へ', primary: true, onClick: function () { K.toCampaign(s); Game.clearUndo(); Game.ui.card = null; Game.save(); Game.render(); } }]);
     } else {
       UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
@@ -189,9 +230,11 @@ Game.TermView = (function () {
     const sel = cr.hand.filter(function (c) { return c.uid === Game.ui.card; })[0] || null;
     const kind = sel ? K.targetKind(cr, sel.id) : null;
     const color = Game.Data.PARTIES[s.player.party].color, max = Game.Balance.comeback.baseMax;
-    app.innerHTML = '<div class="game term">' + hudHtml(s) + windHtml(cr) +
+    const lead = Game.GovView.active(cr);   // 党首:全国の地図と、政権の部品
+    Game.Data.useArena(cr.leader ? 'nation' : 'home');
+    app.innerHTML = '<div class="game term' + (lead ? ' nat' : '') + '">' + hudHtml(s) + windHtml(cr) +
       '<main class="board"><div class="map-cell">' +
-      UI.mapHtml(function (rid) { return { color: color, mix: 10 + (cr.base[rid] || 0) / max * 55 }; }, cr.sel) +
+      UI.mapHtml(lead ? Game.GovView.mapFill(s) : function (rid) { return { color: color, mix: 10 + (cr.base[rid] || 0) / max * 55 }; }, lead ? null : cr.sel) +
       '</div><aside class="side">' + sideHtml(s, sel, kind) + '</aside></main>' + handHtml(cr, sel, kind) + '</div>';
     app.querySelector('#pins').innerHTML = pinsHtml(cr, sel, kind);
 
@@ -208,7 +251,7 @@ Game.TermView = (function () {
     };
     app.querySelector('.map').addEventListener('click', function (e) {
       const t = e.target.closest('[data-id]');
-      if (!t) return;
+      if (!t || lead) return;
       if (sel && kind === 'region') return doPlay(t.dataset.id);
       cr.sel = t.dataset.id;
       render(app);
@@ -236,8 +279,9 @@ Game.TermView = (function () {
       Game.ui.card = null;
       pendingFx = [];
       Game.save();
-      render(app);
+      Game.render();   // 退陣でエンディングに移ることもある
     };
+    if (lead) Game.GovView.wire(app, s);
     app.querySelector('#endTurn').onclick = function () {
       const idle = cr.energy > 0 && cr.hand.some(function (c) { return K.canPlay(cr, c.id).ok; });
       if (!idle) return finish();

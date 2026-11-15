@@ -6,17 +6,70 @@ Game.Campaign = (function () {
   const R = Game.Rng;
   const bal = function () { return Game.Balance; };
   const regions = function () { return Game.Data.DISTRICT.regions; };
+  // いまの舞台の、地区ごとの党の地力(選挙区は balance.js の seats、全国は partyBase)
+  function baseOf(rid) {
+    const B = bal(), S = B.seats[Game.Data.DISTRICT.id];
+    return S ? S.base[rid] : B.partyBase[rid];
+  }
+  // いまの選挙区の、地区ごとの投票率の基準
+  function turnoutOf(rid) { return bal().seats[Game.Data.DISTRICT.id].turnout[rid]; }
 
   // ---------- 始まり ----------
   // 2回目からの選挙は、任期の結果(state.career。career.js)が返ってくる:
   //   立場(現職・元職)、地盤、守った約束の推薦、破った約束、持ち越した約束、党幹部の応援、資金
+  // 党首として戦う総選挙(全国。舞台は js/data/nation.js)。候補は党、地区は11ブロック
+  function newNational(state) {
+    const B = bal(), NB = B.nation, CB = B.comeback, party = state.player.party, cr = state.career;
+    const cands = [{ id: 'me', party: party, name: state.player.name, short: state.player.name.split(/[ 　]/)[0], role: 'leader', player: true }];
+    Object.keys(Game.Data.PARTIES).forEach(function (p) {
+      if (p === party) return;
+      const who = Game.Data.LEADERS[p];
+      cands.push({ id: p, party: p, name: who.name, short: who.short, role: 'nat_' + p });
+    });
+    const shares = {};
+    regions().forEach(function (r) {
+      let sum = 0;
+      cands.forEach(function (c) { sum += baseOf(r.id)[c.party]; });
+      shares[r.id] = {};
+      cands.forEach(function (c) { shares[r.id][c.id] = baseOf(r.id)[c.party] / sum * 100; });
+    });
+    const carryMoney = Math.min(CB.moneyCarryMax, cr.money || 0);
+    const camp = {
+      arena: 'nation', day: 0, energy: 0, money: NB.startMoney + carryMoney, sel: 'kinki',
+      cands: cands, shares: shares, shields: {}, promises: [],
+      deck: [], discard: [], hand: [], uid: 0,
+      intents: [], blocked: {}, today: {}, pending: [], news: '', played: 0, comeback: null,
+    };
+    // 始まりの支持(全ブロック):党への風、党の結束(党への貢献)、党首の約束(守った・破った)
+    const N = cr.next || { endorse: [], broken: [], light: [] };
+    const wind = Math.round(Math.max(-CB.windMax, Math.min(CB.windMax, R.normal(state) * CB.windSd)));
+    const unity = Math.min(NB.unityMax, Math.floor((cr.contrib || 0) / NB.unityPer));
+    const kept = Math.min(NB.keptMax, N.endorse.length) * NB.keptAll;
+    const broken = (N.broken.length + N.light.length) * NB.brokenAll;
+    const govBonus = cr.gov ? Game.Gov.electionBonus(cr.gov) : 0;   // 内閣支持率(首相はそのまま、連立与党は半分、野党は逆向き)
+    const GV = B.gov;
+    const fatigue = cr.gov && cr.gov.role === 'pm' ? -Math.min(GV.fatigueMax, Math.max(0, (cr.pmStreak || 1) - 1)) * GV.fatiguePer : 0;   // 長期政権への飽き
+    const all = wind + unity + kept + broken + govBonus + fatigue;
+    if (all) regions().forEach(function (r) { applyGain(camp, r.id, 'me', all); });
+    camp.comeback = { national: true, wind: wind, unity: unity, kept: kept, broken: broken, money: carryMoney, prevMine: cr.partySeats,
+      fatigue: fatigue, govBonus: govBonus, govRole: cr.gov ? cr.gov.role : null, approval: cr.gov ? Math.round(cr.gov.approval) : null };
+    camp.deck = R.shuffle(state, NB.deck.concat(NB.manifesto[party]));
+    state.camp = camp;
+    startDay(state);
+    return camp;
+  }
+
   function newCampaign(state) {
     const B = bal(), CB = B.comeback, party = state.player.party;
     const cr = state.career || null;
-    const roles = (cr && cr.rivalRoles) || Game.Data.ROLES[party];
+    Game.Data.setHome(state.player.seat);   // 立候補している選挙区(はじめのセーブにはないので、北陽3区になる)
+    Game.Data.useArena(cr && cr.leader ? 'nation' : 'home');
+    if (cr && cr.leader) return newNational(state);
+    const D = Game.Data.DISTRICT;
+    const roles = (cr && cr.rivalRoles) || D.roles[party];
     const cands = [{ id: 'me', party: party, name: state.player.name, short: state.player.name.split(/[ 　]/)[0], role: cr ? cr.role : 'newcomer', player: true }];
     Object.keys(roles).forEach(function (p) {
-      const who = Game.Data.PEOPLE[p];
+      const who = D.people[p];
       cands.push({ id: p, party: p, name: who.name, short: who.short, role: roles[p] });
     });
     const shares = {};
@@ -24,14 +77,14 @@ Game.Campaign = (function () {
       const raw = {};
       let sum = 0;
       cands.forEach(function (c) {
-        raw[c.id] = B.partyBase[r.id][c.party] * (c.player ? B.playerRoles[c.role] : B.roles[c.role].mult);
+        raw[c.id] = baseOf(r.id)[c.party] * (c.player ? B.playerRoles[c.role] : B.roles[c.role].mult * (B.seats[D.id].rivalMult || 1));
         sum += raw[c.id];
       });
       shares[r.id] = {};
       cands.forEach(function (c) { shares[r.id][c.id] = raw[c.id] / sum * 100; });
     });
     const camp = {
-      day: 0, energy: 0, money: B.campaign.startMoney, sel: 'downtown',
+      arena: D.id, day: 0, energy: 0, money: B.campaign.startMoney, sel: 'downtown',
       cands: cands, shares: shares, shields: {}, promises: [],
       deck: [], discard: [], hand: [], uid: 0,
       intents: [], blocked: {}, today: {}, pending: [], news: '', played: 0, comeback: null,
@@ -237,7 +290,7 @@ Game.Campaign = (function () {
           const s = camp.shares[reg.id], my = s[c.id];
           let best = 0;
           Object.keys(s).forEach(function (k) { if (k !== c.id && s[k] > best) best = s[k]; });
-          let w = reg.voters * (1 / (1 + Math.abs(my - best) / A.closeScale)) * (B.partyBase[reg.id][c.party] / A.affinityBase);
+          let w = reg.voters * (1 / (1 + Math.abs(my - best) / A.closeScale)) * (baseOf(reg.id)[c.party] / A.affinityBase);
           if (Math.abs(my - s.me) < A.defendWithin) w *= A.defendMult;
           if (chosen[reg.id]) w *= 0.25;
           return w;
@@ -372,5 +425,6 @@ Game.Campaign = (function () {
     newCampaign: newCampaign, play: play, endDay: endDay, dismiss: dismiss, chooseDebate: chooseDebate,
     canPlay: canPlay, cardGain: cardGain, isTarget: isTarget, overall: overall, margin: margin, ranking: ranking,
     mark: mark, cand: cand, saturated: saturated, rivals: rivals, topRival: topRival, applyGain: applyGain,
+    baseOf: baseOf, turnoutOf: turnoutOf,
   };
 })();

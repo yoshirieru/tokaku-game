@@ -29,6 +29,17 @@ Game.CampaignView = (function () {
       '</header>';
   }
   function raceHtml(camp) {
+    if (Game.Data.DISTRICT.national) {   // 全国:いまの支持から見た議席の見込み
+      const seats = Game.Vote.project(camp), NB = Game.Balance.nation;
+      const ord = C.ranking(seats);
+      const segs = ord.map(function (id) {
+        const c = C.cand(camp, id);
+        return '<span class="seg" style="flex:' + seats[id] + ' 1 0;background:' + UI.color(c) + '"><b>' + Game.Data.PARTIES[c.party].short + '</b>' + seats[id] + '</span>';
+      }).join('');
+      const lv = seats.me >= NB.majority ? 'good' : ord[0] === 'me' ? 'even' : 'bad';
+      return '<section class="race panel" aria-label="議席の見込み"><span class="race-lab">議席の見込み</span><div class="race-bar">' + segs + '</div>' +
+        '<span class="race-mark"><span class="mk mk-' + lv + '">' + seats.me + '議席</span><small class="maj-small">過半数 ' + NB.majority + '</small></span></section>';
+    }
     const o = C.overall(camp);
     const segs = C.ranking(o).map(function (id) {
       const c = C.cand(camp, id);
@@ -86,7 +97,7 @@ Game.CampaignView = (function () {
         '<span class="bar"><i style="width:' + s[id] + '%"></i></span><span class="pct">' + Math.round(s[id]) + '%</span></div>';
     }).join('');
     const detail = '<section class="panel" id="detail" aria-live="polite">' +
-      '<div class="d-head"><h2>' + r.name + '</h2>' + UI.markHtml(C.margin(s)) + '<span class="voters">有権者 ' + man(r.voters) + '</span></div>' +
+      '<div class="d-head"><h2>' + r.name + '</h2>' + UI.markHtml(C.margin(s)) + '<span class="voters">' + (r.smd ? '小選挙区 ' + r.smd + '・比例 ' + r.pr : '有権者 ' + man(r.voters)) + '</span></div>' +
       '<p class="d-desc">' + r.desc + '</p><div class="tags">' + tags + '</div>' + rows +
       (hint ? '<div class="d-hint">' + hint + '</div>' : '') + '</section>';
 
@@ -105,7 +116,7 @@ Game.CampaignView = (function () {
         const p = Game.Data.PROMISES[id];
         return '<div class="pr-line"><span class="pr-dot">約</span><span><b>' + p.policy + '</b>(' + p.org + ')</span></div>';
       }).join('') : '<p class="pr-note">まだ何も約束していない。</p>') +
-      '<p class="pr-note">約束は、当選したあとの任期までついてくる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。</p></section>';
+      '<p class="pr-note">' + (Game.Data.DISTRICT.national ? '公約は、政権に入れば任期のうちに果たすことになる。野党に回れば白紙。' : '約束は、当選したあとの任期までついてくる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。') + '</p></section>';
     return detail + foe + promise;
   }
   function handHtml(camp, selCard) {
@@ -151,6 +162,23 @@ Game.CampaignView = (function () {
         '<p>' + UI.esc(Game.Data.DISTRICT.name) + 'の議席を、' + UI.esc(rv.name) + '候補(' + Game.Data.PARTIES[rv.party].short + '・' + Game.Data.ROLE_NAMES[rv.role] + ')たちと争う。いまは大きく離されている。</p>' +
         '<ul class="m-list"><li>手札のカードを選び、地図の地区を押して使う。1日の体力は' + B.campaign.energy + '。</li>' +
         '<li>相手の今日の動きは、地図の札の下と右の欄に出ている。</li><li>使ったカードは、その日のうちなら取り消せる。</li></ul>',
+        [{ label: '選挙戦へ', primary: true, onClick: next }]);
+    } else if (p.type === 'again' && camp.comeback && camp.comeback.national) {
+      // 党首として戦う総選挙
+      const cb = camp.comeback, NB = B.nation, party = Game.Data.PARTIES[s.player.party].name, li = [];
+      li.push(['', NB.seats + '議席を争う。過半数は <b>' + NB.majority + '</b>。' + party + 'のいまの議席は <b>' + cb.prevMine + '</b>。']);
+      if (cb.wind) li.push([cb.wind > 0 ? 'kept' : 'broken', '今回の選挙は、' + party + 'に<b>' + (cb.wind > 0 ? '追い風' : '逆風') + '</b>が吹いている(全ブロック ' + UI.signed(cb.wind) + ')。']);
+      if (cb.govBonus) {
+        const gw = cb.govRole === 'pm' ? 'あなたの内閣の支持率は ' + cb.approval + '%。' : cb.govRole === 'junior' ? '連立与党として、内閣支持率 ' + cb.approval + '% の響きを半分受ける。' : '相手の内閣の支持率は ' + cb.approval + '%。';
+        li.push([cb.govBonus > 0 ? 'kept' : 'broken', gw + (cb.govBonus > 0 ? '追い風になっている' : '逆風になっている') + '(全ブロック ' + UI.signed(cb.govBonus) + ')。']);
+      }
+      if (cb.fatigue) li.push(['broken', '長く政権を担ってきたことに、飽きが出ている(全ブロック ' + UI.signed(cb.fatigue) + ')。']);
+      if (cb.unity) li.push(['kept', '党のために働いてきたことで、党がまとまっている(全ブロック +' + cb.unity + ')。']);
+      if (cb.kept) li.push(['kept', '党首が約束を守ってきたことが、信頼になっている(全ブロック +' + cb.kept + ')。']);
+      if (cb.broken) li.push(['broken', '党首が約束を破ったことが、全国で報じられている(全ブロック ' + cb.broken + ')。']);
+      li.push(['', 'カードは全国用。選ぶのは11のブロック。上の帯に、いまの支持から見た<b>議席の見込み</b>が出る。']);
+      UI.modal('<p class="m-kicker">総選挙・公示</p><h2>党首として、全国を戦う</h2>' +
+        '<ul class="m-lines">' + li.map(function (x) { return '<li class="ml-' + x[0] + '">' + x[1] + '</li>'; }).join('') + '</ul>',
         [{ label: '選挙戦へ', primary: true, onClick: next }]);
     } else if (p.type === 'again') {
       // 2回目からの選挙:任期の結果が返ってくる
@@ -200,7 +228,9 @@ Game.CampaignView = (function () {
       const n = seen[f.region] = (seen[f.region] || 0) + 1;
       const c = C.cand(camp, f.who);
       const text = f.blocked ? '止めた' : UI.signed(f.gain);
-      setTimeout(function () { UI.floatOn(f.region, text, c.player ? null : UI.color(c)); }, (n - 1) * 380);
+      setTimeout(function () {
+        if (Game.state && Game.state.screen === 'campaign') UI.floatOn(f.region, text, c.player ? null : UI.color(c));   // 画面が変わっていたら出さない
+      }, (n - 1) * 380);
     });
     pendingFx = [];
   }
@@ -209,7 +239,7 @@ Game.CampaignView = (function () {
   function render(app) {
     const s = Game.state, camp = s.camp;
     const selCard = camp.hand.filter(function (c) { return c.uid === Game.ui.card; })[0] || null;
-    app.innerHTML = '<div class="game">' + hudHtml(s) + raceHtml(camp) +
+    app.innerHTML = '<div class="game' + (Game.Data.DISTRICT.national ? ' nat' : '') + '">' + hudHtml(s) + raceHtml(camp) +
       '<main class="board"><div class="map-cell">' +
       UI.mapHtml(function (rid) { return UI.leadFill(camp.cands, camp.shares[rid]); }, camp.sel) +
       '</div><aside class="side">' + sideHtml(camp, selCard) + '</aside></main>' + handHtml(camp, selCard) + '</div>';

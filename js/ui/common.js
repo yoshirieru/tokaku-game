@@ -18,7 +18,7 @@ Game.UI = Game.UI || {};
   };
   UI.markHtml = function (m) {
     const k = Game.Campaign.mark(m);
-    return '<span class="mk mk-' + k.level + '">' + k.sym + ' ' + k.word + '</span>';
+    return '<span class="mk mk-' + k.level + '">' + k.sym + '<span class="mk-word"> ' + k.word + '</span></span>';
   };
   UI.signed = function (n) { return (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n); };
 

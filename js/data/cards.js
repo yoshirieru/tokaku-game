@@ -18,6 +18,21 @@ Game.Data.CARDS = {
   pFamily:  { name: '子育て世帯に約束', type: 'promise', icon: 'promise' },
   pShop:    { name: '商店会に約束', type: 'promise', icon: 'promise' },
   pStudent: { name: '学生団体に約束', type: 'promise', icon: 'promise' },
+  // 全国の総選挙
+  nTour:   { name: '全国遊説', type: 'reach', icon: 'speech' },
+  nLocal:  { name: '地方行脚', type: 'solid', icon: 'local' },
+  nRally:  { name: '大演説会', type: 'reach', icon: 'rally' },
+  nTv:     { name: 'テレビ討論', type: 'reach', icon: 'media' },
+  nSns:    { name: 'SNS発信', type: 'reach', icon: 'sns' },
+  nAd:     { name: '新聞広告', type: 'reach', icon: 'flyer' },
+  nFund:   { name: '資金集め', type: 'fund', icon: 'fund' },
+  nAhead:  { name: '先回り遊説', type: 'counter', icon: 'ahead' },
+  nStar:   { name: '人気議員の応援', type: 'boost', icon: 'star' },
+  mTax:    { name: '減税を公約', type: 'promise', icon: 'promise' },
+  mAgri:   { name: '農業の再生を公約', type: 'promise', icon: 'promise' },
+  mWage:   { name: '賃上げを公約', type: 'promise', icon: 'promise' },
+  mFamily: { name: '子育て支援を公約', type: 'promise', icon: 'promise' },
+  mYouth:  { name: '学費の無償化を公約', type: 'promise', icon: 'promise' },
 };
 Game.Data.CARD_TYPES = {
   reach: '広げる', solid: '固める', promise: '約束', boost: '応援', fund: '資金', counter: '先回り',
@@ -27,11 +42,22 @@ Game.Data.CARD_TYPES = {
 // 任期の結果が返ってくるカード。約束ごとに「推薦」(e_約束)と「破った約束」(b_約束)を作る。数値は balance.js の comeback
 Object.keys(Game.Data.PROMISES).forEach(function (pid) {
   const p = Game.Data.PROMISES[pid], CB = Game.Balance.comeback;
+  if (p.national) return;   // 全国の公約は、選挙区には返ってこない
   Game.Data.CARDS['e_' + pid] = { name: p.org + 'の推薦', type: 'endorse', icon: 'promise' };
   Game.Balance.cards['e_' + pid] = { cost: CB.endorse.cost, money: CB.endorse.money, region: p.region, gain: CB.endorse.gain, once: true, endorse: pid };
   Game.Data.CARDS['b_' + pid] = { name: '破った約束', type: 'curse', icon: 'broken' };
   Game.Balance.cards['b_' + pid] = { cost: CB.curse.cost, money: CB.curse.money, once: true, curse: pid };
 });
+// 約束の相手の名前は選挙区ごとにちがうので、約束・推薦のカードの名前を、いまの選挙区に合わせる(nation.js の setHome から呼ぶ)
+Game.Data.namePromiseCards = function () {
+  const BC = Game.Balance.cards;
+  Object.keys(BC).forEach(function (id) {
+    const pid = BC[id].promise || BC[id].endorse, p = Game.Data.PROMISES[pid];
+    if (!p || p.national || !Game.Data.CARDS[id]) return;
+    Game.Data.CARDS[id].name = BC[id].endorse ? p.org + 'の推薦' : p.card;
+  });
+};
+Game.Data.namePromiseCards();
 
 // 任期のカード(数値は balance.js の term.cards)
 Game.Data.TERM_CARDS = {
@@ -43,9 +69,27 @@ Game.Data.TERM_CARDS = {
   media:    { name: 'メディア出演', type: 'reach', icon: 'media' },
   fund:     { name: '資金パーティー', type: 'fund', icon: 'fund' },
   duty:     { name: '公務', type: 'party', icon: 'flyer' },
+  // 党首の任期(R5)。say は使ったときの知らせ
+  pmLaw:    { name: '法案を進める', type: 'diet', icon: 'flyer', say: '国会で法案の審議が進んだ。' },
+  pmBigLaw: { name: '重要法案', type: 'diet', icon: 'question', say: '内閣の看板となる法案を通した。' },
+  pmPress:  { name: '記者会見', type: 'reach', icon: 'media', say: '国民に向けて、政権の考えを語った。' },
+  pmDiplo:  { name: '首脳外交', type: 'boost', icon: 'star', say: '首脳会談の成果が大きく報じられた。' },
+  pmEcon:   { name: '経済対策', type: 'home', icon: 'fund', say: '暮らしを支える対策をまとめた。党内からも歓迎の声。' },
+  pmParty:  { name: '党内融和', type: 'party', icon: 'party', say: '党の会合を回り、不満を聞いた。' },
+  pmCoal:   { name: '連立協議', type: 'party', icon: 'talk', say: '連立相手の党首と会い、政策をすり合わせた。' },
+  grumble:  { name: '党内の不満', type: 'curse', icon: 'broken', say: '大臣の椅子を逃した議員たちをなだめた。不満はひとまず収まった。' },
+  opAttack: { name: '国会で追及', type: 'counter', icon: 'question', say: '予算委員会で、政権の弱いところを突いた。' },
+  tour:     { name: '全国行脚', type: 'reach', icon: 'local', say: '全国の党員と候補者を訪ね歩いた。' },
 };
 Game.Data.termCardText = function (id) {
   const b = Game.Balance.term.cards[id], CB = Game.Balance.comeback;
+  const sg = function (n) { return (n > 0 ? '+' : '') + n; };
+  if (b.grumble) return { fx: '大臣ポストを渡した不満。手札をふさぐ', note: '体力' + b.cost + 'でなだめると、この任期のあいだ消える' };
+  if (b.promise && b.idle) return { fx: '公約を1つ <em>+' + b.promise + '</em> 進める', note: '進める公約がなければ、内閣支持率 +' + b.idle };
+  if (b.sat) return { fx: '連立相手の満足度 <em>' + sg(b.sat) + '</em>', note: '満足度が ' + Game.Balance.gov.satLeave + ' を下回ると、連立を離れる' };
+  if (b.approval && b.approval < 0) return { fx: '相手の内閣の支持率 <em>' + sg(b.approval) + '</em>', note: '低いほど、次の総選挙で追い風になる' };
+  if (b.approval) return { fx: '内閣支持率 <em>' + sg(b.approval) + '</em>' + (b.contrib ? '、党への貢献 <em>' + sg(b.contrib) + '</em>' : ''), note: '支持率は、次の総選挙の始まりの支持になる' };
+  if (b.contrib && Game.Data.TERM_CARDS[id].say && !b.promise) return { fx: '党への貢献 <em>' + sg(b.contrib) + '</em>', note: Game.Balance.nation.unityPer + 'たまるごとに、総選挙で全ブロック +1(党の結束)' };
   if (b.promise) return { fx: '約束を1つ <em>+' + b.promise + '</em> 進める', note: '約束がなければ、党への貢献 +' + b.contrib };
   if (b.base) return { fx: '選んだ地区の地盤 <em>+' + b.base + '</em>', note: '地盤1につき、次の選挙の始まりの支持 +1' };
   if (b.baseAll) return { fx: '全地区の地盤 <em>+' + b.baseAll + '</em>', note: '地区を選ばずに使える' };
@@ -80,6 +124,7 @@ Game.Data.cardText = function (id) {
   const b = Game.Balance.cards[id];
   const T = Game.Data.TAGS;
   const em = function (n) { return '<em>' + (n > 0 ? '+' : '') + n + '</em>'; };
+  const unit = /^[nm][A-Z]/.test(id) ? 'ブロック' : '地区';   // 全国の総選挙のカードは、ブロックを選ぶ
   let fx = '', note = '';
   if (b.curse) {
     fx = Game.Data.PROMISES[b.curse].org + 'の不信。手札をふさぐ';
@@ -87,21 +132,24 @@ Game.Data.cardText = function (id) {
   } else if (b.endorse) {
     fx = Game.Data.REGION[b.region].name + 'の支持 ' + em(b.gain);
     note = '約束を守ったお返し。この選挙で1回だけ';
+  } else if (b.promise && b.all) {
+    fx = Object.keys(b.all).map(function (t) { return T[t]; }).join('・') + 'のブロック ' + em(b.all[Object.keys(b.all)[0]]);
+    note = '公約「' + Game.Data.PROMISES[b.promise].policy + '」を背負う';
   } else if (b.promise) {
     const p = Game.Data.PROMISES[b.promise];
     fx = Game.Data.REGION[b.region].name + 'の支持 ' + em(b.gain);
     note = '約束「' + p.policy + '」を背負う';
   } else if (b.all) {
-    fx = Object.keys(b.all).map(function (t) { return T[t] + 'の地区 ' + em(b.all[t]); }).join('、');
-    note = '地区を選ばずに使える';
+    fx = Object.keys(b.all).map(function (t) { return T[t] + 'の' + unit + ' ' + em(b.all[t]); }).join('、');
+    note = unit + 'を選ばずに使える';
   } else if (b.gain) {
-    fx = '選んだ地区の支持 ' + em(b.gain);
+    fx = '選んだ' + unit + 'の支持 ' + em(b.gain);
     const bonus = Object.keys(b.tagBonus || {}).map(function (t) { return T[t]; });
     if (bonus.length) note = bonus.join('・') + 'なら +' + (b.gain + b.tagBonus[Object.keys(b.tagBonus)[0]]);
     if (b.shield) note += (note ? '。' : '') + '固い票がつく';
-    if (b.block) note = 'その地区の相手の今日の動きを止める';
+    if (b.block) note = 'その' + unit + 'の相手の今日の動きを止める';
     if (b.once) note = 'この選挙で1回だけ';
-    if (!note) note = 'どの地区でも同じだけ効く';
+    if (!note) note = 'どの' + unit + 'でも同じだけ効く';
   } else if (b.money < 0) {
     fx = '資金 <em>+' + (-b.money) + '万円</em>';
     note = '支援者に頭を下げる';

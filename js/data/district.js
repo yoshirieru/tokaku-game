@@ -5,18 +5,18 @@ Game.Data = Game.Data || {};
 Game.Data.PARTIES = {
   minsei: {
     id: 'minsei', name: '日本民政党', short: '民政', color: '#e5383b',
-    position: '保守系の与党第一党', difficulty: 'やさしい',
-    description: '長く政権を担ってきた保守政党。農村と高齢層に強い。現職の早瀬候補(共和)に挑む。',
+    position: '保守系の与党第一党',
+    description: '長く政権を担ってきた保守政党。農村と高齢層に強い。',
   },
   kyowa: {
     id: 'kyowa', name: '市民共和党', short: '共和', color: '#3d7bff',
-    position: '中道左派の野党第一党', difficulty: 'ふつう',
-    description: '政権交代をめざす野党第一党。工業地帯に強い。民政の現職・大河内候補に挑む。',
+    position: '中道左派の野党第一党',
+    description: '政権交代をめざす野党第一党。工業地帯と労働組合に強い。',
   },
   mirai: {
     id: 'mirai', name: '未来改革党', short: '未来', color: '#f59e0b',
-    position: '改革系の第三党', difficulty: 'むずかしい',
-    description: '改革を掲げる新興の第三党。学生街と都市部が頼り。民政の元職と共和の新人を相手にする。',
+    position: '改革系の第三党',
+    description: '改革を掲げる新興の第三党。若者と都市部が頼り。',
   },
 };
 
@@ -32,7 +32,7 @@ Game.Data.ROLES = {
   kyowa:  { minsei: 'incumbent', mirai: 'newcomer' },
   mirai:  { minsei: 'former', kyowa: 'newcomer' },
 };
-Game.Data.ROLE_NAMES = { incumbent: '現職', revived: '現職(比例)', former: '元職', challenger: '元職', newcomer: '新人' };
+Game.Data.ROLE_NAMES = { incumbent: '現職', revived: '現職(比例)', former: '元職', challenger: '元職', newcomer: '新人', leader: '党首', nat_minsei: '党首', nat_kyowa: '党首', nat_mirai: '党首' };
 Game.Data.ROLE_ORDER = ['incumbent', 'revived', 'former', 'challenger', 'newcomer'];   // 開票特番の並び(テレビと同じ)
 
 // 地区の性格(カードの効き方に出る)
@@ -40,20 +40,21 @@ Game.Data.TAGS = {
   urban: '都市部', float: '浮動票', org: '組織票', elder: '高齢層', family: '子育て世帯', youth: '若者', union: '労働組合',
 };
 
-// 約束(約束カードで背負う)。region はその団体の地区。任期の結果は、その地区に返ってくる
+// 約束(約束カードで背負う)。region はその団体の地区。任期の結果は、その地区に返ってくる。card は約束のカードの名前
+// 名前(policy・org・card)は北陽3区のもの。ほかの選挙区では seats.js の promiseNames で入れ替わる(nation.js の setHome)
 Game.Data.PROMISES = {
-  agri:    { policy: '農業支援', org: '農業団体', region: 'rural' },
-  wage:    { policy: '賃上げ', org: '労働組合', region: 'industrial' },
-  family:  { policy: '子育て支援', org: '子育て世帯の会', region: 'residential' },
-  taxcut:  { policy: '減税', org: '商店会', region: 'downtown' },
-  tuition: { policy: '学費の負担軽減', org: '学生団体', region: 'campus' },
+  agri:    { policy: '農業支援', org: '農業団体', card: '農業団体に約束', region: 'rural' },
+  wage:    { policy: '賃上げ', org: '労働組合', card: '労働組合に約束', region: 'industrial' },
+  family:  { policy: '子育て支援', org: '子育て世帯の会', card: '子育て世帯に約束', region: 'residential' },
+  taxcut:  { policy: '減税', org: '商店会', card: '商店会に約束', region: 'downtown' },
+  tuition: { policy: '学費の負担軽減', org: '学生団体', card: '学生団体に約束', region: 'campus' },
 };
 // 任期の会期の名前(1ターン = 半年)
 Game.Data.sessionName = function (turn) {
   return Math.ceil(turn / 2) + '年目・' + (turn % 2 ? '通常国会' : '臨時国会');
 };
 
-// 選挙区。地図は viewBox 0 0 600 430 の多角形(pts)。x・y は地区の札を置く位置(%)
+// 選挙区(北陽3区。ほかの4つは js/data/seats.js)。地図は viewBox 0 0 600 430 の多角形(pts)。x・y は地区の札を置く位置(%)
 Game.Data.DISTRICT = {
   id: 'hokuyo3', name: '北陽3区', sea: '北陽湾', block: '北関東ブロック',
   viewBox: [600, 430],
