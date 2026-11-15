@@ -376,10 +376,10 @@ Game.Effects.Title = (function () {
           </nav>
         </div>
         <p class="tl-note">${esc(opts.note || '')}</p>
-        <span class="tl-sound-hint" ${Audio.playing() || !settings.bgm ? 'hidden' : ''}>♪ クリックかキーで音が鳴ります</span>
         <div class="tl-ticker" role="marquee" aria-label="ニュース">
           <span class="tl-ticker-label">速報</span>
           <div class="tl-ticker-window"><div class="tl-ticker-track">${tickerText}<i>◆</i>${tickerText}<i>◆</i></div></div>
+          <span class="tl-sound-hint" ${Audio.playing() || !settings.bgm ? 'hidden' : ''}>♪ クリックかキーで音が鳴ります</span>
         </div>
         <div class="tl-flash" ${d(T.pin)}></div>
         <div class="tl-settings" hidden></div>

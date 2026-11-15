@@ -773,10 +773,11 @@ h1, h2, p { margin: 0; }
 /* ---------- タイトル(js/effects/title.js。開票速報のオープニング) ---------- */
 /* --s:演出の速さ(1 通常 / 0.4 速い / 0 スキップ)。--d:その部品が出る時刻(通常の速さの秒) */
 .tl-stage {
-  position: fixed; inset: 0; z-index: 10; overflow: hidden; color: var(--ink); background: var(--night);
+  position: fixed; inset: 0; z-index: 10; overflow: hidden; overflow: clip;   /* clip:ボタンにフォーカスが移っても、はみ出した飾りのぶん画面がずれないように */
+  color: var(--ink); background: var(--night);
   display: grid; grid-template-columns: minmax(0, 45fr) minmax(0, 55fr); grid-template-rows: minmax(0, 1fr) auto;
 }
-.tl-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 90% 75% at 72% 42%, #1c3070 0%, #0a1232 55%, var(--night) 100%); animation: tl-fade calc(var(--s) * 1s) ease both; }
+.tl-bg { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(ellipse 90% 75% at 72% 42%, #1c3070 0%, #0a1232 55%, var(--night) 100%); animation: tl-fade calc(var(--s) * 1s) ease both; }
 .tl-floor {
   position: absolute; left: -25%; right: -25%; bottom: -6%; height: 46%; opacity: .5;
   background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
@@ -841,7 +842,9 @@ h1, h2, p { margin: 0; }
 .tl-ros-d { fill: color-mix(in srgb, var(--accent) 68%, var(--night)); }
 .tl-ros-t { fill: var(--on-gold); font: 800 30px var(--font-head); }
 .tl-sub span { display: inline-block; padding: .22em 1.1em; background: var(--gold); color: var(--on-gold); font: 800 clamp(13px, min(2vw, 4vh), 29px) var(--font-head); letter-spacing: .24em; white-space: nowrap; animation: tl-wipe calc(var(--s) * .45s) ease calc(var(--d) * var(--s)) both; }
-.tl-menu { display: flex; flex-direction: column; gap: clamp(5px, 1.1vh, 10px); width: min(100%, 340px); margin-top: clamp(4px, 2vh, 22px); }
+/* メニューは2列(はじめから・つづきからは横いっぱい)。ボタンが増えても、背の低い画面でテロップに隠れないように */
+.tl-menu { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(5px, 1.1vh, 10px); width: min(100%, 460px); margin-top: clamp(4px, 2vh, 22px); }
+.tl-btn[data-act="new"], .tl-btn[data-act="continue"] { grid-column: 1 / -1; }
 .tl-btn {
   position: relative; text-align: left; padding: .6em 2.2em .6em 1.1em; border: 0; border-left: 7px solid var(--accent); cursor: pointer;
   font: 800 clamp(15px, min(1.7vw, 3.5vh), 21px) var(--font-head); letter-spacing: .2em; color: var(--on-accent); white-space: nowrap;
@@ -858,9 +861,11 @@ h1, h2, p { margin: 0; }
 @keyframes tl-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
 @keyframes tl-slide { from { opacity: 0; transform: translateX(-30px); } }
 
-.tl-note, .tl-sound-hint { position: absolute; top: 12px; z-index: 3; font-size: 11.5px; color: var(--sub); opacity: .85; }
+.tl-note { position: absolute; top: 12px; z-index: 3; font-size: 11.5px; color: var(--sub); opacity: .85; }
 .tl-note { left: clamp(20px, 6vw, 96px); }
-.tl-sound-hint { right: 16px; }
+/* 音の案内はテロップの右の端に(右上は情勢ボードの開票率、左上はロゴの上の見出しと重なるので) */
+.tl-sound-hint { flex: none; display: flex; align-items: center; padding: 0 1.2em; border-left: 1px solid var(--line); background: rgba(4, 8, 26, .96); font-size: .78em; color: var(--sub); white-space: nowrap; }
+.tl-sound-hint[hidden] { display: none; }
 .tl-flash { position: absolute; inset: 0; z-index: 4; pointer-events: none; background: var(--ink); opacity: 0; animation: tl-flash calc(var(--s) * .55s) ease-out calc(var(--d) * var(--s)) both; }
 @keyframes tl-flash { 0% { opacity: 0; } 10% { opacity: .45; } 100% { opacity: 0; } }
 
@@ -887,7 +892,8 @@ h1, h2, p { margin: 0; }
 
 /* 背の低い横長の画面:メニューを2列に */
 @media (max-height: 430px) {
-  .tl-menu { display: grid; grid-template-columns: 1fr 1fr; width: min(100%, 440px); }
+  .tl-menu { width: min(100%, 440px); }
+  .tl-btn[data-act="new"], .tl-btn[data-act="continue"] { grid-column: auto; }
 }
 /* スマホの縦画面:上にボード、下にロゴとメニュー */
 @media (max-width: 760px), (max-aspect-ratio: 4/5) {
@@ -903,10 +909,18 @@ h1, h2, p { margin: 0; }
   .tl-menu { display: grid; grid-template-columns: 1fr 1fr; width: 100%; max-width: 430px; margin-top: clamp(4px, 1.4vh, 16px); }
   .tl-btn { text-align: center; padding: .7em .3em; letter-spacing: .1em; font-size: clamp(14px, min(4.2vw, 2.5vh), 19px); background: linear-gradient(var(--telop-a), var(--telop-b)); }
   .tl-btn::after { display: none; }
+  .tl-btn[data-act="new"], .tl-btn[data-act="continue"] { grid-column: auto; }
   .tl-btn:hover, .tl-btn:focus-visible { transform: translateY(-2px); }
   .tl-note { left: 12px; top: 8px; font-size: 10.5px; }
-  .tl-sound-hint { right: 12px; top: 22px; font-size: 10px; }
+  .tl-sound-hint { position: fixed; right: 12px; top: 22px; z-index: 3; padding: 0; border: 0; background: none; font-size: 10px; opacity: .85; }
   .tl-ticker { grid-row: 3; font-size: 12.5px; }
+}
+/* 背の低いスマホ(375×667 など):ボードを小さくし、ロゴの上の見出しを省いて、メニューがテロップに隠れないように */
+@media (max-width: 760px) and (max-height: 720px), (max-aspect-ratio: 4/5) and (max-height: 720px) {
+  .tl-board { width: min(90%, 35vh); }
+  .tl-kicker { display: none; }
+  .tl-logo { font-size: clamp(48px, min(20vw, 11.5vh), 120px); }
+  .tl-main { gap: clamp(4px, 1vh, 10px); }
 }
 /* 動きを減らす設定:流れ・点滅・揺れを止める */
 .tl-reduced .tl-floor, .tl-reduced .tl-sweep, .tl-reduced .tl-live, .tl-reduced .tl-ticker-track { animation: none; }
