@@ -375,7 +375,10 @@ Game.TermView = (function () {
         return '<div class="up-row' + (k === me ? ' me' : '') + '">' + UI.partyChip({ party: k }) + '<span class="nm">' + P3[k].name + (p.ruling.indexOf(k) >= 0 ? '<small>与党</small>' : '') + '</span>' +
           '<b>' + p.won[k] + '</b><small>改選前 ' + p.old[k] + '(' + UI.signed(d) + ')</small><span class="up-total">合計 ' + p.after[k] + '</span></div>';
       }).join('');
-      const head = p.twisted ? '与党が過半数を割った' : p.ruling.indexOf(me) >= 0 ? '与党が過半数を守った' : p.rulingSeats >= U.majority ? '与党が過半数を守った' : '与党を過半数割れに追い込んだ';
+      const keep = p.rulingSeats >= U.majority, wasKeep = p.ruling.reduce(function (a, k) { return a + (p.before[k] || 0); }, 0) >= U.majority;
+      const head = keep ? (wasKeep ? '与党が過半数を守った' : '与党が過半数を取り戻した')
+        : p.ruling.indexOf(me) >= 0 ? (wasKeep ? '与党が過半数を割った' : '与党は過半数に届かなかった')
+          : (wasKeep ? '与党を過半数割れに追い込んだ' : '与党は過半数に届かないまま');
       const li = [];
       if (p.twisted && !p.wasTwisted) li.push('ねじれ国会になった。重要法案は参院で止まりやすく、進みが 1 減る。');
       if (!p.twisted && p.wasTwisted) li.push('ねじれ国会が解消した。法案は元どおり進む。');
@@ -423,7 +426,7 @@ Game.TermView = (function () {
       const ok = K.canPlay(cr, card.id);
       if (!ok.ok) return say(ok.reason);
       // 資金パーティー(R9):先に、収入をどう記載するかを選ぶ
-      if (!opt && Game.Balance.term.cards[card.id].money < 0) return UI.ledgerChoice(function (o) { doPlay(target, card, o); });
+      if (!opt && !s.scenario && Game.Balance.term.cards[card.id].money < 0) return UI.ledgerChoice(function (o) { doPlay(target, card, o); });
       Game.pushUndo();
       const res = K.play(s, card.uid, target, opt);
       Game.ui.card = null;

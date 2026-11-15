@@ -19,6 +19,7 @@ Game.Scenario = (function () {
   function start(state, id) {
     const sc = find(id);
     if (!sc) return null;
+    Game.Data.applyScenarioNames(sc);   // このモードだけ実名
     state.player.party = sc.party;
     state.player.seat = state.player.seat || 'hokuyo3';
     state.scenario = { id: sc.id, elections: 0, swung: false };
@@ -39,7 +40,7 @@ Game.Scenario = (function () {
       const top = Object.keys(b).sort(function (x, y) { return b[y] - b[x]; })[0];
       cr.blocks[rid] = { lead: top, mine: 0 };
     });
-    const intro = { type: 'event', id: 'scenario', title: sc.title, kicker: sc.model + 'をモデルにしたシナリオ', text: sc.lead };
+    const intro = { type: 'event', id: 'scenario', title: sc.title, kicker: sc.model, text: sc.lead };
     if (sc.start === 'term') {
       Game.Career.beginScenarioTerm(state, sc.turn, intro);
     } else {

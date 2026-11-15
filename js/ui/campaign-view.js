@@ -326,7 +326,7 @@ Game.CampaignView = (function () {
       const ok = C.canPlay(camp, card.id);
       if (!ok.ok) return say(ok.reason);
       // 資金集め(R9):先に、収入をどう記載するかを選ぶ
-      if (!opt && Game.Balance.cards[card.id].money < 0) return UI.ledgerChoice(function (o) { doPlay(regionId, card, o); });
+      if (!opt && !s.scenario && Game.Balance.cards[card.id].money < 0) return UI.ledgerChoice(function (o) { doPlay(regionId, card, o); });
       Game.pushUndo();
       const res = C.play(s, card.uid, regionId, opt);
       if (camp.vs && res.ok) Game.Versus.note(s, res.msg);   // 対戦モード:交代のときに相手に知らせる

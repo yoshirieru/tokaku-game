@@ -348,7 +348,7 @@ Game.Campaign = (function () {
   function morningEvent(state) {
     const camp = state.camp, B = bal(), E = B.events;
     if (R.next(state) >= E.chance) return;
-    const ids = ['rain', 'tailwind', 'headwind', 'gaffe', 'donation'];
+    const ids = state.scenario ? ['rain', 'tailwind', 'headwind', 'donation'] : ['rain', 'tailwind', 'headwind', 'gaffe', 'donation'];   // 史実シナリオ(実名)では、相手の失言は起こさない
     const id = R.weighted(state, ids, function (k) { return E[k].weight; });
     const party = Game.Data.PARTIES[state.player.party].name;
     let title, text;
@@ -362,7 +362,8 @@ Game.Campaign = (function () {
       title = id === 'tailwind' ? '党に追い風' : '党に逆風';
       text = id === 'tailwind'
         ? party + 'の党首の発言が好評。全地区で支持が ' + E.tailwind.all + ' ポイント上がった。'
-        : party + 'の幹部の発言が批判を浴びている。全地区で支持が ' + (-E.headwind.all) + ' ポイント下がった。';
+        : state.scenario ? '報道各社の情勢調査で、' + party + 'の伸び悩みが伝えられた。全地区で支持が ' + (-E.headwind.all) + ' ポイント下がった。'
+          : party + 'の幹部の発言が批判を浴びている。全地区で支持が ' + (-E.headwind.all) + ' ポイント下がった。';
     } else if (id === 'gaffe') {
       const who = cand(camp, topRival(camp));
       regions().forEach(function (r) { fx.push({ region: r.id, who: who.id, gain: Math.round(applyGain(camp, r.id, who.id, E.gaffe.all)) }); });

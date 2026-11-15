@@ -27,6 +27,7 @@ Game.Scandal = (function () {
   // 資金のカードの記載。opt 'hide' なら一部を載せない(資金が上乗せされ、発覚度がたまる)。返り値 { money(上乗せ), note(知らせに足す文) }
   function record(state, opt) {
     const sc = get(state), L = SL();
+    if (state.scenario) opt = 'honest';   // 史実シナリオ(実名)では、収入はいつも正直に記載する
     if (opt === 'hide') {
       sc.hidden += L.extra;
       sc.exposure = Math.min(100, sc.exposure + L.gain);

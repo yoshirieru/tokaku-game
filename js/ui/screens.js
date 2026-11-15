@@ -80,7 +80,7 @@ Game.Screens = (function () {
         '</div>' +
         '<p class="quick-note">近道:議員の時代をとばして、この党の<b>党首</b>として全国の総選挙から始めることもできる。' +
         '<button type="button" class="btn" id="quick">党首として総選挙から</button></p>' +
-        '<p class="quick-note">史実シナリオ:実際にあった選挙の局面を、架空の3党に置きかえて党首として戦う。<button type="button" class="btn" id="scenario">史実シナリオ</button></p>' +
+        '<p class="quick-note">史実シナリオ:実際にあった総選挙の局面に、実在の党の党首として立つ。<button type="button" class="btn" id="scenario">史実シナリオ</button></p>' +
         '<div class="setup-btns"><button type="button" class="btn" id="back">もどる</button>' +
         '<button type="button" class="btn btn-primary btn-lg" id="go">立候補する</button></div>' +
       '</div>';

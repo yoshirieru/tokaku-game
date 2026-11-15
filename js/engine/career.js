@@ -412,8 +412,10 @@ Game.Career = (function () {
       changeApproval(cr, up ? GE.up : GE.down);
       cr.pending.push({
         type: 'event',
-        title: up ? '外交の成果' : '閣僚の不祥事',
-        text: up ? '首脳会談で前進があり、政権の評価が上がった。内閣支持率 +' + GE.up + '。' : '閣僚の失言が報じられ、任命した首相の責任が問われている。内閣支持率 ' + GE.down + '。',
+        title: up ? '外交の成果' : state.scenario ? '国会の空転' : '閣僚の不祥事',   // 史実シナリオ(実名)では、不祥事の出来事は起こさない
+        text: up ? '首脳会談で前進があり、政権の評価が上がった。内閣支持率 +' + GE.up + '。'
+          : state.scenario ? '野党の審議拒否で国会が空転し、法案が止まっている。内閣支持率 ' + GE.down + '。'
+            : '閣僚の失言が報じられ、任命した首相の責任が問われている。内閣支持率 ' + GE.down + '。',
       });
       return;
     }
@@ -818,7 +820,7 @@ Game.Career = (function () {
         : cr.bestRank === 3 ? '大臣を務めあげて、政界を去る'
           : cr.bestRank >= 1 ? rank.name + 'まで務めて、政界を去る' : '陣笠議員のまま、政界を去る';
     state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice(), great: great, scenario: scEnd };
-    state.ending.paper = Game.Future.paper(state);   // 30年後の新聞(R14)
+    state.ending.paper = state.scenario ? null : Game.Future.paper(state);   // 30年後の新聞(R14)。史実シナリオ(実名)では作らない   // 30年後の新聞(R14)
     state.screen = 'ending';
     return state.ending;
   }
