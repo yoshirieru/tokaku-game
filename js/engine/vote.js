@@ -41,6 +41,7 @@ Game.Vote = (function () {
       ids.forEach(function (id) {
         let v = camp.shares[r.id][id] + swing[id] + R.normal(state) * V.swingRegion;
         if (id === 'me') v += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
+        if (id === 'vs' && camp.vs) v += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
         p[id] = Math.max(1, v);
         sum += p[id];
       });
@@ -116,6 +117,7 @@ Game.Vote = (function () {
       ids.forEach(function (id) {
         let v = camp.shares[r.id][id] + swing[id] + R.normal(state) * V.swingRegion;
         if (id === 'me') v += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
+        if (id === 'vs' && camp.vs) v += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
         s[id] = Math.max(1, v);
         sum += s[id];
       });
@@ -126,6 +128,9 @@ Game.Vote = (function () {
       regions[r.id] = { turnout: turnout, votes: votes };
     });
 
+    // 開票所の不審な動き(R10):立会人を送っていなければ、票が相手に流れることがある
+    const recount = Game.Scandal.countFraud(state, regions, totals);
+    if (recount && !recount.caught) total = ids.reduce(function (a, id) { return a + totals[id]; }, 0);
     const order = ids.slice().sort(function (a, b) { return totals[b] - totals[a]; });
     const winner = order[0];
     const marginPct = (totals[order[0]] - totals[order[1]]) / total * 100;
@@ -168,13 +173,13 @@ Game.Vote = (function () {
     // 比例復活:惜敗率が、その選挙での党の復活ラインに届いたか(乱数は開票の計算のあとに引く)
     const lossRatio = totals.me / totals[winner] * 100;
     const prLine = B.pr.line[state.player.party] + R.normal(state) * B.pr.noise;
-    const pr = { line: prLine, revived: winner !== 'me' && lossRatio >= prLine };
+    const pr = camp.vs ? null : { line: prLine, revived: winner !== 'me' && lossRatio >= prLine };   // 対戦モードは比例復活なし
 
     state.election = {
       weather: weather.id, regions: regions, totals: totals, total: total, order: order,
       winner: winner, won: winner === 'me', marginPct: marginPct,
       lossRatio: lossRatio,   // 惜敗率
-      pr: pr,
+      pr: pr, recount: recount,
       ticks: ticks, callTick: callTick, zeroCall: callTick === 0, shown: 0,
     };
     return state.election;

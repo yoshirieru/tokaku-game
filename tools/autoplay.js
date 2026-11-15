@@ -4,6 +4,8 @@
 //   CAREER=1 ELECTIONS=6 node tools/autoplay.js 200   任期をはさんで選挙をくり返す(議席、役職、党首、評価の分布)
 //   CAREER=1 TERMBOT=放置 node tools/autoplay.js 200   任期で約束に手をつけないボット
 //   NATION=1 node tools/autoplay.js 200               党首として戦う総選挙(各党の議席、過半数・第1党の割合)
+//   VERSUS=1 node tools/autoplay.js 300               対戦モード(2人ともボット。BOTS=中級,上級 で 1P と 2P のボット。党の組み合わせごとに 1P・2P・AI の勝ち)
+//   URA=1 で資金のカードの収入を載せない(裏金。R9)、DIRTY=1 で買収を黙認し怪文書に反撃する(選挙違反。R10)。立会人は上級ボットが送る
 //   SEATS=all node tools/autoplay.js 300              選挙区ごとに(SEATS=touou7,biyou2 のように選べる。ないときは北陽3区だけ)
 //   node tools/autoplay.js 300 "B.playerRoles.newcomer=0.7;"   ファイルを変えずに数値を試す(B は Game.Balance)
 //     ※ 推薦・破った約束のカードの数値(B.comeback.endorse / curse)は読み込み時に写すので、ここからは変えられない
@@ -15,11 +17,17 @@ const root = path.resolve(__dirname, '..');
 const sandbox = { console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/engine/career.js', 'js/data/achievements.js', 'js/engine/hall.js'].forEach((f) => {
+['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/scandal.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/engine/career.js', 'js/engine/versus.js', 'js/data/achievements.js', 'js/engine/hall.js'].forEach((f) => {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 });
 const Game = sandbox.Game;
 const B = Game.Balance;
+// 資金のカードの記載(R9):ボットは URA=1 なら載せない、それ以外は正直に記載する
+['Campaign', 'Career'].forEach((k) => {
+  const play = Game[k].play;
+  Game[k].play = (state, uid, target, opt) => play(state, uid, target, opt || (process.env.URA ? 'hide' : 'honest'));
+});
+const ethics = { found: 0, resigned: 0, voided: 0, stolen: 0, caught: 0, by: 0, byWon: 0, redistrict: 0, moved: 0 };
 const N = +process.argv[2] || 200;
 if (process.argv[3]) vm.runInContext('(function(B){' + process.argv[3] + '})(Game.Balance)', sandbox);
 
@@ -129,12 +137,28 @@ function termPlay(state, keep) {
 function playCampaign(state, botName, rnd) {
   for (let guard = 0; guard < 40 && state.screen === 'campaign'; guard++) {
     const camp = state.camp;
+    if (botName === '上級' && camp.day === 1 && !camp.vs && Game.Scandal.risk() >= 0.5) Game.Scandal.sendWitness(state);   // 違反の多い選挙区では立会人を送る
     while (camp.pending.length) {
-      if (camp.pending[0].type === 'debate') Game.Campaign.chooseDebate(state, botName === '上級' ? 'local' : 'policy');
-      else Game.Campaign.dismiss(state);
+      const p = camp.pending[0];
+      if (p.type === 'debate') Game.Campaign.chooseDebate(state, botName === '上級' ? 'local' : 'policy');
+      else if (p.type === 'fraud') Game.Scandal.answerFraud(state, p.kind === 'bribe' ? (process.env.DIRTY ? 'accept' : 'refuse') : (process.env.DIRTY ? 'fight' : 'fair'));
+      else { if (p.id === 'slush') ethics.found++; Game.Campaign.dismiss(state); }
     }
     BOTS[botName](state, rnd);
     Game.Campaign.endDay(state);
+  }
+}
+// 対戦モード:手番の人のボットが動き、交代をくり返す(ボットは手番の視点 'me' で動くので、1人用と同じものが使える)
+function playVersus(state, bots, rnd) {
+  for (let guard = 0; guard < 80 && state.screen === 'campaign'; guard++) {
+    const camp = state.camp;
+    if (camp.vs.handoff) Game.Versus.beginTurn(state);
+    while (camp.pending.length) {
+      if (camp.pending[0].type === 'debate') Game.Campaign.chooseDebate(state, bots[camp.vs.active] === '上級' ? 'local' : 'policy');
+      else Game.Campaign.dismiss(state);
+    }
+    BOTS[bots[camp.vs.active]](state, rnd);
+    Game.Versus.endTurn(state);
   }
 }
 // 任期を解散まで進める。党首選は RACE(unity / reform / deal / skip。省くと unity)で立候補する
@@ -142,13 +166,24 @@ function playTerm(state, termBot) {
   const cr = state.career;
   let turns = 0;
   for (let guard = 0; guard < 40; guard++) {
-    while (cr.pending.length && cr.pending[0].type !== 'dissolve') {
-      const t = cr.pending[0].type;
+    while (cr.pending.length && cr.pending[0].type !== 'dissolve' && state.screen === 'term') {
+      const p = cr.pending[0], t = p.type;
       if (t === 'petition') Game.Career.respond(state, termBot === 'まじめ' && cr.promises.length < 2 && cr.turn <= 4);
       else if (t === 'leaderRace') { stats.races++; Game.Career.runRace(state, process.env.RACE || 'unity'); if (cr.leader) stats.raceWins++; }
-      else Game.Career.dismiss(state);
+      else if (t === 'slush') Game.Scandal.answerSlush(state, !!process.env.FIX);   // FIX=1 なら訂正して返す
+      else if (t === 'byElection') { ethics.by++; if (Game.Career.answerBy(state, true).won) ethics.byWon++; }
+      else if (t === 'redistrict') { ethics.redistrict++; Game.Career.answerRedistrict(state, 'race'); }
+      else if (t === 'moveSeat') {   // 国替え:いちばん勝ちやすい選挙区へ
+        ethics.moved++;
+        const best = Game.Scandal.movableSeats(state).sort((a, b) => B.seats[b].guide[state.player.party] - B.seats[a].guide[state.player.party])[0];
+        Game.Career.chooseSeat(state, best);
+      } else {
+        if (/裏金/.test(p.title || '')) { ethics.found++; if (p.retire) ethics.resigned++; }
+        if (/連座制/.test(p.title || '')) ethics.voided++;
+        Game.Career.dismiss(state);
+      }
     }
-    if (cr.pending.length) break;
+    if (state.screen !== 'term' || cr.pending.length) break;
     TERM_BOTS[termBot](state);
     turns += 1;
     if (Game.Career.canDissolve(cr) && cr.turn >= 4 && cr.gov.approval >= 55 && !cr.promises.length) { Game.Career.dissolve(state); break; }
@@ -175,7 +210,27 @@ seatList.forEach((seat) => {
 curSeat = seat;
 if (seatList.length > 1 || seat !== 'hokuyo3') console.log(`
 == ${Game.Data.SEATS[seat].name}(${Game.Data.SEATS[seat].type})==`);
-if (process.env.NATION) {
+if (process.env.VERSUS) {
+  // ---- 対戦モード(1回の選挙)----
+  const bots = (process.env.BOTS || '中級,中級').split(',');
+  console.log(`各 ${N} 回。1P(${bots[0]})と 2P(${bots[1] || bots[0]})。ハンデ${process.env.NOHANDI ? 'なし' : 'あり'}。対戦の勝ち(2人のうち票の多いほう)/ 議席を取った人 / 2人の得票率の差の平均(1P − 2P)`);
+  const P = Object.keys(Game.Data.PARTIES);
+  P.forEach((a) => P.forEach((b) => {
+    if (a === b) return;
+    const win = [0, 0], seat = [0, 0, 0]; let gap = 0;
+    for (let i = 0; i < N; i++) {
+      const seed = (i + 1) * 7919 + a.length * 104729 + b.length * 31;
+      const state = { version: 2, screen: 'campaign', player: { name: '1P 太郎', party: a, seat: curSeat }, rng: seed };
+      Game.Versus.newMatch(state, { seat: curSeat, offset: i % 2, handicap: !process.env.NOHANDI, players: [{ name: '1P 太郎', party: a }, { name: '2P 花子', party: b }] });
+      playVersus(state, [bots[0], bots[1] || bots[0]], botRnd(seed));
+      const o = Game.Versus.outcome(state), e = state.election;
+      win[o.slot]++; seat[o.seat >= 0 ? o.seat : 2]++;
+      gap += (e.totals.me - e.totals.vs) / e.total * 100;
+    }
+    const ai = Game.Data.PARTIES[P.filter((k) => k !== a && k !== b)[0]].short;
+    console.log(`${Game.Data.PARTIES[a].short}(1P)対 ${Game.Data.PARTIES[b].short}(2P):対戦の勝ち 1P ${pct(win[0], N)}・2P ${pct(win[1], N)}  議席 1P ${pct(seat[0], N)}・2P ${pct(seat[1], N)}・AI(${ai})${pct(seat[2], N)}  得票率の差 ${(gap / N).toFixed(1)}`);
+  }));
+} else if (process.env.NATION) {
   // ---- 党首として戦う総選挙(1回)----
   const bots = (process.env.BOTS || 'ランダム,中級,上級').split(',');
   console.log(`各 ${N} 回。党首として戦う総選挙:自分の党の議席(平均と幅)/ 相手の党の平均 / 単独過半数・第1党の割合 / 党首を辞める割合`);
@@ -233,7 +288,7 @@ if (process.env.NATION) {
         if (state.screen === 'ending') { if (state.ending.reason === 'resigned') resigned++; else dropped++; break; }
         if (e === E - 1) break;
         turns += playTerm(state, termBot); terms++;
-        if (state.screen === 'ending') { ousted++; break; }   // 支持率の低迷で退陣
+        if (state.screen === 'ending') { if (state.ending.reason === 'ousted') ousted++; break; }   // 支持率の低迷で退陣(裏金で辞職も、ここで終わる)
         const nx = state.career.next;
         kept += nx.endorse.length; broken += nx.broken.length; light += nx.light.length; carried += nx.carried.length;
         base += Game.Data.ARENAS[curSeat].regions.reduce((a, r) => a + (state.career.base[r.id] || 0), 0); stars += Game.Career.extraStars(state.career);
@@ -250,6 +305,8 @@ if (process.env.NATION) {
     console.log(`      到達した役職 ${B.ranks.map((r, k) => r.name + ' ' + pct(ranks[k], N)).join(' / ')}  評価 ${['S', 'A', 'B', 'C', 'D'].map((g) => g + ' ' + pct(grades[g] || 0, N)).join(' ')}(平均 ${(score / N).toFixed(0)}点)`);
     console.log(`      党首選 ${stats.races}回のうち勝ち ${pct(stats.raceWins, stats.races)}  党首としての総選挙 ${natN}回:平均 ${natN ? (natSeats / natN).toFixed(0) : '—'}議席・過半数 ${pct(natMaj, natN)}  議席を減らして辞任 ${pct(resigned, N)}`);
     console.log(`      首相になった ${pct(pmEver, N)}(平均の在任 ${pmEver ? (pmTurns / pmEver / 2).toFixed(1) : '—'}年)  支持率の低迷で退陣 ${pct(ousted, N)}`);
+    console.log(`      政治とカネ・選挙違反:裏金の発覚 ${ethics.found}回(うち辞職 ${ethics.resigned})・連座制で当選無効 ${ethics.voided}・補欠選挙 ${ethics.by}回(勝ち ${ethics.byWon})・区割り改定 ${ethics.redistrict}回・国替え ${ethics.moved}回`);
+    Object.keys(ethics).forEach((k) => { ethics[k] = 0; });
     console.log(`      実績 ${Game.Data.ACHIEVEMENTS.filter((a) => !a.cross).map((a) => a.title + ' ' + pct(ach[a.id] || 0, N)).join(' / ')}`);
   });
 } else {

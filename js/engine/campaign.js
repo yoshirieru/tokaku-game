@@ -49,10 +49,12 @@ Game.Campaign = (function () {
     const govBonus = cr.gov ? Game.Gov.electionBonus(cr.gov) : 0;   // 内閣支持率(首相はそのまま、連立与党は半分、野党は逆向き)
     const GV = B.gov;
     const fatigue = cr.gov && cr.gov.role === 'pm' ? -Math.min(GV.fatigueMax, Math.max(0, (cr.pmStreak || 1) - 1)) * GV.fatiguePer : 0;   // 長期政権への飽き
-    const all = wind + unity + kept + broken + govBonus + fatigue;
+    const ethic = Game.Scandal.startOfElection(state);   // クリーンの評判と、裏金の発覚の響き(R9)
+    camp.cleanSns = ethic.sns;
+    const all = wind + unity + kept + broken + govBonus + fatigue + ethic.clean + ethic.penalty;
     if (all) regions().forEach(function (r) { applyGain(camp, r.id, 'me', all); });
     camp.comeback = { national: true, wind: wind, unity: unity, kept: kept, broken: broken, money: carryMoney, prevMine: cr.partySeats,
-      fatigue: fatigue, govBonus: govBonus, govRole: cr.gov ? cr.gov.role : null, approval: cr.gov ? Math.round(cr.gov.approval) : null };
+      fatigue: fatigue, govBonus: govBonus, govRole: cr.gov ? cr.gov.role : null, approval: cr.gov ? Math.round(cr.gov.approval) : null, ethic: ethic };
     camp.deck = R.shuffle(state, NB.deck.concat(NB.manifesto[party]));
     state.camp = camp;
     startDay(state);
@@ -89,12 +91,16 @@ Game.Campaign = (function () {
       deck: [], discard: [], hand: [], uid: 0,
       intents: [], blocked: {}, today: {}, pending: [], news: '', played: 0, comeback: null,
     };
+    // 裏金(R9)・国替え(R10・R11)の持ち越し。公認を取り消されていると、党幹部の応援は来ない
+    const ethic = Game.Scandal.startOfElection(state);
+    camp.cleanSns = ethic.sns;
     let deck = B.deck.slice();
+    if (ethic.unendorsed) deck = deck.filter(function (id) { return id !== 'star'; });
     if (!cr) {
       deck = deck.concat(B.partyPromises[party]);
     } else {
       const N = cr.next;
-      const stars = Game.Career.extraStars(cr);
+      const stars = ethic.unendorsed ? 0 : Game.Career.extraStars(cr);
       for (let i = 0; i < stars; i++) deck.push('star');
       // 約束のカード:持ち越した約束・破った約束の団体には、今回は約束できない
       const closed = {};
@@ -120,8 +126,9 @@ Game.Campaign = (function () {
       // 役職の重み:顔が売れているぶん、全地区で少し上がる
       const rk = cr.status === 'member' ? B.ranks[cr.rank || 0] : null;
       if (rk && rk.startAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', rk.startAll); });
-      camp.comeback = { wind: wind, rank: rk && rk.startAll ? { name: rk.name, gain: rk.startAll } : null, stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney };
+      camp.comeback = { wind: wind, rank: rk && rk.startAll ? { name: rk.name, gain: rk.startAll } : null, stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney, ethic: ethic };
     }
+    if (ethic.clean + ethic.penalty) regions().forEach(function (r) { applyGain(camp, r.id, 'me', ethic.clean + ethic.penalty); });
     camp.deck = R.shuffle(state, deck);
     state.camp = camp;
     startDay(state);
@@ -181,6 +188,7 @@ Game.Campaign = (function () {
     if (b.curse) return 0;
     if (b.all) {
       r.tags.forEach(function (t) { g = Math.max(g, b.all[t] || 0); });
+      if (g > 0 && camp.cleanSns && (id === 'sns' || id === 'nSns')) g += camp.cleanSns;   // クリーンの評判は SNS で効く(R9)
     } else if (b.region) {
       g = b.region === regionId ? b.gain : 0;
     } else if (b.gain) {
@@ -207,7 +215,8 @@ Game.Campaign = (function () {
     return { ok: true };
   }
   // 手札のカード(uid)を使う。地区を選ぶカードは regionId が要る
-  function play(state, uid, regionId) {
+  // opt は資金のカードの記載('hide' なら一部を載せない。R9)
+  function play(state, uid, regionId, opt) {
     const camp = state.camp, B = bal();
     const card = camp.hand.filter(function (c) { return c.uid === uid; })[0];
     if (!card) return { ok: false, reason: 'そのカードは手札にない。' };
@@ -251,7 +260,10 @@ Game.Campaign = (function () {
           msg = p.org + 'に「' + p.policy + '」を約束した。「誰にでもいい顔をする」と見られ、全地区で支持が少し下がった。';
         }
       } else if (b.money < 0) {
-        msg = name + '。' + (-b.money) + '万円が集まった。';
+        // 資金集め(R9):収入の一部を収支報告書に載せないこともできる
+        const rec = Game.Scandal.record(state, opt);
+        camp.money += rec.money;
+        msg = name + '。' + (-b.money + rec.money) + '万円が集まった。' + rec.note;
       } else {
         msg = name + '。届きやすい地区で支持が伸びた。';
       }
@@ -281,7 +293,7 @@ Game.Campaign = (function () {
   function planIntents(state) {
     const camp = state.camp, B = bal(), A = B.rivalAI;
     camp.intents = [];
-    rivals(camp).forEach(function (c) {
+    rivals(camp).filter(function (c) { return !c.human; }).forEach(function (c) {   // 対戦モードの、もう1人の人間は予告しない
       const role = B.roles[c.role];
       const n = role.actions[Math.min(camp.day, role.actions.length) - 1];
       const chosen = {};
@@ -355,9 +367,10 @@ Game.Campaign = (function () {
       camp.pending.push({ type: 'poll', headline: pollHeadline(camp), overall: overall(camp) });
     } else if (camp.day === B.debateDay) {
       camp.pending.push({ type: 'debate' });
-    } else {
+    } else if (!Game.Scandal.campaignFraud(state)) {   // 選挙違反がらみの出来事(R10)が起きなければ、ふつうの朝の出来事
       morningEvent(state);
     }
+    Game.Scandal.campaignSlush(state);   // 裏金の報道・討論会での追及(R9)
     if (camp.day === B.campaign.days) {
       camp.pending.push({ type: 'event', id: 'lastday', title: '最終日', text: '「最後のお願い」に声がかれる。今日は、地区を選ぶカードの効果がすべて +' + B.campaign.lastDayBonus + '。', fx: [] });
     }
@@ -370,7 +383,11 @@ Game.Campaign = (function () {
     if (!camp.pending.length || camp.pending[0].type !== 'debate') return null;
     const fx = [];
     let text;
-    if (opt === 'attack') {
+    if (opt === 'slush' && Game.Scandal.rivalRumor(state)) {   // 対戦モード:もう1人の裏金を追及する(R9)
+      const r = Game.Scandal.pvpAttack(state);
+      fx.push.apply(fx, r.fx);
+      text = r.text;
+    } else if (opt === 'attack') {
       const who = cand(camp, topRival(camp));
       if (R.next(state) < D.attack.chance) {
         regions().forEach(function (r) { fx.push({ region: r.id, who: who.id, gain: Math.round(applyGain(camp, r.id, who.id, D.attack.hit)) }); });
@@ -426,5 +443,7 @@ Game.Campaign = (function () {
     canPlay: canPlay, cardGain: cardGain, isTarget: isTarget, overall: overall, margin: margin, ranking: ranking,
     mark: mark, cand: cand, saturated: saturated, rivals: rivals, topRival: topRival, applyGain: applyGain,
     baseOf: baseOf, turnoutOf: turnoutOf,
+    // 対戦モード(js/engine/versus.js)が、日の進め方を組み立て直すときに使う
+    draw: draw, planIntents: planIntents, morningEvent: morningEvent, pollHeadline: pollHeadline,
   };
 })();

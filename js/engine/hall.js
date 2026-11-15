@@ -28,15 +28,21 @@ Game.Hall = (function () {
       if (seated(h) && lostBefore) comeback = true;
       if (!seated(h)) lostBefore = true;
     });
-    const guide = Game.Balance.seats[seat] ? Game.Balance.seats[seat].guide[party] : 100;
+    // 議席を得た選挙区(国替えしていれば、いくつもある。R6 までの記録には選挙区がないので、いまの選挙区)
+    const seatsWon = {};
+    hist.forEach(function (h) { if (!h.national && seated(h)) seatsWon[h.seat || seat] = true; });
+    const hardWin = hist.some(function (h) {
+      const S = Game.Balance.seats[h.seat || seat];
+      return !h.national && h.won && !h.by && S && S.guide[party] < H().hardGuide;
+    });
+    const sc = state.scandal || {};
     return {
       seat: seat, party: party,
       seats: hist.filter(seated).length,
-      districtWin: hist.some(function (h) { return !h.national && h.won; }),
-      localSeat: hist.some(function (h) { return !h.national && seated(h); }),
+      seatsWon: seatsWon, hardWin: hardWin,
+      cleanTop: (sc.cleanTops || 0) + ((sc.clean || 0) >= Game.Balance.slush.cleanMax ? 1 : 0) >= H().cleanTerms && !sc.everHid,
       revived: hist.some(function (h) { return !h.national && h.revived; }),
       comeback: comeback,
-      hard: guide < H().hardGuide,
       kept: Math.max(0, (cr.kept || 0) - q.kept), broken: cr.broken || 0,
       rank: cr.quick ? 0 : (cr.bestRank || 0),   // 近道は党首から始まるので、役職の実績(大臣の椅子)は数えない
       raceWon: !!cr.raceWon, majority: !!cr.wonMajority, coalPM: !!cr.coalPM,
@@ -52,7 +58,8 @@ Game.Hall = (function () {
       prRevival: f.revived,
       comeback: f.comeback,
       veteran: f.seats >= L.veteranSeats,
-      hardSeat: f.hard && f.districtWin,
+      hardSeat: f.hardWin,
+      cleanHands: f.cleanTop,
       keeper: f.kept >= L.keeperKept && f.broken === 0,
       minister: f.rank >= minister,
       leader: f.raceWon,
@@ -73,7 +80,7 @@ Game.Hall = (function () {
   function record(hall, state, now) {
     hall = normalize(hall);
     const cr = state.career, en = state.ending, f = facts(state);
-    if (f.localSeat) hall.seatsWon[f.seat] = true;
+    Object.keys(f.seatsWon).forEach(function (k) { hall.seatsWon[k] = true; });
     if (f.pm) hall.pmParties[f.party] = true;
     hall.plays += 1;
     hall.grades[en.grade] = (hall.grades[en.grade] || 0) + 1;

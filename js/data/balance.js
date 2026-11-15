@@ -118,6 +118,19 @@ Game.Balance = {
       rivalMult: 1.45,
       guide: { minsei: 37, kyowa: 28, mirai: 70 },
     },
+    kitatsu1: {  // 地方の激戦区(R10。選挙違反が起きやすい:fraud は balance.js の fraud の起きやすさ)
+      base: {
+        downtown:    { minsei: 29, kyowa: 34, mirai: 36 },
+        residential: { minsei: 37, kyowa: 30, mirai: 29 },
+        industrial:  { minsei: 23, kyowa: 46, mirai: 31 },
+        rural:       { minsei: 38, kyowa: 30, mirai: 26 },
+        campus:      { minsei: 25, kyowa: 32, mirai: 47 },
+      },
+      turnout: { downtown: 58, residential: 66, industrial: 60, rural: 68, campus: 46 },
+      rivalMult: 1.45,
+      fraud: 1,
+      guide: { minsei: 66, kyowa: 38, mirai: 25 },
+    },
   },
   // 準備の画面の、難しさのことば(guide がこの値以上なら。どれにも届かなければ「とてもむずかしい」)
   seatLevels: [[75, 'とてもやさしい'], [52, 'やさしい'], [35, 'ふつう'], [18, 'むずかしい']],
@@ -304,10 +317,54 @@ Game.Balance = {
     events: { chance: 0.4, up: 5, down: -5 },   // 首相の会期の始まりの出来事(外交の成果、閣僚の不祥事)
   },
 
+  // ---- 裏金(R9。js/engine/scandal.js)----
+  //   資金のカード(選挙戦の資金集め、任期の資金パーティー)を使うとき、収入の一部を収支報告書に載せないこともできる
+  //   extra 載せないときに上乗せされる資金(万円)/ gain 載せないたびの発覚度 / drift 隠した資金があるかぎり、会期ごとに上がる発覚度
+  //   stages 発覚度がこれに届くと、記者の取材・元秘書の告発・検察の捜査(3つ目で発覚)/ leak 発覚度1あたりの、会期ごとに漏れる見込み(選挙戦は1日ごとに leakCampaign)
+  //   correct 記載を訂正したときの発覚度(隠した資金を返す)/ deny 否定したときの発覚度
+  //   発覚したときの重さは隠した額で決まる:dropUpTo まで → 炎上で支持が落ちる、unendorsedUpTo まで → 公認取り消し、それより多い → 議員辞職
+  //   clean 正直に記載するたびに上がる「クリーン」の評判(cleanMax まで。載せないと 0 に戻る。選挙のたびに 0 から)。cleanMax に届いていれば、次の選挙は全地区 +cleanStart、SNS のカードが +sns
+  //     (正直がふつうの遊び方なので、効き目は最高のときだけ小さく。勝ち負けは全体の1ポイントで1割動く)
+  //   attackAt 発覚度がこれ以上だと、公開討論会で相手が疑惑を追及してくる(全地区 attackHit)。対戦モードでは相手が「裏金を追及する」を選べる(pvpHit、相手の発覚度 +pvpExposure)
+  slush: {
+    extra: 20, gain: 14, drift: 3, stages: [30, 60, 90], leak: 0.0035, leakCampaign: 0.0015,
+    correct: -40, deny: 6, correctMerit: -2,
+    dropUpTo: 40, unendorsedUpTo: 80,
+    dropStart: -4, dropMerit: -5, unendorsedStart: -6, unendorsedMerit: -10, campaignHit: -4, pmApproval: -15,
+    cleanMax: 3, cleanStart: 1, sns: 1,
+    attackAt: 30, attackHit: -3, attackExposure: 10, pvpHit: -5, pvpExposure: 20,
+  },
+  // ---- 選挙違反(R10)----
+  //   seatRisk 選挙区ごとの起きやすさ(北津1区は seats の fraud。ほかは defaultRisk)
+  //   eventChance 選挙戦の朝に、違反がらみの出来事が起きる見込み(× 起きやすさ。ほかの朝の出来事のかわりに起きる)
+  //   bribe 買収の提案を黙認したとき:その地区の支持 gain、捜査ゲージ probe / smear 怪文書・ポスター破壊:反撃(相手 hit、自分 self)、正々堂々(浮動票の地区 fair)
+  //   convict 選挙のあと、捜査ゲージ × これ が陣営幹部の有罪の見込み(連座制:当選無効と、その選挙区から banTurns 会期(5年)立候補できない)
+  //   witness 開票立会人を送る資金(万円)。countChance × 起きやすさ で開票所の不審な動き(送っていれば再集計で防ぐ。送っていなければ、いちばん票の多い地区で自分の票の steal が相手に流れる)
+  //   by 浪人中の補欠選挙(議員の逮捕で議席が空く):会期ごとの見込み chance(起きやすい選挙区は 起きやすさ ÷ defaultRisk 倍、riskMax 倍まで)、勝つ見込み base + 地盤の合計 × perBase(max まで)
+  fraud: {
+    defaultRisk: 0.25, eventChance: 0.35,
+    bribe: { weight: 1, gain: 4, probe: 30 }, smear: { weight: 1, hit: -3, self: -1, fair: 2 },
+    convict: 0.012, banTurns: 10, voidMerit: -6,
+    witness: 10, countChance: 0.12, steal: 0.06,
+    by: { chance: 0.025, riskMax: 2, base: 0.15, perBase: 0.025, max: 0.5 },
+  },
+  // ---- 区割り改定(R11)----
+  //   chance 会期ごとの、一票の格差訴訟で違憲状態の判決が出る見込み(議員の歩みで1回まで。党首は全国を戦うので起きない)
+  //   国替えの先は、自分の党が議席を持つ選挙区(現職がいる)を除く
+  //   vanish 判決のあとの区割りで、自分の選挙区がなくなる見込み(それ以外は隣の区と合わさる)/ keep 合わさった・移った先に残る地盤の割合
+  //   race 合わさった区の公認争い:自分の強さ = base + 党内評価 × merit + 当選回数 × win + 地盤の合計 × perBase、相手(同じ党の現職)= rival ± noise
+  redistrict: { chance: 0.02, vanish: 0.35, keep: 0.5, race: { base: 20, merit: 0.5, win: 3, perBase: 2, rival: 45, noise: 10 } },
+
+  // ---- 対戦モード(R8。js/engine/versus.js)----
+  //   aiMult 3人目(AI)の候補の、始まりの支持の倍率(選挙区の rivalMult にさらにかける)
+  //   ハンデ(2人の始まりの支持をそろえる):差の handicapRate ずつ、低いほうに全地区で足す。handicapSteps 回まで、足す量が handicapDone 未満になったらやめる
+  versus: { aiMult: 1, handicapRate: 0.6, handicapSteps: 12, handicapDone: 0.05 },
+
   // ---- 殿堂・実績(R7。js/engine/hall.js)----
   //   maxRecords 歴代の記録に残す数 / veteranSeats「ベテラン議員」の議席の回数 / hardGuide「逆風を越えて」:選挙区の難しさの目安(guide)がこれ未満
   //   keeperKept「約束を守り抜く」の守った約束の数 / longPMTurns「長期政権」の首相の会期(半年)の数
-  hall: { maxRecords: 50, veteranSeats: 5, hardGuide: 35, keeperKept: 5, longPMTurns: 12 },
+  //   cleanTerms「清廉潔白」:「クリーン」の評判を最高にした任期の数(R9)
+  hall: { maxRecords: 50, veteranSeats: 5, hardGuide: 35, keeperKept: 5, longPMTurns: 12, cleanTerms: 3 },
 
   // ---- 党首選(党三役になると、任期の2会期目に立候補できる)----
   leaderRace: {

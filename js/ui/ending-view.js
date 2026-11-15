@@ -8,7 +8,7 @@ Game.EndingView = (function () {
 
   function render(app) {
     const s = Game.state, en = s.ending;
-    const kicker = en.reason === 'dropped' ? '続けて議席を得られず、党の公認を失った' : en.reason === 'resigned' ? '総選挙で議席を大きく減らし、党首を辞した' : en.reason === 'ousted' ? '内閣支持率の低迷で、退陣に追い込まれた' : '自分の意思で、身を引いた';
+    const kicker = en.reason === 'scandal' ? '政治とカネの疑惑が、すべてを奪った' : en.reason === 'dropped' ? '続けて議席を得られず、党の公認を失った' : en.reason === 'resigned' ? '総選挙で議席を大きく減らし、党首を辞した' : en.reason === 'ousted' ? '内閣支持率の低迷で、退陣に追い込まれた' : '自分の意思で、身を引いた';
     const rows = en.lines.map(function (l) {
       return '<div class="en-row"><span>' + l.label + '</span><b>' + UI.esc(l.value) + '</b><span class="en-pts' + (l.pts < 0 ? ' minus' : '') + '">' + UI.signed(l.pts) + '</span></div>';
     }).join('');
@@ -17,9 +17,9 @@ Game.EndingView = (function () {
         return '<li><span class="en-no">' + (i + 1) + '回目</span><span class="sub">党首として総選挙</span>' +
           '<b class="en-res ' + (h.gov === 'pm' ? 'won' : h.gov === 'junior' ? 'pr' : h.gov ? 'lost' : 'pr') + '">' + (h.majority ? '単独過半数' : h.first ? '第1党' : '第2党以下') + (h.gov ? '・' + { pm: '首相', junior: '連立与党', opposition: '野党' }[h.gov] : '') + '</b><span class="en-votes">' + h.seats + '議席</span></li>';
       }
-      const res = h.won ? ['当選', 'won'] : h.revived ? ['比例復活', 'pr'] : ['落選', 'lost'];
+      const res = h.voided ? ['当選無効', 'lost'] : h.by ? ['補欠選挙で当選', 'won'] : h.won ? ['当選', 'won'] : h.revived ? ['比例復活', 'pr'] : ['落選', 'lost'];
       return '<li><span class="en-no">' + (i + 1) + '回目</span><span class="sub">' + Game.Data.ROLE_NAMES[h.role || 'newcomer'] + 'として</span>' +
-        '<b class="en-res ' + res[1] + '">' + res[0] + '</b><span class="en-votes">' + num(h.votes) + '票</span></li>';
+        '<b class="en-res ' + res[1] + '">' + res[0] + '</b><span class="en-votes">' + (h.by ? (h.seat ? UI.esc(Game.Data.SEATS[h.seat].name) : '') : num(h.votes) + '票') + '</span></li>';
     }).join('');
     app.innerHTML = '<div class="ending">' +
       '<header class="en-head"><p class="m-kicker">' + kicker + '</p><h1>' + UI.esc(s.player.name) + '、' + UI.esc(en.title) + '</h1>' +

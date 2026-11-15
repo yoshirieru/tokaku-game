@@ -1,4 +1,4 @@
-// 選挙区(R6)。5つの選挙区から選んで立候補する。地図・地区の性格・対立候補・約束の相手が、選挙区ごとにちがう。すべて架空。
+// 選挙区(R6)。6つの選挙区から選んで立候補する(北津1区は R10)。地図・地区の性格・対立候補・約束の相手が、選挙区ごとにちがう。すべて架空。
 // 地区の id は5つとも同じ(downtown / residential / industrial / rural / campus)。名前・性格・有権者数・地図の形が選挙区ごと。
 // 数値(党の地力、投票率、難しさの目安)は balance.js の seats。舞台の切り替えは nation.js の useArena / setHome。
 // promiseNames は約束の名前の入れ替え(policy 政策 / org 相手の団体 / card 約束のカードの名前)。書いていない約束は district.js のまま
@@ -181,8 +181,39 @@ Game.Data = Game.Data || {};
     { id: 'campus', shape: 'w2', name: '学生街', voters: 74000, tags: ['youth', 'urban'], desc: '大学がいくつも集まる。若い世代が多い。' },
   ]);
 
+  // ---- 北津1区:北津地方の激戦区(R10)。義理と人情の選挙で、選挙違反が起きやすい ----
+  SEATS.kitatsu1 = seat({
+    id: 'kitatsu1', name: '北津1区', sea: '北津湾', block: '東北ブロック', type: '地方の激戦区',
+    summary: '港町と漁村、山あいの農村。昔ながらの義理と人情の選挙で、買収や怪文書のうわさが絶えない。開票所には立会人を送っておきたい。',
+    labels: [{ text: '北津湾', x: 300, y: 40, big: true }, { text: '北津2区', x: 44, y: 414 }, { text: '南津1区', x: 556, y: 414 }],
+    people: {
+      minsei: { name: '大鷹 剛三', short: '大鷹', age: 68, slogan: '北津の暮らしを守り抜く' },
+      kyowa:  { name: '雪村 恵', short: '雪村', age: 49, slogan: '港と山に、働く人の声を' },
+      mirai:  { name: '風間 拓', short: '風間', age: 35, slogan: 'しがらみのない北津へ' },
+    },
+    roles: {
+      minsei: { kyowa: 'former', mirai: 'newcomer' },     // 民政の前任が引退。共和の元職が議席をねらう
+      kyowa:  { minsei: 'incumbent', mirai: 'newcomer' },
+      mirai:  { minsei: 'incumbent', kyowa: 'former' },
+    },
+    promiseNames: {
+      agri:   { policy: '漁業と農業の支援', org: '漁協と農協', card: '漁協と農協に約束' },
+      wage:   { policy: '製紙工場の雇用を守る', org: '製紙労組', card: '製紙労組に約束' },
+      family: { policy: '地域の病院を守る', org: '町内会連合', card: '町内会に約束' },
+      taxcut: { policy: '港の再整備', org: '港町の商工会', card: '商工会に約束' },
+    },
+  }, baseB, false, true, [
+    { id: 'downtown', shape: 'c', name: '港町', voters: 64000, tags: ['urban', 'float'], desc: '漁港と商店街。朝市の人だかりで演説が届く。' },
+    { id: 'residential', shape: 'sw', name: '漁村', voters: 70000, tags: ['elder', 'org'], desc: '入り江ごとの集落。網元と漁協のひと声で票が動く。' },
+    { id: 'industrial', shape: 'e', name: '製紙工場の町', voters: 58000, tags: ['union', 'org'], desc: '煙突の並ぶ工場の町。組合の結束が固い。' },
+    { id: 'rural', shape: 'n', name: '山あいの農村', voters: 76000, tags: ['elder', 'org'], desc: '山すその田畑と集落。いちばん票が多く、後援会がものを言う。' },
+    { id: 'campus', shape: 'nw', name: '新興住宅地', voters: 42000, tags: ['family', 'youth'], desc: '短大と新しい団地。よそから来た若い家族が多い。' },
+  ]);
+
   Game.Data.SEATS = SEATS;
-  Game.Data.SEAT_ORDER = ['hokuyo3', 'touou7', 'biyou2', 'ominato4', 'namio5'];
+  Game.Data.SEAT_ORDER = ['hokuyo3', 'touou7', 'biyou2', 'ominato4', 'namio5', 'kitatsu1'];
+  // 区割り改定(R11)で公認を争う、同じ党の隣の区の現職
+  Game.Data.SAME_PARTY_RIVALS = ['真田 勇', '小野寺 薫', '久我 誠司', '三枝 透子', '芦田 宗一', '早瀬 茉莉'];
   // 難しさのことば(balance.js の seats[id].guide = 中級ボットの当選率 % を、seatLevels の境目で分ける)
   Game.Data.seatLevel = function (rate) {
     const L = Game.Balance.seatLevels;

@@ -11,6 +11,7 @@ Game.Screens = (function () {
       onNew: function () { Game.view = 'setup'; Game.render(); },
       onContinue: function () { Game.continueGame(); },
       onHall: function () { Game.view = 'hall'; Game.render(); },
+      onVersus: function () { Game.view = 'versus'; Game.render(); },
       onLegacy: function () { location.href = 'legacy/index.html'; },
       note: '登場する政党・政治家・選挙区はすべて架空です',
     });
@@ -34,6 +35,7 @@ Game.Screens = (function () {
     }).join('、') + '。';
   }
 
+  // 選挙区の小さな地図は、対戦の準備の画面でも使う(seatMap)
   function renderSetup(app) {
     const D = Game.Data.setHome(draft.seat);
     const P = Game.Data.PARTIES, guide = Game.Balance.seats[D.id].guide;
@@ -100,5 +102,5 @@ Game.Screens = (function () {
     };
   }
 
-  return { renderTitle: renderTitle, renderSetup: renderSetup, draft: function () { return draft; } };
+  return { renderTitle: renderTitle, renderSetup: renderSetup, seatMap: seatMap, draft: function () { return draft; } };
 })();

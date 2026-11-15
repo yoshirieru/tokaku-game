@@ -22,15 +22,22 @@ Game.Career = (function () {
     const B = Game.Balance, e = state.election, camp = state.camp;
     const cr = state.career || { wins: 0, elections: 0, kept: 0, broken: 0, base: {}, history: [] };
     ['districtWins', 'prWins', 'lossStreak', 'merit', 'rank', 'bestRank'].forEach(function (k) { cr[k] = cr[k] || 0; });   // R2 までのセーブにも足す
-    const got = seated(e);
+    // 連座制(R10):陣営幹部が有罪なら、当選は無効。その選挙区から立てなくなる
+    const ban = Game.Scandal.rensa(state);
+    const won = e.won && !ban;
+    const got = seated(e) && !ban;
+    if (ban) e.voided = true;
     cr.elections += 1;
     if (got) cr.wins += 1;
-    if (e.won) cr.districtWins += 1; else if (got) cr.prWins += 1;
+    if (won) cr.districtWins += 1; else if (got) cr.prWins += 1;
     cr.lossStreak = got ? 0 : cr.lossStreak + 1;
-    cr.merit += e.won ? B.merit.winDistrict : got ? B.merit.winPr : 0;
+    cr.merit += won ? B.merit.winDistrict : got ? B.merit.winPr : 0;
+    const sc = Game.Scandal.get(state);   // 選挙戦の最中に裏金が発覚していれば、党内評価が下がる
+    cr.merit = Math.max(0, cr.merit + sc.meritDue + (ban ? Game.Balance.fraud.voidMerit : 0));
+    sc.meritDue = 0;
     cr.status = got ? 'member' : 'ronin';
     // 次の選挙での自分の立場:小選挙区で勝てば現職、比例復活なら「比例復活の現職」、落選した元議員は元職
-    cr.role = e.won ? 'incumbent' : got ? 'revived' : (cr.wins > 0 ? 'former' : 'newcomer');
+    cr.role = won ? 'incumbent' : got ? 'revived' : (cr.wins > 0 ? 'former' : 'newcomer');
     // 次の選挙での相手の立場:勝った人は現職。議席を失った現職は、巻き返しをねらう元職(challenger)
     cr.rivalRoles = {};
     cr.rivalSolid = {};   // 現職のまま勝った相手は、次の選挙までに地盤を固める
@@ -52,8 +59,9 @@ Game.Career = (function () {
     cr.promises = got ? camp.promises.map(function (id) { return old[id] ? { id: id, progress: old[id].progress, turns: old[id].turns } : { id: id, progress: 0, turns: 0 }; }) : [];
     cr.dropped = got ? 0 : camp.promises.length;
     cr.next = { endorse: [], broken: [], light: [], carried: [], carriedFull: [] };
-    cr.history.push({ won: e.won, revived: got && !e.won, votes: e.totals.me, lossRatio: e.lossRatio, role: camp.cands[0].role });
+    cr.history.push({ seat: state.player.seat || 'hokuyo3', won: won, revived: got && !won, voided: ban || undefined, votes: e.totals.me, lossRatio: e.lossRatio, role: camp.cands[0].role });
     state.career = cr;
+    cr.banNow = ban;
 
     // 続けて議席を得られなければ、党の公認を失って引退
     if (!got && cr.lossStreak >= B.retire.lossStreak) return retire(state, 'dropped');
@@ -69,6 +77,13 @@ Game.Career = (function () {
     cr.sel = Game.Data.REGION[cr.sel] && !Game.Data.REGION[cr.sel].smd ? cr.sel : 'downtown';
     cr.discard = []; cr.hand = []; cr.uid = 0;
     cr.pending = [{ type: 'start' }]; cr.news = ''; cr.over = false;
+    // 連座制で当選無効・立候補できなくなったら、国替え先を選ぶ
+    if (cr.banNow) {
+      const prev = Game.Data.SEATS[state.player.seat || 'hokuyo3'].name;
+      cr.pending.push({ type: 'event', title: '連座制で当選無効', text: '陣営の幹部が買収の罪で有罪になった。連座制により' + (state.election && state.election.won ? '当選は無効になり、' : '') + prev + 'からは5年間、立候補できない。' });
+      cr.pending.push({ type: 'moveSeat', reason: 'ban', keep: 0 });
+      cr.banNow = false;
+    }
     if (got) personnel(cr);
     cr.deck = R.shuffle(state, termDeck(cr));
     state.screen = 'term';
@@ -279,7 +294,8 @@ Game.Career = (function () {
 
   // ---------- カード ----------
   // target は、約束を選ぶカードなら約束の id、地区を選ぶカードなら地区の id
-  function play(state, uid, target) {
+  // opt は資金パーティーの記載('hide' なら一部を載せない。R9)
+  function play(state, uid, target, opt) {
     const cr = state.career;
     const card = cr.hand.filter(function (c) { return c.uid === uid; })[0];
     if (!card) return { ok: false, reason: 'そのカードは手札にない。' };
@@ -336,7 +352,10 @@ Game.Career = (function () {
       addContrib(cr, b.contrib);
       msg = name + '。党への貢献が ' + b.contrib + ' 増えた。';
     } else {
-      msg = name + '。' + (-b.money) + '万円が集まった。';
+      // 資金パーティー(R9):収入の一部を収支報告書に載せないこともできる
+      const rec = Game.Scandal.record(state, opt);
+      cr.money += rec.money;
+      msg = name + '。' + (-b.money + rec.money) + '万円が集まった。' + rec.note;
     }
     cr.money -= b.money;
     cr.energy -= b.cost;
@@ -406,13 +425,76 @@ Game.Career = (function () {
     }
     // 党首選:党三役なら立候補できる
     if (cr.turn === Game.Balance.leaderRace.turn && cr.status === 'member' && !cr.leader && Game.Balance.ranks[cr.rank + 1] && Game.Balance.ranks[cr.rank + 1].leader) offerRace(state);
-    if (cr.turn > 1) rollEvent(state);
+    if (cr.turn > 1 && !Game.Scandal.termEvents(state)) rollEvent(state);   // 裏金・補欠選挙・区割り改定(scandal.js)が先
     const pct = Math.round(dissolveChance(cr) * 100);
     cr.news = Game.Data.sessionName(cr.turn) + '。' + (cr.turn >= T().turns ? 'この会期で任期満了。総選挙になる。'
       : isPM(cr) ? '内閣支持率は ' + Math.round(cr.gov.approval) + '%。解散の時期は、首相が決める。'
         : pct ? 'この会期のあとに解散する見込みは ' + pct + '%。' : '選挙が終わったばかりで、解散はまだない。');
   }
-  function dismiss(state) { state.career.pending.shift(); }
+  // 知らせを閉じる。辞職につながる知らせ(裏金の発覚)なら、ここでエンディングへ
+  function dismiss(state) {
+    const p = state.career.pending.shift();
+    if (p && p.retire) retire(state, p.retire);
+  }
+  // 補欠選挙(R10):立候補するか。勝てば、その場で議員になる
+  function answerBy(state, run) {
+    const cr = state.career, p = cr.pending[0];
+    if (!p || p.type !== 'byElection') return null;
+    let text, won = false;
+    if (run) {
+      won = R.next(state) < Game.Scandal.byChance(cr);
+      if (won) {
+        cr.status = 'member'; cr.role = 'incumbent'; cr.wins += 1; cr.districtWins += 1; cr.lossStreak = 0;
+        addMerit(cr, Game.Balance.merit.winDistrict);
+        // 逮捕された現職の党は、次の選挙で新人を立てる
+        Object.keys(cr.rivalRoles || {}).forEach(function (k) { if (cr.rivalRoles[k] === 'incumbent') cr.rivalRoles[k] = 'newcomer'; });
+        cr.rivalSolid = {};
+        cr.history.push({ seat: state.player.seat || 'hokuyo3', won: true, by: true, votes: 0, role: 'former' });
+        cr.deck = R.shuffle(state, termDeck(cr)); cr.discard = [];
+        text = '補欠選挙に勝った。地元を歩き続けた地盤が実を結び、国会に戻る。次の選挙は現職として戦う。';
+      } else {
+        text = '補欠選挙に挑んだが、届かなかった。それでも名前は売れた。';
+      }
+    } else {
+      text = '補欠選挙は見送った。次の解散に照準を合わせる。';
+    }
+    cr.pending.shift();
+    cr.news = text;
+    return { text: text, won: won };
+  }
+  // 区割り改定(R11)への答え。choice 'race' 公認を争う / 'move' 国替えする
+  function answerRedistrict(state, choice) {
+    const cr = state.career, p = cr.pending[0], RD = Game.Balance.redistrict;
+    if (!p || p.type !== 'redistrict') return null;
+    let text;
+    if (p.kind === 'merge' && choice === 'race') {
+      const me = Game.Scandal.raceStrength(cr) + R.normal(state) * RD.race.noise;
+      if (me >= p.rivalStr) {
+        Object.keys(cr.base).forEach(function (k) { cr.base[k] = Math.round(cr.base[k] * RD.keep); });
+        Game.Scandal.get(state).next.merged = true;
+        text = '公認争いに勝った。' + p.rival + '氏は比例代表に回る。広くなった選挙区で、新しい地域は一から回る(地盤は半分)。';
+        cr.pending.shift();
+      } else {
+        text = '公認争いに敗れた。' + p.rival + '氏が新しい選挙区の公認を得た。ほかの選挙区に移るしかない。';
+        cr.pending[0] = { type: 'moveSeat', reason: 'lostRace', keep: 0, note: text };
+      }
+    } else {
+      const keep = p.kind === 'vanish' ? RD.keep : 0;
+      text = p.kind === 'vanish' ? '選挙区がなくなる。地元の一部を連れて、ほかの選挙区に移る。' : '公認争いを避け、ほかの選挙区に移ることにした。';
+      cr.pending[0] = { type: 'moveSeat', reason: p.kind, keep: keep, note: text };
+    }
+    cr.news = text;
+    return { text: text };
+  }
+  // 国替えの選挙区を選ぶ
+  function chooseSeat(state, seat) {
+    const cr = state.career, p = cr.pending[0];
+    if (!p || p.type !== 'moveSeat' || Game.Scandal.movableSeats(state).indexOf(seat) < 0) return null;
+    const text = Game.Scandal.moveSeat(state, seat, p.keep || 0);
+    cr.pending.shift();
+    cr.news = text;
+    return { text: text };
+  }
   // 団体からの要望に答える
   function respond(state, accept) {
     const cr = state.career, ev = cr.pending[0], E = T().events.petition;
@@ -558,15 +640,16 @@ Game.Career = (function () {
     let grade = 'D';
     for (let i = 0; i < L.grades.length; i++) if (score >= L.grades[i][1]) { grade = L.grades[i][0]; break; }
     const pmNow = isPM(cr);
-    const title = reason === 'ousted' ? '支持を失い、首相の座を追われる'
-      : pmNow ? (reason !== 'ousted' && cr.gov.approval >= 50 ? '名宰相として惜しまれつつ、政界を去る' : '首相を務めあげて、政界を去る')
+    const great = !!(pmNow && reason !== 'ousted' && reason !== 'scandal' && cr.gov.approval >= 50);   // 名宰相として惜しまれつつ
+    const title = reason === 'scandal' ? (cr.wasPM ? '政治とカネの疑惑で、首相の座を去る' : cr.leader ? '政治とカネの疑惑で、党首を辞して政界を去る' : '裏金の発覚で、議員を辞職する')
+      : reason === 'ousted' ? '支持を失い、首相の座を追われる'
+      : pmNow ? (great ? '名宰相として惜しまれつつ、政界を去る' : '首相を務めあげて、政界を去る')
       : cr.wasPM ? '元首相として、政界を去る'
       : cr.leader ? (cr.wonMajority ? '総選挙に勝った党首として、政界を去る' : '党首として、政界を去る')
       : !cr.wins ? '国会に届かないまま、政界を去る'
       : (cr.bestRank || 0) >= 4 ? '党の重鎮として、政界を去る'
         : cr.bestRank === 3 ? '大臣を務めあげて、政界を去る'
           : cr.bestRank >= 1 ? rank.name + 'まで務めて、政界を去る' : '陣笠議員のまま、政界を去る';
-    const great = !!(pmNow && reason !== 'ousted' && cr.gov.approval >= 50);   // 名宰相として惜しまれつつ
     state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice(), great: great };
     state.screen = 'ending';
     return state.ending;
@@ -576,6 +659,7 @@ Game.Career = (function () {
     afterElection: afterElection, play: play, canPlay: canPlay, endTurn: endTurn, dismiss: dismiss, respond: respond, toCampaign: toCampaign,
     dissolveChance: dissolveChance, extraStars: extraStars, targetKind: targetKind, baseGain: baseGain,
     autoPromise: autoPromise, seated: seated, nextRank: nextRank, retire: retire, raceStrength: raceStrength, runRace: runRace, quickLeader: quickLeader,
-    isPM: isPM, canDissolve: canDissolve, dissolve: dissolve,
+    isPM: isPM, canDissolve: canDissolve, dissolve: dissolve, changeApproval: changeApproval, termDeck: termDeck,
+    answerBy: answerBy, answerRedistrict: answerRedistrict, chooseSeat: chooseSeat,
   };
 })();

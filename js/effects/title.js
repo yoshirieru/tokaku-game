@@ -1,7 +1,7 @@
 // タイトル画面の演出(開票速報のオープニング)。絵は SVG と CSS だけで描き、音は Web Audio API で合成する。
 // 左にロゴとメニュー、右に「情勢ボード」(選挙区の地図に色がつき、票が積み上がって当確が出る)。
 // ゲームの状態には触らない。画面の切り替えは呼び出し側(screens.js の renderTitle)から渡された関数で行う。
-//   Game.Effects.Title.render(app, { hasSave, onNew, onContinue, onHall, onLegacy, note })
+//   Game.Effects.Title.render(app, { hasSave, onNew, onContinue, onVersus, onHall, onLegacy, note })
 // 演出の設定(通常 / 速い / スキップ、BGM、効果音)はこの画面だけのもので、localStorage に別に保存する。
 window.Game = window.Game || {};
 Game.Effects = Game.Effects || {};
@@ -355,6 +355,7 @@ Game.Effects.Title = (function () {
     const buttons = [
       { id: 'new', label: 'はじめから', nav: true },
       opts.hasSave ? { id: 'continue', label: 'つづきから', nav: true } : null,
+      opts.onVersus ? { id: 'versus', label: '2人で対戦', nav: true } : null,
       opts.onHall ? { id: 'hall', label: '殿堂', nav: true } : null,
       opts.onLegacy ? { id: 'legacy', label: '前作で遊ぶ', nav: true } : null,
       { id: 'settings', label: '設定' },
@@ -425,6 +426,8 @@ Game.Effects.Title = (function () {
     stage.querySelector('[data-act="new"]').onclick = leave(opts.onNew);
     const cont = stage.querySelector('[data-act="continue"]');
     if (cont) cont.onclick = leave(opts.onContinue);
+    const vsb = stage.querySelector('[data-act="versus"]');
+    if (vsb) vsb.onclick = leave(opts.onVersus);
     const hl = stage.querySelector('[data-act="hall"]');
     if (hl) hl.onclick = leave(opts.onHall);
     const lg = stage.querySelector('[data-act="legacy"]');

@@ -30,6 +30,24 @@ Game.UI = Game.UI || {};
     return hit;
   };
 
+  // 資金のカードを使うときの、収支報告書への記載(R9)。onPick('honest' | 'hide')
+  UI.ledgerChoice = function (onPick) {
+    const L = Game.Balance.slush, sc = Game.Scandal.get(Game.state);
+    UI.modal('<p class="m-kicker">政治資金</p><h2>収入を、どう記載する?</h2>' +
+      '<p>集まったお金は、収支報告書に載せなければならない。載せない分は自由に使えるが、いつか表に出るかもしれない。</p>' +
+      (sc.hidden > 0 ? '<p class="pr-note">いま載せていないお金 ' + sc.hidden + '万円・発覚度 ' + Math.round(sc.exposure) + '</p>' : ''),
+      [
+        { label: '<b>正直に記載する</b><span>「クリーン」の評判 +1(' + Math.min(L.cleanMax, sc.clean + 1) + ' / ' + L.cleanMax + '。' + L.cleanMax + 'なら次の選挙で全地区 +' + L.cleanStart + '・SNS +' + L.sns + ')</span>', onClick: function () { onPick('honest'); } },
+        { label: '<b>一部を載せない</b><span>資金 +' + L.extra + '万円。発覚度 +' + L.gain + '。クリーンの評判は 0 に戻る</span>', onClick: function () { onPick('hide'); } },
+      ], 'choices');
+  };
+  // 政治とカネのいまの様子(短い文)
+  UI.ethicText = function (state) {
+    const sc = Game.Scandal.get(state), L = Game.Balance.slush;
+    if (sc.hidden > 0) return { value: '載せていない ' + sc.hidden + '万円', note: '発覚度 ' + Math.round(sc.exposure) + '(' + L.stages.join('・') + ' で取材・告発・捜査)', bad: true };
+    return { value: 'クリーン ' + sc.clean + ' / ' + L.cleanMax, note: sc.clean >= L.cleanMax ? '次の選挙で全地区 +' + L.cleanStart + '・SNS +' + L.sns : '資金を正直に記載すると上がる(' + L.cleanMax + 'で選挙に効く)' };
+  };
+
   // 選挙区の地図。fill(regionId) は { color, mix(%) } を返す(color がなければ地の色)
   // sel は金色の枠で囲む地区。札(pins)は呼び出し側が #pins に入れる
   UI.mapHtml = function (fill, sel) {

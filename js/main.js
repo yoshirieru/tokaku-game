@@ -7,7 +7,7 @@ window.Game = window.Game || {};
   const SAVE_VERSION = 2;
 
   Game.state = null;
-  Game.view = 'title';      // ゲームを始める前の画面:'title' | 'setup' | 'hall'
+  Game.view = 'title';      // ゲームを始める前の画面:'title' | 'setup' | 'hall' | 'versus'(対戦の準備)
   Game.ui = { card: null }; // 保存しない画面だけの状態(選んでいるカードなど)
   let undoStack = [];       // 行動の直前の state(その日のうちだけ)
 
@@ -48,6 +48,17 @@ window.Game = window.Game || {};
     const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) | 0;
     const state = { version: SAVE_VERSION, screen: 'campaign', player: { name: name, party: party, seat: seat }, rng: seed };
     Game.Campaign.newCampaign(state);
+    Game.state = state;
+    Game.ui = { card: null };
+    undoStack = [];
+    Game.save();
+    Game.render();
+  };
+  // 対戦モード(R8):2人で同じ選挙区を戦う。o は Versus.newMatch と同じ
+  Game.startVersus = function (o) {
+    const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) | 0;
+    const state = { version: SAVE_VERSION, screen: 'campaign', player: {}, rng: seed };
+    Game.Versus.newMatch(state, o);
     Game.state = state;
     Game.ui = { card: null };
     undoStack = [];
@@ -107,11 +118,12 @@ window.Game = window.Game || {};
     if (!s) {
       if (Game.view === 'setup') return Game.Screens.renderSetup(app);
       if (Game.view === 'hall') return Game.HallView.render(app);
+      if (Game.view === 'versus') return Game.VersusView.renderSetup(app);
       return Game.Screens.renderTitle(app);
     }
     const nat = s.election && s.election.national;
     if (s.screen === 'count') return nat ? Game.NationalView.render(app) : Game.CountView.render(app);
-    if (s.screen === 'result') return nat ? Game.NationalView.renderResult(app) : Game.CountView.renderResult(app);
+    if (s.screen === 'result') return s.mode === 'versus' ? Game.VersusView.renderResult(app) : nat ? Game.NationalView.renderResult(app) : Game.CountView.renderResult(app);
     if (s.screen === 'coalition') return Game.GovView.renderCoalition(app);
     if (s.screen === 'term') return Game.TermView.render(app);
     if (s.screen === 'ending') { recordHall(s); return Game.EndingView.render(app); }

@@ -21,7 +21,7 @@ Game.CampaignView = (function () {
     }
     const me = C.cand(camp, 'me');
     return '<header class="hud panel">' +
-      '<div class="who"><span class="seat">' + UI.esc(Game.Data.DISTRICT.name) + '</span>' + UI.partyChip(me) + '<b class="pname">' + UI.esc(me.name) + '</b></div>' +
+      '<div class="who"><span class="seat">' + UI.esc(Game.Data.DISTRICT.name) + '</span>' + (me.tag ? '<span class="vs-tag">' + me.tag + '</span>' : '') + UI.partyChip(me) + '<b class="pname">' + UI.esc(me.name) + '</b></div>' +
       '<ol class="days" aria-label="選挙戦の日程">' + dots + '</ol>' +
       '<div class="res"><span class="lab">資金</span><b>' + camp.money + '</b><small>万円</small></div>' +
       '<div class="ticker"><span class="tk-lab">速報</span><span id="news">' + UI.esc(camp.news) + '</span></div>' +
@@ -116,8 +116,19 @@ Game.CampaignView = (function () {
         const p = Game.Data.PROMISES[id];
         return '<div class="pr-line"><span class="pr-dot">約</span><span><b>' + p.policy + '</b>(' + p.org + ')</span></div>';
       }).join('') : '<p class="pr-note">まだ何も約束していない。</p>') +
-      '<p class="pr-note">' + (Game.Data.DISTRICT.national ? '公約は、政権に入れば任期のうちに果たすことになる。野党に回れば白紙。' : '約束は、当選したあとの任期までついてくる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。') + '</p></section>';
+      '<p class="pr-note">' + (Game.Data.DISTRICT.national ? '公約は、政権に入れば任期のうちに果たすことになる。野党に回れば白紙。' : '約束は、当選したあとの任期までついてくる。果たせば次の選挙で推薦に、破れば「破った約束」になって返ってくる。') + '</p>' + ethicHtml(camp) + '</section>';
     return detail + foe + promise;
+  }
+  // 政治とカネ(R9)と、開票立会人(R10)
+  function ethicHtml(camp) {
+    const t = UI.ethicText(Game.state), F = Game.Balance.fraud;
+    // 1画面に収めるため、1行ずつ(説明は title に)
+    let html = '<p class="ethic' + (t.bad ? ' warn' : '') + '" title="' + UI.esc(t.note) + '"><span>政治とカネ</span><b>' + t.value + (t.bad ? '・発覚度 ' + Math.round(Game.Scandal.get(Game.state).exposure) : '') + '</b></p>';
+    if (!Game.Data.DISTRICT.national && !camp.vs) {
+      html += '<p class="ethic witness" title="開票所の不審な動きに備える。送っていれば、その場で再集計させられる"><span>開票立会人' + (Game.Scandal.risk() >= 0.5 ? '(違反の多い土地柄)' : '') + '</span>' +
+        (camp.witness ? '<b>送った</b>' : '<button type="button" class="btn-go" id="witness">送る ' + F.witness + '万円</button>') + '</p>';
+    }
+    return html;
   }
   function handHtml(camp, selCard) {
     const B = Game.Balance;
@@ -148,15 +159,34 @@ Game.CampaignView = (function () {
       '<div class="energy"><span class="e-lab">今日の体力</span><span class="pips">' + pips + '</span><span class="deck-n">山札 ' + camp.deck.length + '・捨て札 ' + camp.discard.length + '</span></div>' +
       '<div class="prompt" id="prompt">' + prompt + '</div>' +
       '<div class="turn-btns"><button type="button" class="btn btn-undo" id="undo" title="カードを使う前に戻す(Ctrl+Z)"' + (Game.canUndo() ? '' : ' disabled') + '>' + UI.icon('undo') + '<span>取り消す</span></button>' +
-      '<button type="button" class="btn-main" id="endDay">' + (last ? '投票日へ' : 'この日を終える') + '</button></div>' +
+      '<button type="button" class="btn-main" id="endDay">' + (camp.vs && !camp.vs.done[1 - camp.vs.active] ? '番を終えて交代' : last ? '投票日へ' : 'この日を終える') + '</button></div>' +
       '</div><div class="cards" id="cards" aria-label="手札">' + cards + '</div></footer>';
+  }
+
+  // 政治とカネ(R9)・国替え(R10・R11)の持ち越しを、知らせの行にする
+  function ethicLines(e, li, where) {
+    if (!e) return;
+    const L = Game.Balance.slush;
+    if (e.moved) li.push(['', Game.Data.SEATS[e.moved].name + 'に移って、初めての選挙。相手も地元も新しい。']);
+    if (e.merged) li.push(['light', '区割り改定で選挙区が広がった。新しい地域は、一から回ることになる。']);
+    if (e.clean) li.push(['kept', '「クリーン」の評判で、' + where + 'の支持が +' + e.clean + '。' + (e.sns ? 'SNSのカードも +' + e.sns + '。' : '')]);
+    if (e.penalty) li.push(['broken', '裏金の発覚の余波が残っている(' + where + ' ' + e.penalty + ')。']);
+    if (e.unendorsed) li.push(['broken', '党の公認を取り消された。党幹部の応援は来ない。']);
   }
 
   // ---------- 朝の知らせ ----------
   function showPending(app) {
     const s = Game.state, camp = s.camp, p = camp.pending[0], B = Game.Balance;
     const next = function () { C.dismiss(s); Game.save(); render(app); };
-    if (p.type === 'intro') {
+    if (p.type === 'vsIntro') {   // 対戦モードの1日目
+      const vs = camp.vs, other = C.cand(camp, 'vs'), ai = camp.cands.filter(function (c) { return !c.human; })[0];
+      UI.modal('<p class="m-kicker">1日目・公示</p><h2>対戦が始まった</h2>' +
+        '<p>' + UI.esc(Game.Data.DISTRICT.name) + 'で、' + UI.esc(other.name) + 'さん(' + other.tag + '・' + Game.Data.PARTIES[other.party].short + ')と票を競う。議席には、' + UI.esc(ai.name) + '候補(' + Game.Data.PARTIES[ai.party].short + '・' + Game.Data.ROLE_NAMES[ai.role] + ')も挑んでいる。</p>' +
+        '<ul class="m-list"><li>手札のカードを選び、地図の地区を押して使う(ダブルクリックですぐ使える)。1日の体力は' + B.campaign.energy + '。</li>' +
+        '<li>使い終えたら「番を終えて交代」。相手には、あなたが使ったカードが知らされる。</li>' +
+        '<li>2人とも落選しても、票の多いほうが対戦の勝ち。</li></ul>',
+        [{ label: '選挙戦へ', primary: true, onClick: next }]);
+    } else if (p.type === 'intro') {
       const rv = C.cand(camp, C.topRival(camp));
       UI.modal('<p class="m-kicker">1日目・公示</p><h2>選挙戦が始まった</h2>' +
         '<p>' + UI.esc(Game.Data.DISTRICT.name) + 'の議席を、' + UI.esc(rv.name) + '候補(' + Game.Data.PARTIES[rv.party].short + '・' + Game.Data.ROLE_NAMES[rv.role] + ')たちと争う。いまは大きく離されている。</p>' +
@@ -176,6 +206,7 @@ Game.CampaignView = (function () {
       if (cb.unity) li.push(['kept', '党のために働いてきたことで、党がまとまっている(全ブロック +' + cb.unity + ')。']);
       if (cb.kept) li.push(['kept', '党首が約束を守ってきたことが、信頼になっている(全ブロック +' + cb.kept + ')。']);
       if (cb.broken) li.push(['broken', '党首が約束を破ったことが、全国で報じられている(全ブロック ' + cb.broken + ')。']);
+      ethicLines(cb.ethic, li, '全ブロック');
       li.push(['', 'カードは全国用。選ぶのは11のブロック。上の帯に、いまの支持から見た<b>議席の見込み</b>が出る。']);
       UI.modal('<p class="m-kicker">総選挙・公示</p><h2>党首として、全国を戦う</h2>' +
         '<ul class="m-lines">' + li.map(function (x) { return '<li class="ml-' + x[0] + '">' + x[1] + '</li>'; }).join('') + '</ul>',
@@ -195,6 +226,7 @@ Game.CampaignView = (function () {
       cb.carried.forEach(function (id) { li.push(['carried', org(id) + 'との約束は、持ち越したまま背負っている。']); });
       if (cb.stars) li.push(['kept', '党への貢献が認められ、党幹部の応援が ' + cb.stars + '枚 増えた。']);
       if (cb.money) li.push(['', '任期で集めた資金 ' + cb.money + '万円を持ち込んだ。']);
+      ethicLines(cb.ethic, li, '全地区');
       UI.modal('<p class="m-kicker">' + (cr.elections + 1) + '回目の選挙・公示</p><h2>' + (me.role === 'revived' ? '選挙区を取りにいく戦い' : cr.status === 'member' ? '議席を守る戦い' : '議席を取り戻す戦い') + '</h2>' +
         '<ul class="m-lines">' + li.map(function (x) { return '<li class="ml-' + x[0] + '">' + x[1] + '</li>'; }).join('') + '</ul>',
         [{ label: '選挙戦へ', primary: true, onClick: next }]);
@@ -203,10 +235,29 @@ Game.CampaignView = (function () {
         const c = C.cand(camp, id);
         return '<div class="row" style="--pc:' + UI.color(c) + '">' + UI.partyChip(c) + '<span class="nm">' + UI.esc(c.short) + '</span><span class="bar"><i style="width:' + p.overall[id] + '%"></i></span><span class="pct">' + Math.round(p.overall[id]) + '%</span></div>';
       }).join('');
-      UI.modal('<p class="np-name">北陽新聞<span>' + camp.day + '日目・朝刊</span></p><h2 class="np-head">' + UI.esc(p.headline) + '</h2>' +
+      UI.modal('<p class="np-name">' + UI.esc(Game.Data.DISTRICT.name.replace(/\d+区$/, '')) + '新聞<span>' + camp.day + '日目・朝刊</span></p><h2 class="np-head">' + UI.esc(p.headline) + '</h2>' +
         '<p class="np-sub">' + UI.esc(Game.Data.DISTRICT.name) + ' 中盤の情勢調査</p>' + rows +
         '<p class="np-foot">投票日には、どの候補にも地区ごとに数ポイントのぶれが出る。</p>',
         [{ label: '新聞を閉じる', primary: true, onClick: next }], 'paper');
+    } else if (p.type === 'fraud') {   // R10:買収の提案・怪文書
+      const F = B.fraud, answer = function (o) { return function () { const r = Game.Scandal.answerFraud(s, o); Game.clearUndo(); Game.save(); render(app); return r; }; };
+      if (p.kind === 'bribe') {
+        const reg = Game.Data.REGION[p.region].name;
+        UI.modal('<p class="m-kicker">' + camp.day + '日目・選挙違反のにおい</p><h2>支援者が耳打ちしてきた</h2>' +
+          '<p>「' + reg + 'の顔役たちに、ちょっと包んでおけば票はまとまりますよ。先生は知らなかったことにしておけばいい」</p>',
+          [
+            { label: '<b>きっぱり断る</b><span>何も起きない</span>', onClick: answer('refuse') },
+            { label: '<b>黙認する</b><span>' + reg + 'の支持 +' + F.bribe.gain + '。捜査ゲージ +' + F.bribe.probe + '(陣営幹部が有罪になると連座制で当選無効)</span>', onClick: answer('accept') },
+          ], 'choices');
+      } else {
+        const rv = C.cand(camp, p.who);
+        UI.modal('<p class="m-kicker">' + camp.day + '日目・選挙妨害</p><h2>怪文書が出回り、ポスターが破られた</h2>' +
+          '<p>「' + UI.esc(s.player.name) + 'の後援会長に借金がある」という出どころ不明の文書が配られ、掲示板のポスターが何枚も破られていた。' + UI.esc(rv.short) + '陣営のしわざだといううわさもある。</p>',
+          [
+            { label: '<b>反撃する</b><span>' + UI.esc(rv.short) + '候補が全地区 ' + F.smear.hit + '。泥仕合で自分も全地区 ' + F.smear.self + '</span>', onClick: answer('fight') },
+            { label: '<b>正々堂々を貫く</b><span>浮動票の地区で +' + F.smear.fair + '(好感度が上がる)</span>', onClick: answer('fair') },
+          ], 'choices');
+      }
     } else if (p.type === 'debate') {
       const D = B.debate, rv = C.cand(camp, C.topRival(camp));
       const choose = function (opt) { return function () { C.chooseDebate(s, opt); Game.clearUndo(); Game.save(); render(app); }; };
@@ -216,7 +267,7 @@ Game.CampaignView = (function () {
           { label: '<b>相手の弱点を突く</b><span>' + Math.round(D.attack.chance * 100) + '%で' + UI.esc(rv.short) + '候補が全地区 ' + D.attack.hit + '。外すと自分が全地区 ' + D.attack.miss + '</span>', onClick: choose('attack') },
           { label: '<b>政策を語る</b><span>確実に、全地区で +' + D.policy.all + '</span>', onClick: choose('policy') },
           { label: '<b>地元の暮らしを語る</b><span>高齢層・子育て世帯の地区で +' + D.local.gain + '</span>', onClick: choose('local') },
-        ], 'choices');
+        ].concat(Game.Scandal.rivalRumor(s) ? [{ label: '<b>裏金を追及する</b><span>' + UI.esc(C.cand(camp, 'vs').short) + '候補の政治資金にうわさがある。確実に全地区 ' + B.slush.pvpHit + '、相手の発覚度 +' + B.slush.pvpExposure + '</span>', onClick: choose('slush') }] : []), 'choices');
     } else {
       UI.modal('<p class="m-kicker">' + camp.day + '日目</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
         [{ label: 'わかった', primary: true, onClick: function () { pendingFx = pendingFx.concat(p.fx || []); next(); } }]);
@@ -238,6 +289,7 @@ Game.CampaignView = (function () {
   // ---------- 操作 ----------
   function render(app) {
     const s = Game.state, camp = s.camp;
+    if (camp.vs && camp.vs.handoff) return Game.VersusView.renderHandoff(app);   // 対戦モード:交代の画面(手札を見せない)
     const selCard = camp.hand.filter(function (c) { return c.uid === Game.ui.card; })[0] || null;
     app.innerHTML = '<div class="game' + (Game.Data.DISTRICT.national ? ' nat' : '') + '">' + hudHtml(s) + raceHtml(camp) +
       '<main class="board"><div class="map-cell">' +
@@ -247,12 +299,15 @@ Game.CampaignView = (function () {
 
     const say = function (text) { camp.news = text; Game.ui.card = null; render(app); };
     // card を使う(ダブルクリックでは選んでいるカードでなくてもよい)。使う前の state を取り消し用に積む
-    const doPlay = function (regionId, card) {
+    const doPlay = function (regionId, card, opt) {
       card = card || selCard;
       const ok = C.canPlay(camp, card.id);
       if (!ok.ok) return say(ok.reason);
+      // 資金集め(R9):先に、収入をどう記載するかを選ぶ
+      if (!opt && Game.Balance.cards[card.id].money < 0) return UI.ledgerChoice(function (o) { doPlay(regionId, card, o); });
       Game.pushUndo();
-      const res = C.play(s, card.uid, regionId);
+      const res = C.play(s, card.uid, regionId, opt);
+      if (camp.vs && res.ok) Game.Versus.note(s, res.msg);   // 対戦モード:交代のときに相手に知らせる
       Game.ui.card = null;
       pendingFx = res.fx || [];
       Game.save();
@@ -280,9 +335,16 @@ Game.CampaignView = (function () {
     });
     const now = app.querySelector('#playNow');
     if (now) now.onclick = function () { doPlay(null); };
+    const wit = app.querySelector('#witness');
+    if (wit) wit.onclick = function () {
+      Game.pushUndo();
+      const r = Game.Scandal.sendWitness(s);
+      if (!r.ok) { Game.undo(); return say(r.reason); }
+      Game.save(); render(app);
+    };
     app.querySelector('#undo').onclick = function () { pendingFx = []; Game.undo(); };
     const finish = function () {
-      const res = C.endDay(s);
+      const res = camp.vs ? Game.Versus.endTurn(s) : C.endDay(s);
       if (!res.ok) return;
       Game.clearUndo();
       Game.ui.card = null;
@@ -293,7 +355,7 @@ Game.CampaignView = (function () {
     app.querySelector('#endDay').onclick = function () {
       const idle = camp.energy > 0 && camp.hand.some(function (c) { return C.canPlay(camp, c.id).ok && Game.Balance.cards[c.id].cost <= camp.energy; });
       if (!idle) return finish();
-      UI.modal('<h2>まだ動ける</h2><p>体力が ' + camp.energy + ' 残っていて、使えるカードがある。この日を終える?</p>',
+      UI.modal('<h2>まだ動ける</h2><p>体力が ' + camp.energy + ' 残っていて、使えるカードがある。' + (camp.vs ? 'この番を終える?' : 'この日を終える?') + '</p>',
         [{ label: 'もどる' }, { label: '終える', primary: true, onClick: finish }]);
     };
     app.querySelector('#menu').onclick = function () {

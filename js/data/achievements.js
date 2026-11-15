@@ -1,4 +1,4 @@
-// 実績(殿堂、R7)。条件の判定は js/engine/hall.js、しきい値は balance.js の hall。
+// 実績(殿堂、R7。清廉潔白は R9)。条件の判定は js/engine/hall.js、しきい値は balance.js の hall。
 // mark は丸いハンコに入れる1文字。cross: true の実績は、セーブデータをまたいで積み重ねて達成する
 window.Game = window.Game || {};
 Game.Data = Game.Data || {};
@@ -19,6 +19,7 @@ Game.Data.ACHIEVEMENTS = [
   { id: 'longPM',     mark: '長', title: '長期政権',         desc: '首相を6年以上務める' },
   { id: 'greatPM',    mark: '名', title: '名宰相',           desc: '首相のまま、支持率50%以上で政界を去る' },
   { id: 'gradeS',     mark: '史', title: '歴史に名を刻む',   desc: '評価 S で政界を去る' },
-  { id: 'allSeats',   mark: '国', title: '全国を渡り歩く',   desc: '5つの選挙区すべてで議席を得る(セーブデータをまたいで)', cross: true },
+  { id: 'cleanHands', mark: '清', title: '清廉潔白',         desc: '一度も裏金に手を出さず、3つの任期で「クリーン」の評判を最高にして政界を去る' },
+  { id: 'allSeats',   mark: '国', title: '全国を渡り歩く',   desc: 'すべての選挙区(6つ)で議席を得る(セーブデータをまたいで)', cross: true },
   { id: 'threeParties', mark: '三', title: '3党で総理',      desc: '民政・共和・未来それぞれで首相になる(セーブデータをまたいで)', cross: true },
 ];
