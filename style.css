@@ -31,6 +31,9 @@
   --telop-b: #163b8a;                       /* 同(下) */
   --paper: #f3efe4;                         /* 新聞と当確のハンコだけは明るい紙 */
   --paper-ink: #16130f;
+  --surge-a: #0b1230; --surge-b: #1a0f2e; --surge-c: #301018;   /* 奔流(R15)の知らせの背景 */
+  --surge-shine: #ffffff;
+  --opposition: #1f7ae0;                    /* 総選挙の結果:野党・他の側(与党はテロップの赤) */
   --paper-good: #1f6e43;                    /* 30年後の新聞(R14):良くなった指標 */
   --paper-bad: #a3262a;                     /* 悪くなった指標 */
   --film-dark: rgba(8, 6, 3, .9);           /* 昔の映画風の演出の暗がり */
@@ -305,6 +308,17 @@ h1, h2, p { margin: 0; }
 .wind-bar.appr i { border-radius: 7px; background: linear-gradient(90deg, var(--accent), var(--gold) 45%, var(--good)); background-size: 100vw 100%; }
 .gov-eff { margin-left: 8px; font-size: 11.5px; color: var(--sub); }
 /* 参議院(R12) */
+/* 奔流(R15) */
+.surge-chip { flex: none; margin-left: 8px; padding: 1px 9px; border-radius: 4px; font: 800 12px var(--font-head); letter-spacing: .1em; white-space: nowrap; color: var(--on-accent); background: linear-gradient(90deg, var(--accent), var(--opposition)); animation: surgePulse 2.4s ease-in-out infinite; }
+@keyframes surgePulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 12px 1px color-mix(in srgb, var(--accent) 60%, transparent); } }
+.modal.surge { border-top: 0; background: linear-gradient(160deg, var(--surge-a) 0%, var(--surge-b) 55%, var(--surge-c) 100%); overflow: hidden; }
+.surge-head { position: relative; text-align: center; padding: 8px 0 6px; }
+.surge-head::before { content: ""; position: absolute; left: -30%; right: -30%; top: 50%; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); transform: rotate(-4deg); opacity: .6; }
+.surge-title { position: relative; font: 900 64px/1.1 var(--font-head) !important; letter-spacing: .3em; padding-left: .3em; color: var(--ink);
+  background: linear-gradient(180deg, var(--surge-shine) 0%, var(--gold) 70%, var(--accent) 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: surgeIn .9s cubic-bezier(.2, .8, .2, 1) both; }
+.surge-sub { position: relative; font: 700 13px var(--font-head); letter-spacing: .4em; color: var(--sub); animation: fade .6s ease-out .5s both; }
+@keyframes surgeIn { 0% { opacity: 0; letter-spacing: 1.2em; filter: blur(6px); } 100% { opacity: 1; letter-spacing: .3em; filter: blur(0); } }
 .close-chip { flex: none; margin-left: 8px; padding: 1px 8px; border-radius: 4px; font-size: 11.5px; font-weight: 700; white-space: nowrap; color: var(--on-gold); background: var(--gold); }
 .up-chip { flex: none; padding: 1px 8px; border-radius: 4px; font-size: 11.5px; font-weight: 700; white-space: nowrap; border: 1px solid var(--line); color: var(--sub); }
 .up-chip.tw { border-color: var(--accent); color: var(--accent); }
@@ -485,6 +499,46 @@ h1, h2, p { margin: 0; }
 .ho-log ul { margin: 0; padding-left: 1.2em; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
 .ho-card .btn-lg { margin-top: 6px; }
 
+/* ---------- 総選挙の結果:獲得議席と小選挙区 当選一覧 ---------- */
+.nat-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); }
+.seat-chart h2 small, .seat-tiles h2 small { margin-left: 8px; }
+.sc-top { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 2.6fr) minmax(0, .8fr); align-items: start; gap: 6px; }
+.sc-side { display: flex; flex-direction: column; gap: 2px; }
+.sc-side.opp { text-align: right; align-items: flex-end; }
+.sc-lab { font: 800 15px var(--font-head); }
+.sc-side b { font: 900 clamp(32px, 3.4vw, 48px)/1 var(--font-head); font-variant-numeric: tabular-nums; }
+.sc-side.ruling .sc-lab, .sc-side.ruling b { color: var(--accent); }
+.sc-side.opp .sc-lab, .sc-side.opp b { color: var(--opposition); }
+.sc-side > small { padding: 2px 6px; font-size: 11px; font-weight: 700; border-radius: 3px; }
+.sc-side.ruling > small { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.sc-side.opp > small { background: color-mix(in srgb, var(--opposition) 22%, transparent); }
+.sc-boxes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.sc-side.opp .sc-boxes { justify-content: flex-end; }
+.sc-box { min-width: 58px; padding: 3px 6px 4px; text-align: center; background: var(--panel-2); border: 1px solid var(--line); border-top: 4px solid var(--pc); border-radius: 3px; }
+.sc-box span { display: block; font-size: 12px; font-weight: 700; }
+.sc-box span small { display: block; font-size: 9.5px; color: var(--gold); }
+.sc-box b { display: block; font: 900 24px/1.1 var(--font-head); color: var(--pc); }
+.sc-box.me { outline: 2px solid var(--gold); }
+.sc-diff { font-size: 10.5px; color: var(--sub); }
+.sc-arc svg { display: block; width: 100%; height: auto; overflow: visible; }
+.sc-ruling { fill: var(--accent); } .sc-opp { fill: var(--opposition); }
+.sc-before { opacity: .55; }
+.sc-line { stroke: var(--ink); stroke-width: 1.6; }
+.sc-maj { font: 800 13px var(--font-head); fill: var(--ink); }
+.sc-mid { font-size: 11px; fill: var(--sub); }
+.sc-note { margin-top: 4px; font-size: 10.5px; color: var(--sub); }
+.nat-next .pr-note + .pr-note { margin-top: 4px; }
+.seat-tiles { display: flex; flex-direction: column; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.sm-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; align-items: start; }
+.sm-tile { display: flex; flex-direction: column; gap: 2px; padding: 3px 3px 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; }
+.sm-tile > b { font-size: 12px; text-align: center; white-space: nowrap; }
+.sm-tile > b small { margin-left: 2px; font-size: 10.5px; color: var(--sub); font-weight: 400; }
+.sm-seats { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; }
+.sm-seats i, .sm-legend i { width: 12px; height: 12px; display: inline-grid; place-items: center; font: 800 9px/1 var(--font); font-style: normal; color: var(--on-accent); background: var(--pc); border-radius: 2px; }
+.sm-pr { font-size: 10px; color: var(--sub); text-align: center; }
+.sm-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 11px; color: var(--sub); }
+.sm-legend span { display: inline-flex; align-items: center; gap: 4px; }
+
 /* ---------- 30年後の新聞(R14) ---------- */
 .np-back { position: fixed; inset: 0; z-index: 30; overflow: auto; padding: 18px 14px 24px; background: var(--film-dark); }
 .np-back.film::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .75) 100%); animation: npVignette calc(3s * var(--np-s)) ease-out forwards; }
@@ -583,6 +637,9 @@ h1, h2, p { margin: 0; }
   font: 800 20px/1.3 var(--font-head); letter-spacing: .12em; transform: rotate(-7deg);
 }
 .stamp.new { animation: stamp-in .5s cubic-bezier(.2, 1.5, .4, 1) both; }
+.stamp.void { color: var(--sub); border-color: var(--sub); text-decoration: line-through; text-decoration-color: var(--accent); text-decoration-thickness: 3px; }   /* 奔流(R15)で取り消された当確 */
+.ct-ticker.alert { background: color-mix(in srgb, var(--accent) 22%, var(--panel)); animation: tickerAlert .5s ease-in-out 3; }
+@keyframes tickerAlert { 50% { background: color-mix(in srgb, var(--accent) 45%, var(--panel)); } }
 .stamp.big { display: inline-block; margin: 0 0 8px; padding: 4px 22px; font-size: 40px; border-width: 5px; }
 @keyframes stamp-in { from { transform: rotate(-7deg) scale(3.2); opacity: 0; } to { transform: rotate(-7deg) scale(1); opacity: 1; } }
 .rs-head { text-align: center; padding: 8px 0 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -682,6 +739,12 @@ h1, h2, p { margin: 0; }
   .en-body { grid-template-columns: minmax(0, 1fr); }
   .hall-cols { grid-template-columns: minmax(0, 1fr); }
   .vs-players { grid-template-columns: minmax(0, 1fr); }
+  .sc-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .sc-arc { grid-column: 1 / -1; grid-row: 1; }
+  .sc-side b { font-size: 34px; }
+  .seat-tiles { overflow: visible; flex: none; }
+  .sm-tile > b { font-size: 10.5px; white-space: normal; }
+  .sm-seats i { width: 11px; height: 11px; font-size: 8px; }
   .np-back { padding: 10px 8px 18px; }
   .np-paper { padding: 12px 12px 8px; }
   .np-mast { grid-template-columns: 1fr; text-align: center; }
@@ -703,6 +766,7 @@ h1, h2, p { margin: 0; }
   .ct-btns .btn-lg { padding: 10px 16px; font-size: 15px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .surge-chip, .surge-title, .surge-sub, .ct-ticker.alert { animation: none; }
   .game *, .count *, .result *, .modal-back, .modal-back * { animation-duration: .01s !important; transition-duration: .01s !important; }
 }
 

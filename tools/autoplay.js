@@ -6,6 +6,7 @@
 //   NATION=1 node tools/autoplay.js 200               党首として戦う総選挙(各党の議席、過半数・第1党の割合)
 //   VERSUS=1 node tools/autoplay.js 300               対戦モード(2人ともボット。BOTS=中級,上級 で 1P と 2P のボット。党の組み合わせごとに 1P・2P・AI の勝ち)
 //   URA=1 で資金のカードの収入を載せない(裏金。R9)、DIRTY=1 で買収を黙認し怪文書に反撃する(選挙違反。R10)。立会人は上級ボットが送る
+//   SURGE=1 node tools/autoplay.js 300                最初の選挙で、奔流の起きた割合・投票率・だれが勝ったか(R15)
 //   SEATS=all node tools/autoplay.js 300              選挙区ごとに(SEATS=touou7,biyou2 のように選べる。ないときは北陽3区だけ)
 //   node tools/autoplay.js 300 "B.playerRoles.newcomer=0.7;"   ファイルを変えずに数値を試す(B は Game.Balance)
 //     ※ 推薦・破った約束のカードの数値(B.comeback.endorse / curse)は読み込み時に写すので、ここからは変えられない
@@ -254,6 +255,7 @@ if (process.env.VERSUS) {
   parties.forEach((p) => {
     bots.forEach((b) => {
       const sum = {}, roles = {}; let maj = 0, first = 0, resign = 0; const mine = [];
+      const sgN = {}, sgS = {}, noN = {}, noS = {};   // 奔流(R15):対象の党の議席(奔流のとき / ないとき)
       for (let i = 0; i < N; i++) {
         const seed = (i + 1) * 7919 + p.length * 104729;
         const state = newState(p, seed);
@@ -263,12 +265,14 @@ if (process.env.VERSUS) {
         const e = state.election;
         state.camp.cands.forEach((c) => { sum[c.party] = (sum[c.party] || 0) + e.seats[c.id]; });
         mine.push(e.seats.me); maj += e.meMajority ? 1 : 0; first += e.won ? 1 : 0;
+        state.camp.cands.forEach((c) => { const on = e.surge && e.surge.target === c.id, N1 = on ? sgN : noN, S1 = on ? sgS : noS; N1[c.party] = (N1[c.party] || 0) + 1; S1[c.party] = (S1[c.party] || 0) + e.seats[c.id]; });
         Game.Career.afterElection(state);
         if (state.screen === 'ending') resign++;
         roles[state.career.gov.role] = (roles[state.career.gov.role] || 0) + 1;
       }
       mine.sort((x, y) => x - y);
       const others = Object.keys(sum).filter((k) => k !== p).map((k) => Game.Data.PARTIES[k].short + ' ' + (sum[k] / N).toFixed(0)).join('・');
+      if (process.env.SURGE) console.log(`      奔流 ${Object.keys(sgN).map((k) => Game.Data.PARTIES[k].short + ' ' + sgN[k] + '回 平均 ' + (sgS[k] / sgN[k]).toFixed(0) + '議席(ないとき ' + (noS[k] / noN[k]).toFixed(0) + ')').join('・')}`);
       console.log(`${Game.Data.PARTIES[p].short} ${b.padEnd(4, ' ')} ${(sum[p] / N).toFixed(0).padStart(3)}議席(${mine[Math.floor(N * 0.1)]}〜${mine[Math.floor(N * 0.9)]})  相手 ${others}  過半数 ${pct(maj, N)}  第1党 ${pct(first, N)}  首相 ${pct(roles.pm || 0, N)}・連立与党 ${pct(roles.junior || 0, N)}・野党 ${pct(roles.opposition || 0, N)}  辞任 ${pct(resign, N)}`);
     });
   });
@@ -341,6 +345,7 @@ if (process.env.VERSUS) {
   parties.forEach((p) => {
     bots.forEach((b) => {
       let win = 0, pr = 0, s = 0, e = 0, zero = 0, tick = 0;
+      const sg = { n: 0, me: 0, meWin: 0, ai: 0, aiWin: 0, aiMeWin: 0, turnout: 0, fc: 0, fcMe: 0 };   // 奔流(R15)
       for (let i = 0; i < N; i++) {
         const seed = (i + 1) * 7919 + p.length * 104729;
         const state = newState(p, seed);
@@ -349,9 +354,19 @@ if (process.env.VERSUS) {
         playCampaign(state, b, botRnd(seed));
         win += state.election.won ? 1 : 0; pr += state.election.pr.revived ? 1 : 0; s += start; e += Game.Campaign.margin(Game.Campaign.overall(state.camp));
         zero += state.election.zeroCall ? 1 : 0; tick += state.election.callTick;
+        const el = state.election;
+        if (el.surge) {
+          sg.n++;
+          let tv = 0, vv = 0;
+          Game.Data.DISTRICT.regions.forEach((r) => { tv += r.voters * el.regions[r.id].turnout; vv += r.voters; });
+          sg.turnout += tv / vv * 100;
+          if (el.falseCall) { sg.fc++; sg.fcMe += el.falseCall.who === 'me' ? 1 : 0; }
+          if (el.surge.target === 'me') { sg.me++; sg.meWin += el.won ? 1 : 0; } else { sg.ai++; sg.aiWin += el.winner === el.surge.target ? 1 : 0; sg.aiMeWin += el.won ? 1 : 0; }
+        }
       }
       const f = (n) => (n / N * 100).toFixed(0).padStart(3);
       console.log(`${Game.Data.PARTIES[p].short} ${b.padEnd(4, ' ')} 当選 ${f(win)}% + 復活 ${f(pr)}% = ${f(win + pr)}%  差 ${(s / N).toFixed(1)} → ${(e / N).toFixed(1)}  ゼロ打ち ${(zero / N * 100).toFixed(0)}%  当確 ${B.count.ticks[Math.round(tick / N)]}ごろ`);
+      if (process.env.SURGE) console.log(`      奔流 ${pct(sg.n, N)}(投票率 ${sg.n ? (sg.turnout / sg.n).toFixed(1) : '—'}%)  自分に ${sg.me}回 → 当選 ${pct(sg.meWin, sg.me)}  相手に ${sg.ai}回 → その相手が当選 ${pct(sg.aiWin, sg.ai)}・自分が当選 ${pct(sg.aiMeWin, sg.ai)}  当確の取り消し ${pct(sg.fc, sg.n)}(自分の当確 ${sg.fcMe}回)`);
     });
   });
 }

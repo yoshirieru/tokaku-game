@@ -28,15 +28,20 @@ Game.CountView = (function () {
   }
   function narration(s, t) {
     const e = s.election, tick = e.ticks[t], cands = s.camp.cands;
-    const w = byId(cands, e.winner);
+    const w = byId(cands, e.winner), fc = e.falseCall, fw = fc ? byId(cands, fc.who) : null;
+    // 奔流(R15):先に出た当確の取り消し
+    if (fc && t === fc.retract) {
+      return '【速報】' + fw.name + '氏の当選確実を取り消します。開票の終盤、' + w.short + '氏の票が一気に開いています。' + (t === e.callTick ? w.name + '氏に当選確実。' : '');
+    }
+    if (fc && t === fc.tick && t > 0) return fw.name + '氏に当選確実が出ました。開票率 ' + Math.round(tick.pct * 100) + '%。';
     if (t === 0) {
-      const head = '午後8時、投票が締め切られました。天気は' + WEATHER[e.weather] + '、投票率は ' + turnoutAll(e).toFixed(1) + '%。' + (e.closeBoost >= 3 ? '激戦への関心から、投票所には長い列ができました。' : '');
-      return head + (e.zeroCall ? '出口調査の結果、' + w.name + '氏の当選が確実になりました。' : '出口調査では競り合っています。開票を待ちます。');
+      const head = '午後8時、投票が締め切られました。天気は' + WEATHER[e.weather] + '、投票率は ' + turnoutAll(e).toFixed(1) + '%。' + (e.surge ? '「奔流」――ふだん投票に行かない人たちが、投票所に押し寄せました。' : e.closeBoost >= 3 ? '激戦への関心から、投票所には長い列ができました。' : '');
+      return head + (e.zeroCall ? '出口調査の結果、' + w.name + '氏の当選が確実になりました。' : fc && fc.tick === 0 ? '出口調査の結果、' + fw.name + '氏の当選が確実になりました。' : '出口調査では競り合っています。開票を待ちます。');
     }
     const ord = Object.keys(tick.counted).sort(function (a, b) { return tick.counted[b] - tick.counted[a]; });
     const lead = byId(cands, ord[0]), second = byId(cands, ord[1]);
     const diff = tick.counted[ord[0]] - tick.counted[ord[1]];
-    if (t === e.callTick) return w.name + '氏に当選確実が出ました。開票率 ' + Math.round(tick.pct * 100) + '%。';
+    if (t === e.callTick) return w.name + '氏に当選確実が出ました。開票率 ' + Math.round(tick.pct * 100) + '%。' + (fc ? 'いったん当確が出た' + fw.short + '氏を、奔流の票が逆転しました。' : '');
     if (t === e.ticks.length - 1) return '開票が終わりました。' + w.name + '氏が ' + num(e.totals[e.winner]) + '票で当選。' + recountText(e);
     return '開票率 ' + Math.round(tick.pct * 100) + '%。' + lead.short + '氏がリード、' + second.short + '氏が ' + num(diff) + '票差で追っています。';
   }
@@ -48,6 +53,9 @@ Game.CountView = (function () {
     const prev = e.ticks[Math.max(0, prevShown >= 0 && prevShown < t ? prevShown : t)];
     const called = t >= e.callTick;
     const justCalled = t === e.callTick && prevShown < t;
+    const fc = e.falseCall;   // 奔流(R15)で取り消される当確
+    const fcOn = fc && t >= fc.tick && t < fc.retract, fcOff = fc && t >= fc.retract;
+    const justFalse = fc && t === fc.tick && prevShown < t, justRetract = fc && t === fc.retract && prevShown < t;
     const max = e.totals[e.winner] * 1.04;
     // 比例代表:小選挙区で負けたときだけ、開票のあと(午前1時30分)に復活できたかが分かる
     const pr = !e.won && e.pr ? e.pr : null;
@@ -67,7 +75,9 @@ Game.CountView = (function () {
     const rows = fixedOrder(cands).map(function (c) {
       const v = tick.counted[c.id], pv = prev.counted[c.id];
       const sum = Object.keys(tick.counted).reduce(function (a, k) { return a + tick.counted[k]; }, 0);
-      const stamp = called && c.id === e.winner ? '<span class="stamp' + (justCalled ? ' new' : '') + '">当確</span>' : '';
+      const stamp = called && c.id === e.winner ? '<span class="stamp' + (justCalled ? ' new' : '') + '">当確</span>'
+        : fc && c.id === fc.who && fcOn ? '<span class="stamp' + (justFalse ? ' new' : '') + '">当確</span>'
+          : fc && c.id === fc.who && fcOff ? '<span class="stamp void' + (justRetract ? ' new' : '') + '">当確取消</span>' : '';
       return '<div class="ct-row' + (c.player || c.human ? ' me' : '') + '" style="--pc:' + UI.color(c) + '">' +
         '<div class="ct-name">' + UI.partyChip(c) + '<b>' + UI.esc(c.name) + '</b><span class="sub">' + Game.Data.ROLE_NAMES[c.role] + (c.tag ? '・' + c.tag : c.player ? '・あなた' : '') + '</span>' + stamp + '</div>' +
         '<div class="ct-bar"><i style="width:' + (pv / max * 100) + '%" data-w="' + (v / max * 100) + '"></i></div>' +
@@ -96,7 +106,7 @@ Game.CountView = (function () {
       '<span class="ct-clock">' + (prShown ? '1:30' : tick.time) + '</span><span class="ct-pct">開票率 <b>' + Math.round(tick.pct * 100) + '</b>%</span></header>' +
       '<div class="ct-body"><section class="ct-cands panel">' + rows + prBox + '</section>' +
       '<div class="map-cell">' + UI.mapHtml(fill, null) + '</div></div>' +
-      '<div class="ct-ticker panel"><span class="tk-lab">速報</span><span>' + UI.esc(prShown ? prText : narration(s, t)) + '</span></div>' +
+      '<div class="ct-ticker panel' + (fc && t === fc.retract && !prShown ? ' alert' : '') + '"><span class="tk-lab">速報</span><span>' + UI.esc(prShown ? prText : narration(s, t)) + '</span></div>' +
       '<footer class="ct-btns">' +
       (t < last ? '<button type="button" class="btn" id="auto">' + (auto ? '止める' : '自動で進める') + '</button>' +
         '<button type="button" class="btn btn-primary btn-lg" id="next">' + e.ticks[t + 1].time + ' へ進む</button>' : '') +
@@ -117,7 +127,7 @@ Game.CountView = (function () {
         if (k < 1 && b.isConnected) requestAnimationFrame(step);
       })(t0);
     });
-    if (justCalled || (prJust && pr && pr.revived)) UI.sound('stamp');
+    if (justCalled || justFalse || justRetract || (prJust && pr && pr.revived)) UI.sound('stamp');
     prJust = false;
     prevShown = t;
 
@@ -195,7 +205,7 @@ Game.CountView = (function () {
     app.innerHTML = '<div class="result">' +
       '<header class="rs-head ' + (got ? 'won' : 'lost') + '">' + (got ? '<span class="stamp big new">' + (e.won ? '当選' : '比例復活') + '</span>' : '') +
       '<h1>' + head + '</h1><p>' + sub + '</p>' +
-      '<p class="sub">' + (e.recount ? UI.esc(recountText(e)) + '<br>' : '') + '投票日の天気は' + WEATHER[e.weather] + '、投票率 ' + turnoutAll(e).toFixed(1) + '%' + (e.closeBoost >= 3 ? '(激戦への関心で、ふだんより +' + e.closeBoost.toFixed(1).replace('.0', '') + 'ポイント)' : '') + '。' + (e.zeroCall ? '午後8時ちょうどに当確が出た。' : '当確が出たのは ' + e.ticks[e.callTick].time + '。') + '</p></header>' +
+      '<p class="sub">' + (e.recount ? UI.esc(recountText(e)) + '<br>' : '') + '投票日の天気は' + WEATHER[e.weather] + '、投票率 ' + turnoutAll(e).toFixed(1) + '%' + (e.surge ? '(奔流:眠っていた票が動いた)' : e.closeBoost >= 3 ? '(激戦への関心で、ふだんより +' + e.closeBoost.toFixed(1).replace('.0', '') + 'ポイント)' : '') + '。' + (e.falseCall ? 'いったん' + UI.esc(byId(cands, e.falseCall.who).name) + '氏に当確が出たが、' + e.ticks[e.falseCall.retract].time + 'に取り消された。' + UI.esc(w.short) + '氏に当確が出たのは ' + e.ticks[e.callTick].time + '。' : e.zeroCall ? '午後8時ちょうどに当確が出た。' : '当確が出たのは ' + e.ticks[e.callTick].time + '。') + '</p></header>' +
       '<div class="rs-body"><div class="rs-left"><section class="panel"><h2>開票結果</h2>' + table + '</section>' +
       '<section class="panel"><h2>背負った約束</h2>' + promiseText + '</section>' +
       '<section class="panel"><h2>この先</h2><p class="pr-note">' + (e.won ? '議員として任期に入る。約束を果たし、地盤を固め、次の選挙に備える。' : revived ? '比例復活の議員として任期に入る。次の選挙でも、選挙区には現職の相手がいる。' : willDrop ? '続けて' + Game.Balance.retire.lossStreak + '回、議席を得られなかった。党は、次の選挙に別の候補を立てる。' : '浪人として地元を歩き、次の解散を待つ。') + '</p></section></div>' +

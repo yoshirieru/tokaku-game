@@ -58,6 +58,7 @@ Game.Campaign = (function () {
     camp.comeback = { national: true, wind: wind, unity: unity, kept: kept, broken: broken, money: carryMoney, prevMine: cr.partySeats,
       fatigue: fatigue, govBonus: govBonus, govRole: cr.gov ? cr.gov.role : null, approval: cr.gov ? Math.round(cr.gov.approval) : null, ethic: ethic };
     camp.deck = R.shuffle(state, NB.deck.concat(NB.manifesto[party]));
+    planSurge(state, camp);   // 奔流(R15)
     state.camp = camp;
     startDay(state);
     return camp;
@@ -134,6 +135,7 @@ Game.Campaign = (function () {
     const ethicAll = ethic.clean + ethic.penalty + ethic.upper;
     if (ethicAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', ethicAll); });
     camp.deck = R.shuffle(state, deck);
+    planSurge(state, camp);   // 奔流(R15)
     state.camp = camp;
     startDay(state);
     return camp;
@@ -375,6 +377,7 @@ Game.Campaign = (function () {
       morningEvent(state);
     }
     Game.Scandal.campaignSlush(state);   // 裏金の報道・討論会での追及(R9)
+    surgeMorning(camp);   // 奔流の朝(R15)
     if (camp.day === B.campaign.days) {
       camp.pending.push({ type: 'event', id: 'lastday', title: '最終日', text: '「最後のお願い」に声がかれる。今日は、地区を選ぶカードの効果がすべて +' + B.campaign.lastDayBonus + '。', fx: [] });
     }
@@ -415,6 +418,67 @@ Game.Campaign = (function () {
     camp.news = text;
     return { text: text, fx: fx };
   }
+  // ---------- 奔流(R15)----------
+  // 選挙の始まりに、起きるかどうかと、起きる日を決める。対象は始まりの全体の支持がいちばん低い候補(党首の総選挙は、いちばん小さい党)
+  function planSurge(state, camp) {
+    const S = bal().surge;
+    if (R.next(state) >= S.chance) { camp.surge = null; return; }
+    // 対象は、プレイヤーではない候補のうち、いちばん支持の低い候補(1人用・全国)。対戦モードは2人も含めて、いちばん低い候補
+    const o = overall(camp);
+    const target = Object.keys(o).filter(function (k) { return camp.vs || k !== 'me'; }).sort(function (a, b) { return o[a] - o[b]; })[0];
+    camp.surge = { day: S.dayMin + Math.floor(R.next(state) * (S.dayMax - S.dayMin + 1)), target: target, party: cand(camp, target).party, active: false,
+      luck: 1 + S.spread * (2 * R.next(state) - 1) };   // 隠れた票の大きさのぶれ
+  }
+  // 奔流の朝:知らせを積み、この日から伸びはじめる
+  function surgeMorning(camp) {
+    const sg = camp.surge;
+    if (!sg || sg.active || camp.day < sg.day) return null;
+    sg.active = true;
+    const S = bal().surge, c = cand(camp, sg.target), nat = Game.Data.DISTRICT.national;
+    // 伸びの大きさ:いまのトップとの差を、投票日までにどれだけ詰めるか
+    const o = overall(camp), lead = Object.keys(o).filter(function (k) { return k !== sg.target; }).sort(function (a, b) { return o[b] - o[a]; })[0];
+    const left = bal().campaign.days - camp.day + 1;
+    const all = Math.max(0, o[lead] - o[sg.target]) * (nat ? S.closeNation : sg.target === 'me' ? S.closeMe : S.closeAi);
+    sg.daily = Math.round(Math.max(S.dailyMin, all * S.visible / left) * 10) / 10;   // 選挙戦で見えるのは、ほんの一部
+    sg.hidden = Math.round(all * (1 - S.visible) * (sg.luck || 1) * 10) / 10;   // 残りは隠れた票。投票日に足し、開票の後半に一気に開く
+    const who = nat ? Game.Data.PARTIES[c.party].name : c.name + '候補';
+    const ev = {
+      type: 'event', id: 'surge', title: '奔流', fx: [], target: sg.target,
+      kicker: camp.day + '日目・何かが動き出した',
+      text: (sg.target === 'me'
+        ? '誰もまだ気づいていなかった。あなたの演説に、見たことのない数の人が足を止めはじめた。ふだん投票に行かない人たちが、動き出している。'
+        : 'だれも本気にしていなかった' + who + 'の街頭に、人の波が押し寄せている。ふだん投票に行かない人たちが、動き出した。') +
+        '世論調査に映るのは、ほんの一部(毎日、全' + (nat ? 'ブロック' : '地区') + 'で +' + sg.daily + ')。眠っていた票は、開票の夜に姿を現す。投票率は8割を超える見込み。',
+    };
+    camp.pending.push(ev);
+    return ev;
+  }
+  // 1日の終わり:奔流の候補が伸びる
+  function surgeTick(camp, fx) {
+    const sg = camp.surge;
+    if (!sg || !sg.active) return;
+    regions().forEach(function (r) {
+      const d = applyGain(camp, r.id, sg.target, sg.daily);
+      if (fx) fx.push({ region: r.id, who: sg.target, gain: Math.round(d) });
+    });
+  }
+  // 奔流の隠れた票を足した支持(地区ごと。camp.shares は変えない)。起きていなければ null
+  function surgeShares(camp, regionId) {
+    const sg = camp.surge;
+    if (!sg || !sg.active || !sg.hidden) return null;
+    const C = bal().campaign, s = camp.shares[regionId], out = {};
+    const old = s[sg.target], nw = Math.max(C.shareFloor, Math.min(C.shareCap, old + sg.hidden)), k = (100 - nw) / (100 - old);
+    Object.keys(s).forEach(function (c) { out[c] = c === sg.target ? nw : s[c] * k; });
+    return out;
+  }
+  // 奔流の投票率(地区ごと、0〜1)。起きていなければ null
+  function surgeTurnout(state, camp, r) {
+    const sg = camp.surge, S = bal().surge;
+    if (!sg || !sg.active) return null;
+    const lift = r.tags && r.tags.some(function (t) { return t === 'float' || t === 'youth'; }) ? S.lift : 0;
+    return Math.max(S.turnout, Math.min(S.max, S.turnout + lift + R.normal(state) * S.noise)) / 100;
+  }
+
   // 接戦の記録(R13):上位2人の差が小さい日が続くと、投票率が上がる
   function trackClose(camp) {
     const V = bal().vote.close, o = overall(camp);
@@ -440,6 +504,7 @@ Game.Campaign = (function () {
     });
     camp.hand.forEach(function (c) { camp.discard.push(c.id); });
     camp.hand = [];
+    surgeTick(camp, fx);   // 奔流の候補が伸びる(R15)
     if (!Game.Data.DISTRICT.national) trackClose(camp);
     if (camp.day >= B.campaign.days) {
       camp.intents = [];
@@ -459,5 +524,6 @@ Game.Campaign = (function () {
     // 対戦モード(js/engine/versus.js)が、日の進め方を組み立て直すときに使う
     draw: draw, planIntents: planIntents, morningEvent: morningEvent, pollHeadline: pollHeadline,
     trackClose: trackClose, closeBoost: closeBoost,
+    planSurge: planSurge, surgeMorning: surgeMorning, surgeTick: surgeTick, surgeTurnout: surgeTurnout, surgeShares: surgeShares,
   };
 })();

@@ -60,6 +60,7 @@ Game.Versus = (function () {
     delete first.scandal;
     Object.assign(camp, first);
     state.camp = camp;
+    C.planSurge(state, camp);   // 奔流(R15):ハンデのあとの支持で決める(下で、もう一度決め直す)
     // ハンデ:始まりの見込みの票(有権者 × 投票率 × 支持)が少ないほうに、全地区で同じだけ足して、2人の見込みの票をそろえる
     camp.vs.handicap = null;
     if (o.handicap) {
@@ -78,7 +79,9 @@ Game.Versus = (function () {
         add += g;
       }
       camp.vs.handicap = { slot: who === 'me' ? 0 : 1, pts: Math.round(add * 10) / 10 };
+      if (camp.surge) { const o2 = C.overall(camp); camp.surge.target = Object.keys(o2).sort(function (a, b) { return o2[a] - o2[b]; })[0]; camp.surge.party = C.cand(camp, camp.surge.target).party; }
     }
+    if (camp.surge) camp.surge.slot = camp.surge.target === 'me' ? 0 : camp.surge.target === 'vs' ? 1 : -1;   // 視点を入れ替えても追えるように
     state.screen = 'campaign';
     startDay(state);
     return camp;
@@ -94,6 +97,7 @@ Game.Versus = (function () {
       if (c.id === 'me') { c.id = 'vs'; c.player = false; } else if (c.id === 'vs') { c.id = 'me'; c.player = true; }
     });
     camp.cands.sort(function (a, b) { return (b.id === 'me') - (a.id === 'me'); });   // 'me' を先頭に(1人用と同じ並び)
+    if (camp.surge && (camp.surge.target === 'me' || camp.surge.target === 'vs')) camp.surge.target = camp.surge.target === 'me' ? 'vs' : 'me';
     vs.active = 1 - vs.active;
     state.player.name = vs.names[vs.active];
     state.player.party = vs.parties[vs.active];
@@ -135,6 +139,13 @@ Game.Versus = (function () {
         copy.fx = [];
         vs.stash.pending.push(copy);
       }
+    }
+    // 奔流の朝(R15):先手の視点で起こし、後手にも同じ知らせ
+    const sg = C.surgeMorning(camp);
+    if (sg) {
+      const copy = JSON.parse(JSON.stringify(sg));
+      if (camp.surge.slot >= 0) copy.text = copy.text.replace(/^誰もまだ気づいていなかった。あなたの/, '誰もまだ気づいていなかった。' + vs.names[camp.surge.slot] + 'さんの');
+      vs.stash.pending.push(copy);
     }
     if (camp.day === B.campaign.days) {
       const last = { type: 'event', id: 'lastday', title: '最終日', text: '「最後のお願い」に声がかれる。今日は、地区を選ぶカードの効果がすべて +' + B.campaign.lastDayBonus + '。', fx: [] };
@@ -182,6 +193,7 @@ Game.Versus = (function () {
       }
       fx.push({ region: it.region, who: it.who, gain: Math.round(C.applyGain(camp, it.region, it.who, g)), shielded: shielded });
     });
+    C.surgeTick(camp, fx);   // 奔流の候補が伸びる(R15)
     C.trackClose(camp);   // 接戦が続くと投票率が上がる(R13)
     if (camp.day >= B.campaign.days) {
       camp.intents = [];

@@ -114,7 +114,7 @@ Game.VersusView = (function () {
     }).join('');
     app.innerHTML = '<div class="result">' +
       '<header class="rs-head won">' + (e.resultSeen ? '' : '<span class="stamp big new">勝利</span>') + '<h1><span class="vs-tag">' + (out.slot ? '2P' : '1P') + '</span>' + UI.esc(out.name) + 'さんの勝ち</h1>' +
-      '<p>' + num(out.gap) + '票差。' + seatLine + '</p></header>' +
+      '<p>' + num(out.gap) + '票差。' + seatLine + '</p>' + (e.surge ? '<p class="sub">奔流:投票率は8割を超えた。</p>' : '') + '</header>' +
       '<div class="rs-body"><div class="rs-left"><section class="panel"><h2>開票結果<small>' + UI.esc(Game.Data.DISTRICT.name) + '</small></h2>' + rows + '</section></div>' +
       '<div class="map-cell">' + UI.mapHtml(fill, null) + '</div></div>' +
       '<footer class="ct-btns"><button type="button" class="btn" id="title">タイトルへ</button>' +

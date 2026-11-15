@@ -38,7 +38,7 @@ Game.CampaignView = (function () {
       }).join('');
       const lv = seats.me >= NB.majority ? 'good' : ord[0] === 'me' ? 'even' : 'bad';
       return '<section class="race panel" aria-label="議席の見込み"><span class="race-lab">議席の見込み</span><div class="race-bar">' + segs + '</div>' +
-        '<span class="race-mark"><span class="mk mk-' + lv + '">' + seats.me + '議席</span><small class="maj-small">過半数 ' + NB.majority + '</small></span></section>';
+        surgeChip(camp) + '<span class="race-mark"><span class="mk mk-' + lv + '">' + seats.me + '議席</span><small class="maj-small">過半数 ' + NB.majority + '</small></span></section>';
     }
     const o = C.overall(camp);
     const segs = C.ranking(o).map(function (id) {
@@ -46,8 +46,15 @@ Game.CampaignView = (function () {
       return '<span class="seg" style="flex:' + o[id].toFixed(1) + ' 1 0;background:' + UI.color(c) + '"><b>' + UI.esc(c.short) + '</b>' + Math.round(o[id]) + '%</span>';
     }).join('');
     return '<section class="race panel" aria-label="全体の情勢"><span class="race-lab">全体の情勢</span><div class="race-bar">' + segs + '</div>' +
-      (camp.close ? '<span class="close-chip" title="上位2人の差が小さい日が続くと、投票日の投票率が上がる(浮動票・若者の地区ほど大きく)">激戦 ' + camp.close + '日・投票率 +' + C.closeBoost(camp).toFixed(1).replace('.0', '') + '</span>' : '') +
+      surgeChip(camp) + (camp.close ? '<span class="close-chip" title="上位2人の差が小さい日が続くと、投票日の投票率が上がる(浮動票・若者の地区ほど大きく)">激戦 ' + camp.close + '日・投票率 +' + C.closeBoost(camp).toFixed(1).replace('.0', '') + '</span>' : '') +
       '<span class="race-mark">' + UI.markHtml(C.margin(o)) + '</span></section>';
+  }
+  // 奔流(R15)の札:起きているあいだ、だれに票が流れ込んでいるか
+  function surgeChip(camp) {
+    const sg = camp.surge;
+    if (!sg || !sg.active) return '';
+    const c = C.cand(camp, sg.target), nat = Game.Data.DISTRICT.national;
+    return '<span class="surge-chip" title="眠っていた票が動き出した。投票日まで毎日、全' + (nat ? 'ブロック' : '地区') + 'で伸びる。投票率は8割を超える見込み">奔流 → ' + UI.esc(sg.target === 'me' ? 'あなた' : nat ? Game.Data.PARTIES[c.party].short : c.short) + '</span>';
   }
   // 相手の今日の動きが、いまのままだとどれだけ効くか(先回り・固い票を見込む)
   function intentPreview(camp) {
@@ -270,6 +277,10 @@ Game.CampaignView = (function () {
           { label: '<b>政策を語る</b><span>確実に、全地区で +' + D.policy.all + '</span>', onClick: choose('policy') },
           { label: '<b>地元の暮らしを語る</b><span>高齢層・子育て世帯の地区で +' + D.local.gain + '</span>', onClick: choose('local') },
         ].concat(Game.Scandal.rivalRumor(s) ? [{ label: '<b>裏金を追及する</b><span>' + UI.esc(C.cand(camp, 'vs').short) + '候補の政治資金にうわさがある。確実に全地区 ' + B.slush.pvpHit + '、相手の発覚度 +' + B.slush.pvpExposure + '</span>', onClick: choose('slush') }] : []), 'choices');
+    } else if (p.id === 'surge') {   // 奔流(R15)
+      UI.sound('stamp');
+      UI.modal('<div class="surge-head"><p class="m-kicker">' + UI.esc(p.kicker) + '</p><h2 class="surge-title">奔流</h2><p class="surge-sub">眠っていた票が、動き出す</p></div><p>' + UI.esc(p.text) + '</p>',
+        [{ label: 'わかった', primary: true, onClick: next }], 'surge');
     } else {
       UI.modal('<p class="m-kicker">' + camp.day + '日目</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
         [{ label: 'わかった', primary: true, onClick: function () { pendingFx = pendingFx.concat(p.fx || []); next(); } }]);

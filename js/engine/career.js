@@ -98,6 +98,8 @@ Game.Career = (function () {
     cr.elections += 1; cr.wins += 1; cr.districtWins += 1; cr.lossStreak = 0;   // 党首は地元の議席を守ったものとする
     cr.merit += B.merit.winDistrict;
     cr.partySeats = e.seats.me;
+    cr.nationSeats = {};   // 次の総選挙の「選挙前勢力」(全党)
+    state.camp.cands.forEach(function (c) { cr.nationSeats[c.party] = e.seats[c.id]; });
     cr.bestSeats = Math.max(cr.bestSeats || 0, e.seats.me);
     if (e.meMajority) cr.wonMajority = true;
     // 政権づくり:画面(連立の画面)か自動プレイが先に決めている。決まっていなければ、ここで自動で決める

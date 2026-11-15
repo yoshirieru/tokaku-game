@@ -36,17 +36,19 @@ Game.Vote = (function () {
     ids.forEach(function (id) { seats[id] = 0; votes[id] = 0; });
     let total = 0;
     Game.Data.DISTRICT.regions.forEach(function (r) {
-      const p = {}, w = {};
-      let sum = 0;
+      const p = {}, w = {}, fin = Game.Campaign.surgeShares(camp, r.id);   // 奔流の隠れた票を足した支持(R15)
+      const bp = {}, bw = {};   // 奔流の隠れた票がないときの得票(開票のはじめに見える姿)
+      let sum = 0, bsum = 0;
       ids.forEach(function (id) {
-        let v = camp.shares[r.id][id] + swing[id] + R.normal(state) * V.swingRegion;
-        if (id === 'me') v += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
-        if (id === 'vs' && camp.vs) v += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
-        p[id] = Math.max(1, v);
-        sum += p[id];
+        let d = swing[id] + R.normal(state) * V.swingRegion;
+        if (id === 'me') d += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
+        if (id === 'vs' && camp.vs) d += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
+        p[id] = Math.max(1, (fin ? fin[id] : camp.shares[r.id][id]) + d);
+        bp[id] = Math.max(1, camp.shares[r.id][id] + d);
+        sum += p[id]; bsum += bp[id];
       });
-      ids.forEach(function (id) { p[id] = p[id] / sum; w[id] = Math.pow(p[id], NB.cube); });
-      const turnout = Math.max(20, NB.turnout + weather.turnout + R.normal(state) * NB.turnoutNoise) / 100;
+      ids.forEach(function (id) { p[id] = p[id] / sum; w[id] = Math.pow(p[id], NB.cube); bp[id] = bp[id] / bsum; bw[id] = Math.pow(bp[id], NB.cube); });
+      const turnout = Game.Campaign.surgeTurnout(state, camp, r) || Math.max(20, NB.turnout + weather.turnout + R.normal(state) * NB.turnoutNoise) / 100;   // 奔流なら8割超(R15)
       const ballots = Math.round(r.voters * turnout);
       const smd = largestRemainder(r.smd, w), pr = dhondt(r.pr, p);
       const st = {}, share = {};
@@ -56,7 +58,13 @@ Game.Vote = (function () {
         const n = Math.round(ballots * p[id]); votes[id] += n; total += n;
       });
       byBlock[r.id] = { share: share, smd: smd, pr: pr, seats: st, turnout: turnout };
+      if (fin) {
+        const bs = largestRemainder(r.smd, bw), bpr = dhondt(r.pr, bp), base = {};
+        ids.forEach(function (id) { base[id] = bs[id] + bpr[id]; });
+        byBlock[r.id].base = base;
+      }
     });
+    const sgOn = camp.surge && camp.surge.active ? camp.surge : null, late = B.surge.late;
     const order = ids.slice().sort(function (a, b) { return seats[b] - seats[a]; });
     // 開票の進み方:ブロックごとに開きはじめる時刻がちがう。開いた割合のぶんだけ議席が積み上がる
     const ticks = C.ticks.map(function (time, t) {
@@ -66,7 +74,13 @@ Game.Vote = (function () {
       Object.keys(byBlock).forEach(function (rid) {
         const f = Math.max(0, Math.min(1, (t - NB.countStart[rid]) / NB.countSpan));
         regionPct[rid] = f;
-        ids.forEach(function (id) { const n = Math.round(byBlock[rid].seats[id] * f); shown[id] += n; done += n; all += byBlock[rid].seats[id]; });
+        const b = byBlock[rid];
+        ids.forEach(function (id) {
+          // 奔流:隠れた票の党の議席は開票の後半に一気に開く。ほかの党は、隠れた票がないときの議席の割合で開き、最後に確定の議席になる
+          const F = b.seats[id];
+          const n = !b.base ? Math.round(F * f) : id === sgOn.target ? Math.round(F * Math.pow(f, late)) : f >= 1 ? F : Math.min(F, Math.round(b.base[id] * f));
+          shown[id] += n; done += n; all += F;
+        });
       });
       return { time: time, seats: shown, pct: done / all, regionPct: regionPct };
     });
@@ -75,9 +89,19 @@ Game.Vote = (function () {
     for (let t = 0; t < ticks.length; t++) {
       if (ids.some(function (id) { return ticks[t].seats[id] >= NB.majority; })) { callTick = t; break; }
     }
+    // 出口調査(奔流の隠れた票がまだ見えていない)の見立て
+    let exit = null;
+    if (sgOn) {
+      const bseats = {};
+      ids.forEach(function (id) { bseats[id] = 0; });
+      Object.keys(byBlock).forEach(function (rid) { ids.forEach(function (id) { bseats[id] += byBlock[rid].base ? byBlock[rid].base[id] : byBlock[rid].seats[id]; }); });
+      const bo = ids.slice().sort(function (a, b) { return bseats[b] - bseats[a]; });
+      exit = { seats: bseats, lead: bo[0], majority: bseats[bo[0]] >= NB.majority };
+    }
     const cr = state.career;
     state.election = {
-      national: true, weather: weather.id, byBlock: byBlock, seats: seats, votes: votes, total: total, order: order,
+      exit: exit,
+      national: true, surge: camp.surge && camp.surge.active ? { target: camp.surge.target, party: camp.surge.party } : null, weather: weather.id, byBlock: byBlock, seats: seats, votes: votes, total: total, order: order,
       winner: order[0], won: order[0] === 'me', majority: seats[order[0]] >= NB.majority, meMajority: seats.me >= NB.majority,
       prevMine: cr && cr.partySeats != null ? cr.partySeats : null,
       ticks: ticks, callTick: callTick, zeroCall: false, shown: 0, lossRatio: 100, pr: null,
@@ -113,22 +137,28 @@ Game.Vote = (function () {
     let total = 0;
     const boost = Game.Campaign.closeBoost(camp);
     Game.Data.DISTRICT.regions.forEach(function (r) {
-      const s = {};
-      let sum = 0;
+      const s = {}, bs = {}, fin = Game.Campaign.surgeShares(camp, r.id);   // 奔流の隠れた票を足した支持(R15)
+      let sum = 0, bsum = 0;
       ids.forEach(function (id) {
-        let v = camp.shares[r.id][id] + swing[id] + R.normal(state) * V.swingRegion;
-        if (id === 'me') v += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
-        if (id === 'vs' && camp.vs) v += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
-        s[id] = Math.max(1, v);
-        sum += s[id];
+        let d = swing[id] + R.normal(state) * V.swingRegion;
+        if (id === 'me') d += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
+        if (id === 'vs' && camp.vs) d += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
+        s[id] = Math.max(1, (fin ? fin[id] : camp.shares[r.id][id]) + d);
+        bs[id] = Math.max(1, camp.shares[r.id][id] + d);   // 隠れた票がないときの姿(開票のはじめに見える)
+        sum += s[id]; bsum += bs[id];
       });
       // 接戦が続くと、関心が高まって投票率が上がる(R13)。浮動票・若者の地区ほど大きく、組織票の地区は小さく
       const cm = r.tags.some(function (t) { return t === 'float' || t === 'youth'; }) ? V.close.high : r.tags.indexOf('org') >= 0 ? V.close.low : 1;
-      const turnout = Math.max(20, Math.min(95, Game.Campaign.turnoutOf(r.id) + weather.turnout + R.normal(state) * V.turnoutNoise + boost * cm)) / 100;
+      const turnout = Game.Campaign.surgeTurnout(state, camp, r) || Math.max(20, Math.min(95, Game.Campaign.turnoutOf(r.id) + weather.turnout + R.normal(state) * V.turnoutNoise + boost * cm)) / 100;   // 奔流なら8割超(R15)
       const ballots = Math.round(r.voters * turnout);
       const votes = {};
       ids.forEach(function (id) { votes[id] = Math.round(ballots * s[id] / sum); totals[id] += votes[id]; total += votes[id]; });
       regions[r.id] = { turnout: turnout, votes: votes };
+      if (fin) {
+        const base = {};
+        ids.forEach(function (id) { base[id] = Math.round(ballots * bs[id] / bsum); });
+        regions[r.id].base = base;
+      }
     });
 
     // 開票所の不審な動き(R10):立会人を送っていなければ、票が相手に流れることがある
@@ -144,6 +174,7 @@ Game.Vote = (function () {
       skew[rid] = {};
       ids.forEach(function (id) { skew[rid][id] = R.normal(state) * C.earlySkew; });
     });
+    const late = B.surge.late;
     const ticks = C.ticks.map(function (time, t) {
       const counted = {}, regionPct = {}, byRegion = {};
       ids.forEach(function (id) { counted[id] = 0; });
@@ -152,8 +183,10 @@ Game.Vote = (function () {
         const f = C.progress[rid][t];
         regionPct[rid] = f;
         byRegion[rid] = {};
+        const base = regions[rid].base, k = base ? Math.pow(f, late) : 1;   // 奔流の隠れた票は、開票の後半に一気に開く
         ids.forEach(function (id) {
-          const n = Math.round(regions[rid].votes[id] * f * (1 + skew[rid][id] * (1 - f)));
+          const v = base ? base[id] + (regions[rid].votes[id] - base[id]) * k : regions[rid].votes[id];
+          const n = Math.round(v * f * (1 + skew[rid][id] * (1 - f)));
           byRegion[rid][id] = n;
           counted[id] += n; sum += n;
         });
@@ -161,15 +194,42 @@ Game.Vote = (function () {
       return { time: time, counted: counted, pct: Math.min(1, sum / total), regionPct: regionPct, byRegion: byRegion };
     });
     // 当確が出る時刻:大差なら20時ちょうど(ゼロ打ち)。そうでなければ、開票済みの差が残りの票に対して十分になったとき
-    let callTick = ticks.length - 1;
-    if (marginPct >= C.zeroCallMargin) {
+    // 奔流(R15)のときは、報道は隠れた票がまだ見えていない出口調査と開票で判断する。先に別の候補に当確を出し、あとで取り消すことがある
+    const lastT = ticks.length - 1;
+    const lead = function (t) {
+      const c = ticks[t].counted, ord = ids.slice().sort(function (a, b) { return c[b] - c[a]; });
+      const sum = ids.reduce(function (a, id) { return a + c[id]; }, 0);
+      return { who: ord[0], gap: c[ord[0]] - c[ord[1]], left: total - sum, c: c };
+    };
+    let falseCall = null, from = 1, baseZero = false;
+    const anyBase = Object.keys(regions).some(function (rid) { return regions[rid].base; });
+    if (anyBase) {
+      const bt = {};
+      ids.forEach(function (id) { bt[id] = Object.keys(regions).reduce(function (a, rid) { return a + (regions[rid].base || regions[rid].votes)[id]; }, 0); });
+      const bo = ids.slice().sort(function (a, b) { return bt[b] - bt[a]; });
+      const bAll = ids.reduce(function (a, id) { return a + bt[id]; }, 0);
+      baseZero = bo[0] === winner && (bt[bo[0]] - bt[bo[1]]) / bAll * 100 >= C.surgeZero;   // 出口調査で見えている姿のまま勝つなら、20時に当確
+      if (bo[0] !== winner) {
+        let ft = -1;
+        if ((bt[bo[0]] - bt[bo[1]]) / bAll * 100 >= C.surgeZero) ft = 0;
+        else for (let t = 1; t < lastT; t++) { const L = lead(t); if (L.who === bo[0] && L.gap > L.left * C.surgeCall) { ft = t; break; } }
+        if (ft >= 0) {
+          let rt = lastT;
+          for (let t = ft + 1; t < lastT; t++) {
+            if (lead(t).who !== bo[0] && ticks[t].pct >= C.retractPct) { rt = t; break; }
+          }
+          falseCall = { who: bo[0], tick: ft, retract: rt };
+          from = rt;
+        }
+      }
+    }
+    let callTick = lastT;
+    if (anyBase ? baseZero : marginPct >= C.zeroCallMargin) {
       callTick = 0;
     } else {
-      for (let t = 1; t < ticks.length; t++) {
-        const c = ticks[t].counted;
-        const ord = ids.slice().sort(function (a, b) { return c[b] - c[a]; });
-        const sum = ids.reduce(function (a, id) { return a + c[id]; }, 0);
-        if (ord[0] === winner && c[ord[0]] - c[ord[1]] > (total - sum) * C.callRatio) { callTick = t; break; }
+      for (let t = from; t < ticks.length; t++) {
+        const L = lead(t);
+        if (L.who === winner && L.gap > L.left * C.callRatio) { callTick = t; break; }
       }
     }
 
@@ -183,6 +243,8 @@ Game.Vote = (function () {
       winner: winner, won: winner === 'me', marginPct: marginPct,
       lossRatio: lossRatio,   // 惜敗率
       pr: pr, recount: recount, closeBoost: boost, closeDays: camp.close || 0,
+      surge: camp.surge && camp.surge.active ? { target: camp.surge.target, party: camp.surge.party } : null,
+      falseCall: falseCall,   // 奔流で取り消された当確 { who, tick(出た時刻), retract(取り消した時刻) }
       ticks: ticks, callTick: callTick, zeroCall: callTick === 0, shown: 0,
     };
     return state.election;

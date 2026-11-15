@@ -68,7 +68,7 @@ Game.Balance = {
         campus:      { minsei: 26, kyowa: 32, mirai: 37 },
       },
       turnout: { rural: 62, residential: 54, downtown: 50, industrial: 55, campus: 38 },
-      guide: { minsei: 70, kyowa: 49, mirai: 34 },
+      guide: { minsei: 67, kyowa: 47, mirai: 35 },
     },
     touou7: {    // 都会(下町・山の手は高齢層、ほかは浮動票。未来の地盤)
       base: {
@@ -80,7 +80,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 58, industrial: 52, rural: 60, campus: 40 },
       rivalMult: 1.5,
-      guide: { minsei: 39, kyowa: 36, mirai: 58 },
+      guide: { minsei: 34, kyowa: 31, mirai: 53 },
     },
     biyou2: {    // 保守王国(民政の地盤)
       base: {
@@ -92,7 +92,7 @@ Game.Balance = {
       },
       turnout: { downtown: 58, residential: 64, industrial: 56, rural: 66, campus: 42 },
       rivalMult: 1.3,
-      guide: { minsei: 83, kyowa: 26, mirai: 5 },
+      guide: { minsei: 77, kyowa: 22, mirai: 7 },
     },
     ominato4: {  // 工業都市(共和の地盤)
       base: {
@@ -104,7 +104,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 55, industrial: 58, rural: 62, campus: 38 },
       rivalMult: 1.25,
-      guide: { minsei: 40, kyowa: 80, mirai: 15 },
+      guide: { minsei: 34, kyowa: 76, mirai: 14 },
     },
     namio5: {    // 改革の地盤(未来の強い現職)
       base: {
@@ -116,7 +116,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 55, industrial: 54, rural: 60, campus: 40 },
       rivalMult: 1.45,
-      guide: { minsei: 38, kyowa: 30, mirai: 73 },
+      guide: { minsei: 32, kyowa: 29, mirai: 72 },
     },
     kitatsu1: {  // 地方の激戦区(R10。選挙違反が起きやすい:fraud は balance.js の fraud の起きやすさ)
       base: {
@@ -129,7 +129,7 @@ Game.Balance = {
       turnout: { downtown: 58, residential: 66, industrial: 60, rural: 68, campus: 46 },
       rivalMult: 1.45,
       fraud: 1,
-      guide: { minsei: 67, kyowa: 40, mirai: 27 },
+      guide: { minsei: 56, kyowa: 36, mirai: 25 },
     },
   },
   // 準備の画面の、難しさのことば(guide がこの値以上なら。どれにも届かなければ「とてもむずかしい」)
@@ -409,6 +409,18 @@ Game.Balance = {
     wind: { per: 6, max: 1 }, twist: { law: 1, attack: -1 }, bigLoss: 10, lossApproval: -5, worldRuling: 'minsei',
   },
 
+  // ---- 奔流(R15。js/engine/campaign.js の planSurge ほか)----
+  //   選挙ごとに chance の見込みで起きる(5〜6回に1回)。プレイヤーではない候補のうち、いちばん勝ち目の薄い候補(始まりの全体の支持がいちばん低い)に、眠っていた票が流れ込む
+  //   (1人用・全国の総選挙。対戦モードは2人も含めた中で、いちばん低い候補)
+  //   dayMin〜dayMax 日目の朝に知らせが来る。伸びの合計のうち visible だけが選挙戦の毎日に少しずつ見え、残りは「隠れた票」として投票日に足す
+  //     隠れた票の大きさは、選挙ごとに × (1 ± spread) でぶれる(どこまで届くかは開票まで分からない)
+  //     隠れた票は開票の後半に一気に開く(地区の開票率 f のとき、隠れた票は f^late の割合だけ開いている)。先に出た当確が取り消されることがある
+  //     伸びの合計は、その朝のトップとの差 × closeAi(相手の候補)/ closeMe(対戦で人間に当たったとき。ごく小さく)。見える分は残りの日数で割って毎日足す(1日 dailyMin 以上)
+  //     伸びた分は、ほかの候補(トップも)から削られるので、差は数字より速く詰まる。目安:相手の候補なら3〜4割で勝つ(選挙区によっては5割)
+  //     党首の総選挙は closeNation(小選挙区の議席は得票の3乗で配るので、同じ伸びでも議席は大きく動く)
+  //   投票日の投票率は、どの地区も turnout + ぶれ(標準偏差 noise)、浮動票・若者の地区はさらに +lift(max まで)。全体で8割を超える
+  surge: { chance: 0.18, dayMin: 2, dayMax: 5, closeAi: 0.6, closeMe: 0.05, closeNation: 0.55, visible: 0.2, spread: 0.4, dailyMin: 0.1, late: 4, turnout: 81, noise: 2, lift: 3, max: 94 },
+
   // ---- 対戦モード(R8。js/engine/versus.js)----
   //   aiMult 3人目(AI)の候補の、始まりの支持の倍率(選挙区の rivalMult にさらにかける)
   //   ハンデ(2人の始まりの支持をそろえる):差の handicapRate ずつ、低いほうに全地区で足す。handicapSteps 回まで、足す量が handicapDone 未満になったらやめる
@@ -475,5 +487,9 @@ Game.Balance = {
     earlySkew: 0.12,     // 開票のはじめの、候補ごとの偏り
     zeroCallMargin: 12,  // 最終的な差がこれ以上(ポイント)なら20時ちょうどに当確
     callRatio: 0.55,     // 開票済みの差が、残りの票のこの割合を超えたら当確
+    retractPct: 0.5,     // 奔流(R15):開票率がこれ以上で、当確を出した候補が抜かれたら当確を取り消す(はじめの地区だけで抜かれても取り消さない)
+    // 奔流のときの報道は、出口調査が隠れた票(ふだん投票に行かない人)をとらえられず、早めに当確を出しがち
+    surgeZero: 4,        // 隠れた票のない姿で、差がこれ以上なら20時ちょうどに当確
+    surgeCall: 0.15,     // 開票済みの差が、残りの票のこの割合を超えたら当確
   },
 };
