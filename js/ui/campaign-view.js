@@ -46,6 +46,7 @@ Game.CampaignView = (function () {
       return '<span class="seg" style="flex:' + o[id].toFixed(1) + ' 1 0;background:' + UI.color(c) + '"><b>' + UI.esc(c.short) + '</b>' + Math.round(o[id]) + '%</span>';
     }).join('');
     return '<section class="race panel" aria-label="全体の情勢"><span class="race-lab">全体の情勢</span><div class="race-bar">' + segs + '</div>' +
+      (camp.close ? '<span class="close-chip" title="上位2人の差が小さい日が続くと、投票日の投票率が上がる(浮動票・若者の地区ほど大きく)">激戦 ' + camp.close + '日・投票率 +' + C.closeBoost(camp).toFixed(1).replace('.0', '') + '</span>' : '') +
       '<span class="race-mark">' + UI.markHtml(C.margin(o)) + '</span></section>';
   }
   // 相手の今日の動きが、いまのままだとどれだけ効くか(先回り・固い票を見込む)
@@ -172,6 +173,7 @@ Game.CampaignView = (function () {
     if (e.clean) li.push(['kept', '「クリーン」の評判で、' + where + 'の支持が +' + e.clean + '。' + (e.sns ? 'SNSのカードも +' + e.sns + '。' : '')]);
     if (e.penalty) li.push(['broken', '裏金の発覚の余波が残っている(' + where + ' ' + e.penalty + ')。']);
     if (e.unendorsed) li.push(['broken', '党の公認を取り消された。党幹部の応援は来ない。']);
+    if (e.upper) li.push([e.upper > 0 ? 'kept' : 'broken', 'この前の参院選で党が' + (e.upper > 0 ? '議席を伸ばした勢いが残っている' : '議席を減らした痛手が残っている') + '(' + where + ' ' + UI.signed(e.upper) + ')。']);
   }
 
   // ---------- 朝の知らせ ----------

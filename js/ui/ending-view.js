@@ -28,8 +28,13 @@ Game.EndingView = (function () {
       '<p class="pr-note">評価は、当選回数・役職・約束・総選挙・首相としての在任で決まる。</p></section>' +
       '<section class="panel"><h2>政治家としての歩み<small>選挙 ' + en.elections + '回</small></h2><ol class="en-history">' + history + '</ol></section></div>' +
       '<footer class="ct-btns"><button type="button" class="btn" id="title">タイトルへ</button><button type="button" class="btn" id="hall">殿堂を見る</button>' +
+      (en.paper ? '<button type="button" class="btn" id="paper">30年後の新聞</button>' : '') +
       '<button type="button" class="btn btn-primary btn-lg" id="again">はじめから遊ぶ</button></footer></div>';
     app.querySelector('#title').onclick = Game.toTitle;
+    // 30年後の新聞(R14):はじめてエンディングを開いたときに飛んでくる。あとはボタンで読み直せる
+    const pb = app.querySelector('#paper');
+    if (pb) pb.onclick = function () { Game.PaperView.show(en.paper); };
+    if (en.paper && !en.paperSeen) { en.paperSeen = true; Game.save(); Game.PaperView.show(en.paper); }
     app.querySelector('#hall').onclick = function () { Game.save(); Game.state = null; Game.view = 'hall'; Game.render(); };
     app.querySelector('#again').onclick = function () { Game.state = null; Game.view = 'setup'; Game.render(); };
   }

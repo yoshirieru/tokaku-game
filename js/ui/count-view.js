@@ -30,7 +30,7 @@ Game.CountView = (function () {
     const e = s.election, tick = e.ticks[t], cands = s.camp.cands;
     const w = byId(cands, e.winner);
     if (t === 0) {
-      const head = '午後8時、投票が締め切られました。天気は' + WEATHER[e.weather] + '、投票率は ' + turnoutAll(e).toFixed(1) + '%。';
+      const head = '午後8時、投票が締め切られました。天気は' + WEATHER[e.weather] + '、投票率は ' + turnoutAll(e).toFixed(1) + '%。' + (e.closeBoost >= 3 ? '激戦への関心から、投票所には長い列ができました。' : '');
       return head + (e.zeroCall ? '出口調査の結果、' + w.name + '氏の当選が確実になりました。' : '出口調査では競り合っています。開票を待ちます。');
     }
     const ord = Object.keys(tick.counted).sort(function (a, b) { return tick.counted[b] - tick.counted[a]; });
@@ -195,7 +195,7 @@ Game.CountView = (function () {
     app.innerHTML = '<div class="result">' +
       '<header class="rs-head ' + (got ? 'won' : 'lost') + '">' + (got ? '<span class="stamp big new">' + (e.won ? '当選' : '比例復活') + '</span>' : '') +
       '<h1>' + head + '</h1><p>' + sub + '</p>' +
-      '<p class="sub">' + (e.recount ? UI.esc(recountText(e)) + '<br>' : '') + '投票日の天気は' + WEATHER[e.weather] + '、投票率 ' + turnoutAll(e).toFixed(1) + '%。' + (e.zeroCall ? '午後8時ちょうどに当確が出た。' : '当確が出たのは ' + e.ticks[e.callTick].time + '。') + '</p></header>' +
+      '<p class="sub">' + (e.recount ? UI.esc(recountText(e)) + '<br>' : '') + '投票日の天気は' + WEATHER[e.weather] + '、投票率 ' + turnoutAll(e).toFixed(1) + '%' + (e.closeBoost >= 3 ? '(激戦への関心で、ふだんより +' + e.closeBoost.toFixed(1).replace('.0', '') + 'ポイント)' : '') + '。' + (e.zeroCall ? '午後8時ちょうどに当確が出た。' : '当確が出たのは ' + e.ticks[e.callTick].time + '。') + '</p></header>' +
       '<div class="rs-body"><div class="rs-left"><section class="panel"><h2>開票結果</h2>' + table + '</section>' +
       '<section class="panel"><h2>背負った約束</h2>' + promiseText + '</section>' +
       '<section class="panel"><h2>この先</h2><p class="pr-note">' + (e.won ? '議員として任期に入る。約束を果たし、地盤を固め、次の選挙に備える。' : revived ? '比例復活の議員として任期に入る。次の選挙でも、選挙区には現職の相手がいる。' : willDrop ? '続けて' + Game.Balance.retire.lossStreak + '回、議席を得られなかった。党は、次の選挙に別の候補を立てる。' : '浪人として地元を歩き、次の解散を待つ。') + '</p></section></div>' +

@@ -17,7 +17,7 @@ const root = path.resolve(__dirname, '..');
 const sandbox = { console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/scandal.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/engine/career.js', 'js/engine/versus.js', 'js/data/achievements.js', 'js/engine/hall.js'].forEach((f) => {
+['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/scandal.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/data/future.js', 'js/engine/future.js', 'js/engine/upper.js', 'js/engine/career.js', 'js/engine/versus.js', 'js/data/achievements.js', 'js/engine/hall.js'].forEach((f) => {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 });
 const Game = sandbox.Game;
@@ -27,7 +27,7 @@ const B = Game.Balance;
   const play = Game[k].play;
   Game[k].play = (state, uid, target, opt) => play(state, uid, target, opt || (process.env.URA ? 'hide' : 'honest'));
 });
-const ethics = { found: 0, resigned: 0, voided: 0, stolen: 0, caught: 0, by: 0, byWon: 0, redistrict: 0, moved: 0 };
+const ethics = { found: 0, resigned: 0, voided: 0, stolen: 0, caught: 0, by: 0, byWon: 0, redistrict: 0, moved: 0, upper: 0, upperWon: 0, twist: 0, pmUpper: 0, windUp: 0, windDown: 0 };
 const N = +process.argv[2] || 200;
 if (process.argv[3]) vm.runInContext('(function(B){' + process.argv[3] + '})(Game.Balance)', sandbox);
 
@@ -172,7 +172,24 @@ function playTerm(state, termBot) {
       else if (t === 'leaderRace') { stats.races++; Game.Career.runRace(state, process.env.RACE || 'unity'); if (cr.leader) stats.raceWins++; }
       else if (t === 'slush') Game.Scandal.answerSlush(state, !!process.env.FIX);   // FIX=1 なら訂正して返す
       else if (t === 'byElection') { ethics.by++; if (Game.Career.answerBy(state, true).won) ethics.byWon++; }
+      else if (t === 'budget') {   // 予算編成(R14):BUDGET=defense などで決め打ち、ないときは順ぐりに
+        const want = process.env.BUDGET;
+        let pickB = want && p.options.indexOf(want) >= 0 ? want : p.options[cr.turn % p.options.length];
+        if (want === 'smart') {   // いちばん下がりそうな指標を支える重点を選ぶ(30年後の見込みで)
+          const FB = B.future, y = Game.Future.year(state) + FB.horizon;
+          const worst = Game.Data.INDICATOR_ORDER.slice().sort((a, b) => (Game.Future.value(state, a, y) - FB.start[a]) - (Game.Future.value(state, b, y) - FB.start[b]))[0];
+          pickB = p.options.slice().sort((a, b) => (FB.budget[b].long[worst] || 0) - (FB.budget[a].long[worst] || 0))[0];
+        }
+        Game.Future.answerBudget(state, pickB);
+      }
       else if (t === 'redistrict') { ethics.redistrict++; Game.Career.answerRedistrict(state, 'race'); }
+      else if (t === 'upperElection') {   // 参院選(R12):党首は UPPER(tour / manifesto / none。省くと tour)、議員は応援
+        const r = Game.Upper.run(state, cr.leader ? (process.env.UPPER || 'tour') : 'support');
+        ethics.upper++; ethics.upperWon += r.won[state.player.party];
+        if (cr.gov && cr.gov.role === 'pm') { ethics.pmUpper++; if (r.twisted) ethics.twist++; }
+        if (r.wind > 0) ethics.windUp++; else if (r.wind < 0) ethics.windDown++;
+        Game.Career.dismiss(state);
+      }
       else if (t === 'moveSeat') {   // 国替え:いちばん勝ちやすい選挙区へ
         ethics.moved++;
         const best = Game.Scandal.movableSeats(state).sort((a, b) => B.seats[b].guide[state.player.party] - B.seats[a].guide[state.player.party])[0];
@@ -267,6 +284,7 @@ if (process.env.VERSUS) {
     let inc = 0, incSeat = 0, out = 0, outSeat = 0, kept = 0, broken = 0, light = 0, carried = 0, turns = 0, terms = 0, base = 0, stars = 0, dropped = 0, score = 0;
     let natN = 0, natSeats = 0, natMaj = 0, resigned = 0, pmEver = 0, pmTurns = 0, ousted = 0;
     const ach = {};   // 1回の歩みで達成した実績(セーブデータをまたぐものは数えない)
+    const papers = { tone: {}, delta: {}, decisions: 0, heads: {} };   // 30年後の新聞(R14)
     stats.races = 0; stats.raceWins = 0;
     for (let i = 0; i < N; i++) {
       const seed = (i + 1) * 7919 + p.length * 104729;
@@ -297,6 +315,11 @@ if (process.env.VERSUS) {
       const end = state.ending || Game.Career.retire(state, 'retire');
       ranks[state.career.bestRank || 0]++; grades[end.grade] = (grades[end.grade] || 0) + 1; score += end.score;
       Game.Hall.earned(Game.Hall.facts(state), Game.Hall.empty()).forEach((id) => { ach[id] = (ach[id] || 0) + 1; });
+      const pp = end.paper;
+      if (pp) {
+        papers.tone[pp.tone] = (papers.tone[pp.tone] || 0) + 1; papers.decisions += pp.column.count; papers.heads[pp.headline] = 1;
+        Object.keys(pp.ind).forEach((k) => { papers.delta[k] = (papers.delta[k] || 0) + pp.ind[k].delta; });
+      }
       if (state.career.wasPM) { pmEver++; pmTurns += state.career.pmTurns || 0; }
     }
     console.log(`${Game.Data.PARTIES[p].short}: 回ごとの議席 ${seat.map((w) => pct(w, N)).join(' / ')}(うち小選挙区 ${dist.map((w) => pct(w, N)).join(' / ')})`);
@@ -305,8 +328,10 @@ if (process.env.VERSUS) {
     console.log(`      到達した役職 ${B.ranks.map((r, k) => r.name + ' ' + pct(ranks[k], N)).join(' / ')}  評価 ${['S', 'A', 'B', 'C', 'D'].map((g) => g + ' ' + pct(grades[g] || 0, N)).join(' ')}(平均 ${(score / N).toFixed(0)}点)`);
     console.log(`      党首選 ${stats.races}回のうち勝ち ${pct(stats.raceWins, stats.races)}  党首としての総選挙 ${natN}回:平均 ${natN ? (natSeats / natN).toFixed(0) : '—'}議席・過半数 ${pct(natMaj, natN)}  議席を減らして辞任 ${pct(resigned, N)}`);
     console.log(`      首相になった ${pct(pmEver, N)}(平均の在任 ${pmEver ? (pmTurns / pmEver / 2).toFixed(1) : '—'}年)  支持率の低迷で退陣 ${pct(ousted, N)}`);
+    console.log(`      参院選 ${ethics.upper}回(自分の党の改選の平均 ${ethics.upper ? (ethics.upperWon / ethics.upper).toFixed(1) : '—'}議席、次の衆院選に追い風 ${pct(ethics.windUp, ethics.upper)}・逆風 ${pct(ethics.windDown, ethics.upper)})  首相のときの参院選 ${ethics.pmUpper}回のうち、ねじれ ${pct(ethics.twist, ethics.pmUpper)}`);
     console.log(`      政治とカネ・選挙違反:裏金の発覚 ${ethics.found}回(うち辞職 ${ethics.resigned})・連座制で当選無効 ${ethics.voided}・補欠選挙 ${ethics.by}回(勝ち ${ethics.byWon})・区割り改定 ${ethics.redistrict}回・国替え ${ethics.moved}回`);
     Object.keys(ethics).forEach((k) => { ethics[k] = 0; });
+    console.log(`      30年後の新聞:良い ${pct(papers.tone.good || 0, N)}・悪い ${pct(papers.tone.bad || 0, N)}・まだら ${pct(papers.tone.mixed || 0, N)}・変化なし ${pct(papers.tone.quiet || 0, N)}  見出しの種類 ${Object.keys(papers.heads).length}  決定の数 平均 ${(papers.decisions / N).toFixed(1)}  指標の動き ${Game.Data.INDICATOR_ORDER.map((k) => Game.Data.INDICATORS[k].short + ' ' + ((papers.delta[k] || 0) / N).toFixed(1)).join(' ')}`);
     console.log(`      実績 ${Game.Data.ACHIEVEMENTS.filter((a) => !a.cross).map((a) => a.title + ' ' + pct(ach[a.id] || 0, N)).join(' / ')}`);
   });
 } else {

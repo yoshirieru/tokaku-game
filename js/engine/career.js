@@ -308,14 +308,16 @@ Game.Career = (function () {
     if (kind === 'promise') {
       const p = cr.promises.filter(function (x) { return x.id === target; })[0];
       if (!p) return { ok: false, reason: '進める約束を選ぼう。' };
-      p.progress += b.promise;
+      const step = b.idle ? Game.Upper.lawProgress(state, b.promise) : b.promise;   // 首相の法案は、ねじれ国会だと参院で止まる(R12)
+      p.progress += step;
       const nat = !!P(p.id).national;   // 全国の公約(党首)
-      msg = name + '。' + (nat ? '公約「' : P(p.id).org + 'との約束「') + P(p.id).policy + '」を進めた。';
+      msg = name + '。' + (nat ? '公約「' : P(p.id).org + 'との約束「') + P(p.id).policy + '」を進めた。' + (step < b.promise ? '(ねじれ国会で、参院の審議が進まない)' : '');
       if (p.progress >= T().promiseGoal) {
         cr.promises = cr.promises.filter(function (x) { return x !== p; });
         cr.next.endorse.push(p.id);
         cr.kept += 1;
         addMerit(cr, Game.Balance.merit.kept);
+        Game.Future.recordPolicy(state, p.id);   // 果たした政策は、数年〜数十年かけて国の指標に効く(R14)
         if (nat) {
           msg = name + '。公約「' + P(p.id).policy + '」を果たした。';
           if (isPM(cr)) { changeApproval(cr, Game.Balance.gov.keptApproval); msg += '内閣支持率が上がった。'; }
@@ -341,7 +343,7 @@ Game.Career = (function () {
     } else if (b.grumble) {
       msg = Game.Data.TERM_CARDS[id].say;
     } else if (b.approval || b.sat) {
-      if (b.approval) changeApproval(cr, b.approval);
+      if (b.approval) changeApproval(cr, b.approval + (b.approval < 0 ? Game.Upper.attackBonus(state) : 0));   // 野党が参院で多数なら、追及がよく効く(R12)
       if (b.sat) cr.gov.sat = Math.min(100, cr.gov.sat + b.sat);
       if (b.contrib) addContrib(cr, b.contrib);
       msg = name + '。' + Game.Data.TERM_CARDS[id].say;
@@ -425,7 +427,10 @@ Game.Career = (function () {
     }
     // 党首選:党三役なら立候補できる
     if (cr.turn === Game.Balance.leaderRace.turn && cr.status === 'member' && !cr.leader && Game.Balance.ranks[cr.rank + 1] && Game.Balance.ranks[cr.rank + 1].leader) offerRace(state);
-    if (cr.turn > 1 && !Game.Scandal.termEvents(state)) rollEvent(state);   // 裏金・補欠選挙・区割り改定(scandal.js)が先
+    Game.Future.tick(state);   // 年を進め、毎年の通常国会で予算編成の決定(R14)
+    const upper = Game.Upper.tick(state);   // 参院選(R12)。3年ごと
+    // 裏金・補欠選挙・区割り改定(scandal.js)は参院選の会期にも進む。ふだんの出来事は、そのどれもない会期だけ
+    if (cr.turn > 1 && !Game.Scandal.termEvents(state) && !upper) rollEvent(state);
     const pct = Math.round(dissolveChance(cr) * 100);
     cr.news = Game.Data.sessionName(cr.turn) + '。' + (cr.turn >= T().turns ? 'この会期で任期満了。総選挙になる。'
       : isPM(cr) ? '内閣支持率は ' + Math.round(cr.gov.approval) + '%。解散の時期は、首相が決める。'
@@ -651,6 +656,7 @@ Game.Career = (function () {
         : cr.bestRank === 3 ? '大臣を務めあげて、政界を去る'
           : cr.bestRank >= 1 ? rank.name + 'まで務めて、政界を去る' : '陣笠議員のまま、政界を去る';
     state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice(), great: great };
+    state.ending.paper = Game.Future.paper(state);   // 30年後の新聞(R14)
     state.screen = 'ending';
     return state.ending;
   }

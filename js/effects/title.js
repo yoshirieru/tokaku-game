@@ -478,5 +478,5 @@ Game.Effects.Title = (function () {
     if (name === 'stamp') Audio.stamp(); else Audio.decide();
   }
 
-  return { render, sound };
+  return { render, sound, settings: loadSettings, reducedMotion: () => reducedMotion() };   // 設定は、エンディングの新聞の演出でも使う(R14)
 })();

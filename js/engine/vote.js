@@ -111,6 +111,7 @@ Game.Vote = (function () {
     const regions = {}, totals = {};
     ids.forEach(function (id) { totals[id] = 0; });
     let total = 0;
+    const boost = Game.Campaign.closeBoost(camp);
     Game.Data.DISTRICT.regions.forEach(function (r) {
       const s = {};
       let sum = 0;
@@ -121,7 +122,9 @@ Game.Vote = (function () {
         s[id] = Math.max(1, v);
         sum += s[id];
       });
-      const turnout = Math.max(20, Game.Campaign.turnoutOf(r.id) + weather.turnout + R.normal(state) * V.turnoutNoise) / 100;
+      // 接戦が続くと、関心が高まって投票率が上がる(R13)。浮動票・若者の地区ほど大きく、組織票の地区は小さく
+      const cm = r.tags.some(function (t) { return t === 'float' || t === 'youth'; }) ? V.close.high : r.tags.indexOf('org') >= 0 ? V.close.low : 1;
+      const turnout = Math.max(20, Math.min(95, Game.Campaign.turnoutOf(r.id) + weather.turnout + R.normal(state) * V.turnoutNoise + boost * cm)) / 100;
       const ballots = Math.round(r.voters * turnout);
       const votes = {};
       ids.forEach(function (id) { votes[id] = Math.round(ballots * s[id] / sum); totals[id] += votes[id]; total += votes[id]; });
@@ -179,7 +182,7 @@ Game.Vote = (function () {
       weather: weather.id, regions: regions, totals: totals, total: total, order: order,
       winner: winner, won: winner === 'me', marginPct: marginPct,
       lossRatio: lossRatio,   // 惜敗率
-      pr: pr, recount: recount,
+      pr: pr, recount: recount, closeBoost: boost, closeDays: camp.close || 0,
       ticks: ticks, callTick: callTick, zeroCall: callTick === 0, shown: 0,
     };
     return state.election;

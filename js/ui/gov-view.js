@@ -14,6 +14,11 @@ Game.GovView = (function () {
   function badge(cr) { return ROLE[cr.gov.role]; }
 
   // ---------- 任期の画面に差し込む部品 ----------
+  // 参院の与党の議席と、ねじれ国会(R12)
+  function upperChip(s) {
+    const U = Game.Balance.upper, rs = Game.Upper.rulingSeats(s), tw = Game.Upper.twisted(s), u = Game.Upper.get(s);
+    return '<span class="up-chip' + (tw ? ' tw' : '') + '" title="参院の与党の議席(過半数 ' + U.majority + ')。' + (u.next > 0 ? '次の参院選まで あと' + u.next + '会期' : 'この会期に参院選') + '">参院 与党 ' + rs + (tw ? '・ねじれ' : '') + '</span>';
+  }
   // 上の帯:内閣支持率。首相は解散のボタン、ほかは解散の見込み
   function barHtml(s) {
     const cr = s.career, gov = cr.gov, g = Game.Balance.gov, T = Game.Balance.term;
@@ -30,7 +35,7 @@ Game.GovView = (function () {
     }
     return '<section class="race panel wind gov-bar" aria-label="内閣支持率"><span class="race-lab">内閣支持率</span>' +
       '<div class="wind-bar appr"><i style="width:' + a + '%"></i>' + (gov.role === 'pm' ? '<span class="maj-mark" style="left:' + g.lowApproval + '%" title="退陣ライン"></span>' : '') + '</div>' +
-      '<span class="wind-text">' + whose + ' <b>' + a + '%</b><small class="gov-eff">総選挙に ' + UI.signed(bonus) + '</small></span>' + right + '</section>';
+      '<span class="wind-text">' + whose + ' <b>' + a + '%</b><small class="gov-eff">総選挙に ' + UI.signed(bonus) + '</small></span>' + upperChip(s) + right + '</section>';
   }
   // 地図:この前の総選挙で、どの党がそのブロックを取ったか
   function mapFill(s) {

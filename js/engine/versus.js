@@ -182,6 +182,7 @@ Game.Versus = (function () {
       }
       fx.push({ region: it.region, who: it.who, gain: Math.round(C.applyGain(camp, it.region, it.who, g)), shielded: shielded });
     });
+    C.trackClose(camp);   // 接戦が続くと投票率が上がる(R13)
     if (camp.day >= B.campaign.days) {
       camp.intents = [];
       activate(state, 0);   // 投票と開票は 1P の視点で(2P の固い票は vote.js が stash から読む)

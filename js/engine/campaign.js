@@ -51,7 +51,9 @@ Game.Campaign = (function () {
     const fatigue = cr.gov && cr.gov.role === 'pm' ? -Math.min(GV.fatigueMax, Math.max(0, (cr.pmStreak || 1) - 1)) * GV.fatiguePer : 0;   // 長期政権への飽き
     const ethic = Game.Scandal.startOfElection(state);   // クリーンの評判と、裏金の発覚の響き(R9)
     camp.cleanSns = ethic.sns;
-    const all = wind + unity + kept + broken + govBonus + fatigue + ethic.clean + ethic.penalty;
+    const upperWind = Game.Upper.takeWind(state);   // 参院選の勢い(R12)
+    ethic.upper = upperWind;
+    const all = wind + unity + kept + broken + govBonus + fatigue + ethic.clean + ethic.penalty + upperWind;
     if (all) regions().forEach(function (r) { applyGain(camp, r.id, 'me', all); });
     camp.comeback = { national: true, wind: wind, unity: unity, kept: kept, broken: broken, money: carryMoney, prevMine: cr.partySeats,
       fatigue: fatigue, govBonus: govBonus, govRole: cr.gov ? cr.gov.role : null, approval: cr.gov ? Math.round(cr.gov.approval) : null, ethic: ethic };
@@ -94,6 +96,7 @@ Game.Campaign = (function () {
     // 裏金(R9)・国替え(R10・R11)の持ち越し。公認を取り消されていると、党幹部の応援は来ない
     const ethic = Game.Scandal.startOfElection(state);
     camp.cleanSns = ethic.sns;
+    ethic.upper = Game.Upper.takeWind(state);   // 参院選の勢い(R12)
     let deck = B.deck.slice();
     if (ethic.unendorsed) deck = deck.filter(function (id) { return id !== 'star'; });
     if (!cr) {
@@ -128,7 +131,8 @@ Game.Campaign = (function () {
       if (rk && rk.startAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', rk.startAll); });
       camp.comeback = { wind: wind, rank: rk && rk.startAll ? { name: rk.name, gain: rk.startAll } : null, stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney, ethic: ethic };
     }
-    if (ethic.clean + ethic.penalty) regions().forEach(function (r) { applyGain(camp, r.id, 'me', ethic.clean + ethic.penalty); });
+    const ethicAll = ethic.clean + ethic.penalty + ethic.upper;
+    if (ethicAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', ethicAll); });
     camp.deck = R.shuffle(state, deck);
     state.camp = camp;
     startDay(state);
@@ -411,6 +415,14 @@ Game.Campaign = (function () {
     camp.news = text;
     return { text: text, fx: fx };
   }
+  // 接戦の記録(R13):上位2人の差が小さい日が続くと、投票率が上がる
+  function trackClose(camp) {
+    const V = bal().vote.close, o = overall(camp);
+    const ord = Object.keys(o).sort(function (a, b) { return o[b] - o[a]; });
+    camp.close = o[ord[0]] - o[ord[1]] < V.margin ? (camp.close || 0) + 1 : Math.max(0, (camp.close || 0) - 1);
+  }
+  // 接戦で上がる投票率(ポイント。地区の性格の倍率をかける前)
+  function closeBoost(camp) { const V = bal().vote.close; return Math.min(V.max, (camp.close || 0) * V.perDay); }
   // この日を終える:相手の動きが効き、次の日へ。最終日のあとは投票へ
   function endDay(state) {
     const camp = state.camp, B = bal();
@@ -428,6 +440,7 @@ Game.Campaign = (function () {
     });
     camp.hand.forEach(function (c) { camp.discard.push(c.id); });
     camp.hand = [];
+    if (!Game.Data.DISTRICT.national) trackClose(camp);
     if (camp.day >= B.campaign.days) {
       camp.intents = [];
       Game.Vote.run(state);
@@ -445,5 +458,6 @@ Game.Campaign = (function () {
     baseOf: baseOf, turnoutOf: turnoutOf,
     // 対戦モード(js/engine/versus.js)が、日の進め方を組み立て直すときに使う
     draw: draw, planIntents: planIntents, morningEvent: morningEvent, pollHeadline: pollHeadline,
+    trackClose: trackClose, closeBoost: closeBoost,
   };
 })();

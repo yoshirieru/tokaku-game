@@ -39,7 +39,12 @@ Game.TermView = (function () {
       : pct ? 'この会期のあとに解散する見込み <b>' + pct + '%</b>' : '選挙の直後。この会期のあとの解散は<b>ない</b>';
     return '<section class="race panel wind" aria-label="解散風"><span class="race-lab">解散風</span>' +
       '<div class="wind-bar"><i style="width:' + pct + '%"></i></div>' +
-      '<span class="wind-text">' + text + '</span><span class="wind-left">' + (left > 0 ? '任期満了まで あと' + left + '会期' : '') + '</span></section>';
+      '<span class="wind-text">' + text + '</span><span class="wind-left">' + (left > 0 ? '任期満了まで あと' + left + '会期・' : '') + upperLeft() + '</span></section>';
+  }
+  // 次の参院選まで(R12)
+  function upperLeft() {
+    const u = Game.Upper.get(Game.state);
+    return u.next > 0 ? '参院選まで あと' + u.next + '会期' : 'この会期に参院選';
   }
   function pinsHtml(cr, sel, kind) {
     if (Game.GovView.active(cr)) return Game.GovView.pinsHtml(Game.state);
@@ -258,6 +263,44 @@ Game.TermView = (function () {
           const S2 = Game.Data.SEATS[k];
           return { label: '<b>' + UI.esc(S2.name) + '(' + UI.esc(S2.type) + ')</b><span>' + UI.esc(S2.block) + '・' + Game.Data.PARTIES[P2].short + 'なら「' + guide(k) + '」</span>', onClick: pick(k) };
         }), 'choices');
+    } else if (p.type === 'budget') {   // R14:予算編成(すぐ出る効果と、長い目で出る効果)
+      const FB = Game.Balance.future, D2 = Game.Data, r = Game.Future.role(s);
+      const head = { pm: '来年度の予算、何に重点を置く?', member: '党の部会で、何を要望する?', junior: '連立与党として、予算に何を求める?', opposition: '野党の対案で、何を掲げる?' }[r];
+      const longText = function (id) {
+        const L = FB.budget[id].long;
+        return Object.keys(L).sort(function (a, b) { return L[b] - L[a]; }).map(function (k) { return D2.INDICATORS[k].short + ' ' + (L[k] > 0 ? '+' : '−') + Math.abs(L[k]); }).join('・');
+      };
+      const pick = function (id) { return function () { Game.Future.answerBudget(s, id); after(); }; };
+      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・予算編成</p><h2>' + head + '</h2>' +
+        '<p>決定には、すぐ出る効果と、数年から数十年かけて国に出る効果がある。どの道にも、良いところと痛いところがある。' + (r === 'pm' ? '' : '(首相ほどの力はないので、国への効き目は小さい)') + '</p>',
+        p.options.map(function (id) {
+          return { label: '<b>' + D2.BUDGET[id].name + '</b><span>すぐ:' + Game.Future.nowText(s, id) + ' / 長い目で:' + longText(id) + '</span>', onClick: pick(id) };
+        }), 'choices');
+    } else if (p.type === 'upperElection') {   // R12:参院選
+      const U = Game.Balance.upper, rs = Game.Upper.rulingSeats(s), names = { tour: '全国を応援で回る', manifesto: '果たした公約を訴える', none: '党の候補に任せる', support: '党の候補の応援に回る', local: '地元を固める' };
+      const rul = Game.Upper.ruling(s).map(function (k) { return Game.Data.PARTIES[k].short; }).join('・');
+      const run = function (c) { return function () { Game.Upper.run(s, c); after(); }; };
+      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・参議院選挙</p><h2>参院選が始まる</h2>' +
+        '<p>3年に一度の参院選。' + U.seats + '議席のうち ' + U.contested + '議席を争う。いまの与党(' + rul + ')は参院で ' + rs + '議席(過半数は ' + U.majority + ')。' +
+        (cr.gov ? '内閣支持率 ' + Math.round(cr.gov.approval) + '% が、与党の追い風にも逆風にもなる。' : '') + '</p>' +
+        (cr.gov && cr.gov.role !== 'opposition' ? '<p class="pr-note">過半数を割ると「ねじれ国会」。首相の重要法案が参院で進みにくくなる。</p>' : cr.gov ? '<p class="pr-note">与党を過半数割れに追い込めば、国会での追及がよく効く。</p>' : '<p class="pr-note">党が議席を伸ばせば、次の衆院選に勢いがつく。</p>'),
+        Game.Upper.choices(s).map(function (c) { return { label: '<b>' + names[c.id] + '</b><span>' + c.note + '</span>', onClick: run(c.id) }; }), 'choices');
+    } else if (p.type === 'upperResult') {   // R12:参院選の結果
+      const U = Game.Balance.upper, P3 = Game.Data.PARTIES, me = s.player.party;
+      const rows = Object.keys(P3).sort(function (a, b) { return p.won[b] - p.won[a]; }).map(function (k) {
+        const d = p.won[k] - p.old[k];
+        return '<div class="up-row' + (k === me ? ' me' : '') + '">' + UI.partyChip({ party: k }) + '<span class="nm">' + P3[k].name + (p.ruling.indexOf(k) >= 0 ? '<small>与党</small>' : '') + '</span>' +
+          '<b>' + p.won[k] + '</b><small>改選前 ' + p.old[k] + '(' + UI.signed(d) + ')</small><span class="up-total">合計 ' + p.after[k] + '</span></div>';
+      }).join('');
+      const head = p.twisted ? '与党が過半数を割った' : p.ruling.indexOf(me) >= 0 ? '与党が過半数を守った' : p.rulingSeats >= U.majority ? '与党が過半数を守った' : '与党を過半数割れに追い込んだ';
+      const li = [];
+      if (p.twisted && !p.wasTwisted) li.push('ねじれ国会になった。重要法案は参院で止まりやすく、進みが 1 減る。');
+      if (!p.twisted && p.wasTwisted) li.push('ねじれ国会が解消した。法案は元どおり進む。');
+      if (p.hit) li.push('首相の党の大敗に、責任を問う声。内閣支持率 ' + p.hit + '。');
+      if (p.wind) li.push(P3[me].short + 'の勢いは、次の衆院選の始まりの支持になる(' + UI.signed(p.wind) + ')。');
+      UI.modal('<p class="m-kicker">参議院選挙・開票</p><h2>' + head + '</h2><p>' + UI.esc(p.note) + '与党は参院で <b>' + p.rulingSeats + '</b> / ' + U.seats + '議席(過半数 ' + U.majority + ')。</p>' + rows +
+        (li.length ? '<ul class="m-list">' + li.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' : ''),
+        [{ label: 'わかった', primary: true, onClick: function () { if (p.won[me] > p.old[me]) UI.sound('stamp'); next(); } }]);
     } else if (p.type === 'dissolve') {
       const lines = p.lines.length ? '<ul class="m-lines">' + p.lines.map(function (l) { return '<li class="ml-' + l.kind + '">' + UI.esc(l.text) + '</li>'; }).join('') + '</ul>'
         : '<p>背負った約束は残っていない。</p>';

@@ -85,9 +85,15 @@ Game.Data.termCardText = function (id) {
   const b = Game.Balance.term.cards[id], CB = Game.Balance.comeback;
   const sg = function (n) { return (n > 0 ? '+' : '') + n; };
   if (b.grumble) return { fx: '大臣ポストを渡した不満。手札をふさぐ', note: '体力' + b.cost + 'でなだめると、この任期のあいだ消える' };
-  if (b.promise && b.idle) return { fx: '公約を1つ <em>+' + b.promise + '</em> 進める', note: '進める公約がなければ、内閣支持率 +' + b.idle };
+  if (b.promise && b.idle) {
+    const n = Game.state && Game.Upper ? Game.Upper.lawProgress(Game.state, b.promise) : b.promise;   // ねじれ国会(R12)
+    return { fx: '公約を1つ <em>+' + n + '</em> 進める', note: n < b.promise ? 'ねじれ国会で参院の審議が進まない(ふだんは +' + b.promise + ')' : '進める公約がなければ、内閣支持率 +' + b.idle };
+  }
   if (b.sat) return { fx: '連立相手の満足度 <em>' + sg(b.sat) + '</em>', note: '満足度が ' + Game.Balance.gov.satLeave + ' を下回ると、連立を離れる' };
-  if (b.approval && b.approval < 0) return { fx: '相手の内閣の支持率 <em>' + sg(b.approval) + '</em>', note: '低いほど、次の総選挙で追い風になる' };
+  if (b.approval && b.approval < 0) {
+    const extra = Game.state && Game.Upper ? Game.Upper.attackBonus(Game.state) : 0;   // 参院で野党が多数(R12)
+    return { fx: '相手の内閣の支持率 <em>' + sg(b.approval + extra) + '</em>', note: extra ? '参院は野党が多数。追及がよく効く' : '低いほど、次の総選挙で追い風になる' };
+  }
   if (b.approval) return { fx: '内閣支持率 <em>' + sg(b.approval) + '</em>' + (b.contrib ? '、党への貢献 <em>' + sg(b.contrib) + '</em>' : ''), note: '支持率は、次の総選挙の始まりの支持になる' };
   if (b.contrib && Game.Data.TERM_CARDS[id].say && !b.promise) return { fx: '党への貢献 <em>' + sg(b.contrib) + '</em>', note: Game.Balance.nation.unityPer + 'たまるごとに、総選挙で全ブロック +1(党の結束)' };
   if (b.promise) return { fx: '約束を1つ <em>+' + b.promise + '</em> 進める', note: '約束がなければ、党への貢献 +' + b.contrib };

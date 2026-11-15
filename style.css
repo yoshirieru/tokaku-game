@@ -31,6 +31,9 @@
   --telop-b: #163b8a;                       /* 同(下) */
   --paper: #f3efe4;                         /* 新聞と当確のハンコだけは明るい紙 */
   --paper-ink: #16130f;
+  --paper-good: #1f6e43;                    /* 30年後の新聞(R14):良くなった指標 */
+  --paper-bad: #a3262a;                     /* 悪くなった指標 */
+  --film-dark: rgba(8, 6, 3, .9);           /* 昔の映画風の演出の暗がり */
   --font: 'Zen Kaku Gothic New', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, system-ui, sans-serif;
   --font-head: 'Shippori Mincho B1', 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
 }
@@ -301,6 +304,16 @@ h1, h2, p { margin: 0; }
 .wind-bar.appr { overflow: visible; }
 .wind-bar.appr i { border-radius: 7px; background: linear-gradient(90deg, var(--accent), var(--gold) 45%, var(--good)); background-size: 100vw 100%; }
 .gov-eff { margin-left: 8px; font-size: 11.5px; color: var(--sub); }
+/* 参議院(R12) */
+.close-chip { flex: none; margin-left: 8px; padding: 1px 8px; border-radius: 4px; font-size: 11.5px; font-weight: 700; white-space: nowrap; color: var(--on-gold); background: var(--gold); }
+.up-chip { flex: none; padding: 1px 8px; border-radius: 4px; font-size: 11.5px; font-weight: 700; white-space: nowrap; border: 1px solid var(--line); color: var(--sub); }
+.up-chip.tw { border-color: var(--accent); color: var(--accent); }
+.up-row { display: grid; grid-template-columns: auto 1fr auto auto auto; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--track); font-size: 13px; }
+.up-row .nm small { margin-left: 6px; font-size: 10.5px; color: var(--gold); }
+.up-row b { font: 800 18px var(--font-head); }
+.up-row.me b { color: var(--gold); }
+.up-row > small { font-size: 11px; color: var(--sub); }
+.up-total { font-size: 12px; color: var(--sub); text-align: right; min-width: 4.5em; }
 .pr-note.warn { color: var(--accent); font-weight: 700; }
 .btn-dissolve { flex: none; padding: 5px 14px; border-color: var(--accent); color: var(--ink); font-weight: 700; white-space: nowrap; }
 .btn-dissolve:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
@@ -472,6 +485,64 @@ h1, h2, p { margin: 0; }
 .ho-log ul { margin: 0; padding-left: 1.2em; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
 .ho-card .btn-lg { margin-top: 6px; }
 
+/* ---------- 30年後の新聞(R14) ---------- */
+.np-back { position: fixed; inset: 0; z-index: 30; overflow: auto; padding: 18px 14px 24px; background: var(--film-dark); }
+.np-back.film::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .75) 100%); animation: npVignette calc(3s * var(--np-s)) ease-out forwards; }
+/* フィルムの粒子(SVG のノイズを、その場で描く)と、縦に走る傷 */
+.np-grain { position: fixed; inset: -50%; pointer-events: none; z-index: 3; opacity: 0; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .95  0 0 0 0 .85  0 0 0 .55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 180px 180px; }
+.np-back.film::after { content: ""; position: fixed; top: 0; bottom: 0; left: 37%; width: 1px; z-index: 3; pointer-events: none; background: rgba(255, 250, 235, .35); animation: npScratch calc(.9s * var(--np-s)) steps(6) 0s 3 both; }
+@keyframes npScratch { 0% { transform: translateX(0); opacity: .8; } 50% { transform: translateX(26vw); opacity: .3; } 100% { transform: translateX(-12vw); opacity: 0; } }
+.np-back.film .np-grain { animation: npGrain .18s steps(3) infinite, npGrainFade calc(3.2s * var(--np-s)) ease-out forwards; }
+.np-stage { position: relative; z-index: 1; width: min(880px, 100%); margin: 0 auto; }
+.np-paper { background: var(--paper); color: var(--paper-ink); padding: 18px 22px 12px; border-radius: 2px; box-shadow: 0 30px 80px rgba(0, 0, 0, .65); transform: rotate(-.6deg); filter: sepia(.12); }
+.np-back.film .np-paper { animation: npFly calc(1.5s * var(--np-s)) cubic-bezier(.18, .7, .3, 1) both, npSepia calc(3s * var(--np-s)) ease-out both; }
+.np-back.film .np-stage { animation: npFlicker .11s steps(2) 0s calc(16 / var(--np-s, 1)); }
+.np-btns { display: flex; justify-content: center; margin-top: 14px; }
+.np-back.film .np-btns { animation: fade .4s ease-out calc(1.5s * var(--np-s)) both; }
+@keyframes npFly {
+  0% { transform: translateY(30vh) scale(.06) rotate(-1080deg); opacity: 0; }
+  12% { opacity: 1; }
+  82% { transform: translateY(0) scale(1.05) rotate(-6deg); }
+  100% { transform: scale(1) rotate(-.6deg); }
+}
+@keyframes npSepia { 0% { filter: sepia(1) contrast(1.3) brightness(.8); } 60% { filter: sepia(.85) contrast(1.15) brightness(.92); } 100% { filter: sepia(.12); } }
+@keyframes npFlicker { 0% { opacity: 1; } 50% { opacity: .82; } }
+@keyframes npGrain { 0% { transform: translate(0, 0); } 33% { transform: translate(-3%, 2%); } 66% { transform: translate(2%, -3%); } }
+@keyframes npGrainFade { 0% { opacity: 1; } 70% { opacity: .7; } 100% { opacity: .18; } }
+@keyframes npVignette { 0% { opacity: 1; } 100% { opacity: .45; } }
+.np-mast { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 8px; padding-bottom: 6px; border-bottom: 5px double var(--paper-ink); }
+.np-title { font: 900 clamp(30px, 5.6vw, 52px)/1 var(--font-head); letter-spacing: .18em; text-align: center; }
+.np-date, .np-ed { font-size: 12px; }
+.np-ed { text-align: right; }
+.np-headline { margin: 12px 0 6px; font: 900 clamp(24px, 4.3vw, 42px)/1.28 var(--font-head); letter-spacing: .02em; }
+.np-good .np-headline { color: var(--paper-good); } .np-bad .np-headline { color: var(--paper-bad); }
+.np-subs { margin: 0 0 10px; padding: 0 0 8px; list-style: none; display: flex; flex-wrap: wrap; gap: 2px 18px; font: 700 14px var(--font-head); border-bottom: 1px solid var(--paper-ink); }
+.np-subs li::before { content: "◆ "; }
+.np-cols { display: grid; grid-template-columns: 1.05fr 1fr; gap: 0 18px; }
+.np-cols h3, .np-letters h3 { font: 900 15px/1.4 var(--font-head); padding: 2px 0 4px; margin-bottom: 6px; border-bottom: 2px solid var(--paper-ink); }
+.np-column { padding-left: 16px; border-left: 1px solid var(--paper-ink); font-size: 13.5px; line-height: 1.7; }
+.np-column ol { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 6px; }
+.np-lead { font-size: 12.5px; margin-bottom: 6px; }
+.np-inds { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.np-ind { display: grid; grid-template-columns: 5.6em 1fr auto auto; align-items: center; gap: 4px; font-size: 12px; }
+.np-ind svg { width: 100%; height: 26px; overflow: visible; }
+.np-ind polyline { fill: none; stroke: var(--paper-ink); stroke-width: 1.8; }
+.np-ind circle { fill: var(--paper-ink); }
+.np-ind .np-base { stroke: var(--paper-ink); stroke-width: .6; stroke-dasharray: 2 2; opacity: .5; }
+.np-ind.up polyline, .np-ind.up circle { stroke: var(--paper-good); fill: none; } .np-ind.up circle { fill: var(--paper-good); }
+.np-ind.down polyline { stroke: var(--paper-bad); } .np-ind.down circle { fill: var(--paper-bad); }
+.np-ind b { font-variant-numeric: tabular-nums; }
+.np-ind small { font-size: 10.5px; min-width: 2.2em; text-align: right; }
+.np-ind.up small { color: var(--paper-good); } .np-ind.down small { color: var(--paper-bad); }
+.np-legend { font-size: 10.5px; opacity: .75; margin-top: 4px; }
+.np-letters { margin-top: 12px; }
+.np-letters ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.np-letters li { font-size: 12.5px; line-height: 1.6; padding: 6px 8px; border: 1px solid rgba(22, 19, 15, .35); }
+.np-letters cite { display: block; margin-top: 3px; font-style: normal; font-size: 11px; opacity: .75; text-align: right; }
+.np-note { margin-top: 10px; font-size: 10px; text-align: right; opacity: .7; }
+
 /* ---------- 殿堂(R7) ---------- */
 .hall .panel h2 small { margin-left: 8px; }
 .ach-grid { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 8px; }
@@ -611,6 +682,13 @@ h1, h2, p { margin: 0; }
   .en-body { grid-template-columns: minmax(0, 1fr); }
   .hall-cols { grid-template-columns: minmax(0, 1fr); }
   .vs-players { grid-template-columns: minmax(0, 1fr); }
+  .np-back { padding: 10px 8px 18px; }
+  .np-paper { padding: 12px 12px 8px; }
+  .np-mast { grid-template-columns: 1fr; text-align: center; }
+  .np-ed, .np-date { text-align: center; }
+  .np-cols, .np-letters ul { grid-template-columns: minmax(0, 1fr); }
+  .np-column { padding-left: 0; border-left: 0; margin-top: 10px; }
+  .np-inds { grid-template-columns: minmax(0, 1fr); }
   .ho-card h1 { font-size: 22px; }
   .ach-grid { grid-template-columns: minmax(0, 1fr); gap: 5px; }
   .ach { padding: 5px 8px; gap: 8px; }

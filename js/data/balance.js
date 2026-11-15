@@ -53,7 +53,7 @@ Game.Balance = {
   // プレイヤーの立場ごとの、始まりの支持の倍率(新人 / 当選して現職 / 落選した元職)
   // revived は、小選挙区で負けて比例復活した現職(議席はあるが、選挙区には勝った相手がいる)
   // leader は党首として戦う総選挙(党の地力そのまま)
-  playerRoles: { newcomer: 0.69, incumbent: 0.72, revived: 0.7, former: 0.66, leader: 1 },
+  playerRoles: { newcomer: 0.68, incumbent: 0.72, revived: 0.7, former: 0.66, leader: 1 },
   // 選挙区(R6。地図・相手・約束の名前は js/data/seats.js)。地区の id は5つとも同じで、中身(名前と性格)が選挙区ごとにちがう
   //   base 党の地力(地区ごと)/ turnout 投票率の基準(%)/ rivalMult 相手の候補の強さ(始まりの支持の倍率。ないときは1)
   //     都市の地区ほどカードがよく効くので、北陽3区のほかは相手を強くして釣り合わせている
@@ -68,7 +68,7 @@ Game.Balance = {
         campus:      { minsei: 26, kyowa: 32, mirai: 37 },
       },
       turnout: { rural: 62, residential: 54, downtown: 50, industrial: 55, campus: 38 },
-      guide: { minsei: 71, kyowa: 46, mirai: 31 },
+      guide: { minsei: 70, kyowa: 49, mirai: 34 },
     },
     touou7: {    // 都会(下町・山の手は高齢層、ほかは浮動票。未来の地盤)
       base: {
@@ -80,7 +80,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 58, industrial: 52, rural: 60, campus: 40 },
       rivalMult: 1.5,
-      guide: { minsei: 40, kyowa: 34, mirai: 59 },
+      guide: { minsei: 39, kyowa: 36, mirai: 58 },
     },
     biyou2: {    // 保守王国(民政の地盤)
       base: {
@@ -92,7 +92,7 @@ Game.Balance = {
       },
       turnout: { downtown: 58, residential: 64, industrial: 56, rural: 66, campus: 42 },
       rivalMult: 1.3,
-      guide: { minsei: 84, kyowa: 27, mirai: 7 },
+      guide: { minsei: 83, kyowa: 26, mirai: 5 },
     },
     ominato4: {  // 工業都市(共和の地盤)
       base: {
@@ -104,7 +104,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 55, industrial: 58, rural: 62, campus: 38 },
       rivalMult: 1.25,
-      guide: { minsei: 38, kyowa: 81, mirai: 16 },
+      guide: { minsei: 40, kyowa: 80, mirai: 15 },
     },
     namio5: {    // 改革の地盤(未来の強い現職)
       base: {
@@ -116,7 +116,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 55, industrial: 54, rural: 60, campus: 40 },
       rivalMult: 1.45,
-      guide: { minsei: 37, kyowa: 28, mirai: 70 },
+      guide: { minsei: 38, kyowa: 30, mirai: 73 },
     },
     kitatsu1: {  // 地方の激戦区(R10。選挙違反が起きやすい:fraud は balance.js の fraud の起きやすさ)
       base: {
@@ -129,7 +129,7 @@ Game.Balance = {
       turnout: { downtown: 58, residential: 66, industrial: 60, rural: 68, campus: 46 },
       rivalMult: 1.45,
       fraud: 1,
-      guide: { minsei: 66, kyowa: 38, mirai: 25 },
+      guide: { minsei: 67, kyowa: 40, mirai: 27 },
     },
   },
   // 準備の画面の、難しさのことば(guide がこの値以上なら。どれにも届かなければ「とてもむずかしい」)
@@ -355,6 +355,60 @@ Game.Balance = {
   //   race 合わさった区の公認争い:自分の強さ = base + 党内評価 × merit + 当選回数 × win + 地盤の合計 × perBase、相手(同じ党の現職)= rival ± noise
   redistrict: { chance: 0.02, vanish: 0.35, keep: 0.5, race: { base: 20, merit: 0.5, win: 3, perBase: 2, rival: 45, noise: 10 } },
 
+  // ---- 国の指標と30年後の新聞(R14。js/engine/future.js、文面は js/data/future.js)----
+  //   指標は 0〜100(高いほど良い)。start ゲームの始まりの値 / trend 何もしなければ1年ごとに動く量 / lag 決定の効き目が出きるまでの年数(指標ごと)
+  //   決定の重み weight:首相 1、連立与党、野党党首、議員(予算の要望)。local 議員の地元の約束を果たしたとき
+  //   policies 約束・公約を果たしたときの長い効き目 / budget 予算編成の重点(long 長い効き目、approval 首相のときの内閣支持率)。どれにも長所と短所がある
+  //   budgetOffer 毎年の予算編成で出す重点の数(ほかは次の年に)/ startYear ゲームの始まりの年 / horizon 新聞は政界を去ってから何年後か
+  //   big 大見出しに使う動きの大きさ(始まりとの差。まだら模様は、良いほうと悪いほうがどちらも big 以上)
+  future: {
+    startYear: 2027, horizon: 30, budgetOffer: 3, big: 5,
+    repeat: 0.6,   // 同じ予算・同じ政策をくり返すと、効き目は前の repeat 倍(同じ公約を任期ごとに果たしても、効き目は積み上がりすぎない)
+    start: { fiscal: 40, birth: 42, growth: 48, welfare: 46, regions: 42, environment: 50, security: 50, education: 52 },
+    trend: { fiscal: -0.04, birth: -0.06, growth: -0.02, welfare: -0.05, regions: -0.06, environment: -0.04, security: -0.02, education: -0.02 },
+    // 指標どうしのつながり:link[k][j] だけ、指標 j の始まりからの動きが k に足される(成長は税収になり、出生と成長は社会保障を支える)
+    link: { fiscal: { growth: 0.5, birth: 0.1 }, welfare: { birth: 0.3, growth: 0.2 }, growth: { education: 0.3 } },
+    lag: { fiscal: 3, birth: 15, growth: 6, welfare: 10, regions: 10, environment: 20, security: 5, education: 18 },
+    weight: { pm: 1, junior: 0.7, opposition: 0.4, member: 0.6 }, local: 0.5,
+    policies: {
+      agri:     { regions: 3, environment: 1, fiscal: -1, growth: -1 },
+      wage:     { welfare: 2, birth: 1, growth: -1, fiscal: -1 },
+      family:   { birth: 3, fiscal: -1, growth: -1 },
+      taxcut:   { growth: 3, fiscal: -2, welfare: -1 },
+      tuition:  { education: 3, birth: 1, fiscal: -1 },
+      n_tax:    { growth: 4, fiscal: -2, welfare: -1 },
+      n_agri:   { regions: 4, environment: 1, fiscal: -1, growth: -1 },
+      n_wage:   { welfare: 3, birth: 1, growth: -2, regions: -1 },
+      n_family: { birth: 4, fiscal: -1, growth: -1 },
+      n_youth:  { education: 4, birth: 1, fiscal: -2 },
+    },
+    budget: {
+      defense:   { long: { security: 4, fiscal: -1, environment: -1 }, approval: -1 },
+      welfare:   { long: { welfare: 4, fiscal: -2, growth: -1 }, approval: 3 },
+      austerity: { long: { fiscal: 5, growth: -1, welfare: -1, regions: -1 }, approval: -4 },
+      green:     { long: { environment: 4, growth: -1, fiscal: -1 }, approval: 1 },
+      local:     { long: { regions: 4, fiscal: -1, environment: -1 }, approval: 1 },
+      research:  { long: { education: 3, growth: 2, fiscal: -1, regions: -1 }, approval: -1 },
+      childcare: { long: { birth: 4, fiscal: -2 }, approval: 2 },
+    },
+  },
+
+  // ---- 参議院(R12。js/engine/upper.js)----
+  //   seats 定数 / majority 過半数 / contested 1回の参院選で改選する議席 / start はじめの議席(2つの組に半分ずつ。おおよそ base × 改選数 × 2 にそろえ、はじめから勢いがつかないようにする。民政はぎりぎり過半数から)
+  //   every 参院選の間隔(会期)/ firstIn 最初の参院選までの会期。民政はひとりで過半数ぎりぎり(支持率しだいで、ねじれになる)
+  //   base 党の地力(改選の得票の割合)/ approvalWeight 内閣支持率が50から1ずれるごとに、与党全体の割合が動く量(野党は逆。党の数で割る)/ noise 党ごとのぶれ
+  //   党首の選び方:tour 全国を応援で回る(割合 +tour、この会期の体力 −tourEnergy)/ manifesto 果たした公約を訴える(1つ以上あれば +manifesto)
+  //   議員の選び方:応援(党への貢献 +support、党の割合 +memberShare。浪人は半分)/ 地元(選んでいる地区の地盤 +local)
+  //   wind 改選前の組より per 議席増える(減る)ごとに、次の衆院選は全地区 ±1(max まで)
+  //   twist ねじれ国会:首相の法案の進みが law だけ減る(重要法案 2 → 1)、野党党首の追及が attack だけ強まる
+  //   bigLoss 首相の党が改選前より これだけ以上減らすと、内閣支持率 lossApproval / worldRuling 党首でないときの世の中の政権
+  upper: {
+    seats: 248, majority: 125, contested: 124, start: { minsei: 126, kyowa: 74, mirai: 48 }, every: 6, firstIn: 3,
+    base: { minsei: 0.5, kyowa: 0.3, mirai: 0.2 }, approvalWeight: 0.006, noise: 0.03,
+    tour: 0.03, tourEnergy: 1, manifesto: 0.02, support: 2, memberShare: 0.01, local: 1,
+    wind: { per: 6, max: 1 }, twist: { law: 1, attack: -1 }, bigLoss: 10, lossApproval: -5, worldRuling: 'minsei',
+  },
+
   // ---- 対戦モード(R8。js/engine/versus.js)----
   //   aiMult 3人目(AI)の候補の、始まりの支持の倍率(選挙区の rivalMult にさらにかける)
   //   ハンデ(2人の始まりの支持をそろえる):差の handicapRate ずつ、低いほうに全地区で足す。handicapSteps 回まで、足す量が handicapDone 未満になったらやめる
@@ -398,6 +452,9 @@ Game.Balance = {
   vote: {
     weather: [{ id: 'sunny', weight: 55, turnout: 0 }, { id: 'cloudy', weight: 30, turnout: -1 }, { id: 'rain', weight: 15, turnout: -5 }],
     // 投票率の基準(%)は選挙区ごと(seats の turnout)
+    // 接戦(R13):1日の終わりに上位2人の差が margin 未満なら「激戦の日」(そうでない日は1つ減る)。激戦の日 × perDay だけ投票率が上がる(max まで)
+    //   上がり方は地区の性格で変わる:浮動票・若者の地区は high 倍、組織票の地区は low 倍(関心が高まると、ふだん投票しない人が来る)
+    close: { margin: 4, perDay: 1.5, max: 10, high: 1.15, low: 0.85 },
     turnoutNoise: 2,
     swingAll: 1.5,       // 候補ごとの、選挙区全体のぶれ(標準偏差、ポイント)
     swingRegion: 2.5,    // 候補ごと・地区ごとのぶれ
