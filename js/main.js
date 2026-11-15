@@ -37,7 +37,7 @@ window.Game = window.Game || {};
   };
   // エンディングを迎えたら、殿堂に1件記録する。結果は state.ending.hall に持ち、読み直しても二重に記録しない
   function recordHall(s) {
-    if (!s || s.screen !== 'ending' || !s.ending || s.ending.hall) return;
+    if (!s || s.screen !== 'ending' || !s.ending || s.ending.hall || s.scenario) return;   // 史実シナリオ(R17)は殿堂に記録しない
     const h = Game.loadHall();
     s.ending.hall = Game.Hall.record(h, s, Date.now());
     Game.saveHall(h);
@@ -71,6 +71,18 @@ window.Game = window.Game || {};
     const state = { version: SAVE_VERSION, screen: 'campaign', player: { name: name, party: party, seat: seat }, rng: seed };
     Game.Career.quickLeader(state);
     Game.Campaign.newCampaign(state);
+    Game.state = state;
+    Game.ui = { card: null };
+    undoStack = [];
+    Game.save();
+    Game.render();
+  };
+  // 史実シナリオ(R17)
+  Game.startScenario = function (name, id) {
+    const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) | 0;
+    const state = { version: SAVE_VERSION, screen: 'campaign', player: { name: name, party: 'minsei', seat: 'hokuyo3' }, rng: seed };
+    Game.Data.setNewParty(null);
+    Game.Scenario.start(state, id);
     Game.state = state;
     Game.ui = { card: null };
     undoStack = [];
@@ -119,6 +131,7 @@ window.Game = window.Game || {};
     if (!s) {
       if (Game.view === 'setup') return Game.Screens.renderSetup(app);
       if (Game.view === 'hall') return Game.HallView.render(app);
+      if (Game.view === 'scenario') return Game.ScenarioView.render(app);   // 史実シナリオ(R17)
       if (Game.view === 'versus') return Game.VersusView.renderSetup(app);
       return Game.Screens.renderTitle(app);
     }

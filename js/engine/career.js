@@ -98,10 +98,22 @@ Game.Career = (function () {
     return cr;
   }
 
+  // 史実シナリオ(R17):党首の任期の途中(turn 会期目)から始める。intro は最初に出す知らせ
+  function beginScenarioTerm(state, turn, intro) {
+    const cr = state.career;
+    beginTerm(state, true);
+    cr.turn = turn;
+    cr.pending = cr.pending.filter(function (p) { return p.type !== 'start'; });
+    if (intro) cr.pending.unshift(intro);
+    cr.news = Game.Data.sessionName(cr.turn) + '。任期満了まで、あと ' + (T().turns - cr.turn + 1) + '会期。';
+    return cr;
+  }
+
   // ---------- 党首として戦った総選挙のあと ----------
   function afterNational(state) {
     const B = Game.Balance, e = state.election, cr = state.career;
     const prev = cr.partySeats;
+    if (state.scenario) state.scenario.elections += 1;   // 史実シナリオ(R17)
     cr.elections += 1; cr.wins += 1; cr.districtWins += 1; cr.lossStreak = 0;   // 党首は地元の議席を守ったものとする
     cr.merit += B.merit.winDistrict;
     cr.partySeats = e.seats.me;
@@ -128,6 +140,8 @@ Game.Career = (function () {
     cr.next = { endorse: [], broken: [], light: [], carried: [], carriedFull: [] };
     if (gov.role === 'pm') { cr.wasPM = true; cr.pmTerms = (cr.pmTerms || 0) + 1; }
     cr.history.push({ national: true, seats: e.seats.me, prev: prev, first: e.won, majority: e.meMajority, role: 'leader', gov: gov.role, won: true, votes: e.votes.me });
+    // 史実シナリオ(R17):シナリオの総選挙と政権づくりが終わったら、エンディング
+    if (Game.Scenario.over(state)) return retire(state, 'scenario');
     // 議席を大きく減らし、政権にも入れなかったら、責任をとって党首を辞める
     if (prev != null && gov.role === 'opposition' && e.seats.me <= prev * (1 - B.nation.resignDrop)) return retire(state, 'resigned');
     return beginTerm(state, true);
@@ -591,7 +605,7 @@ Game.Career = (function () {
         }
         // 支持率の低い会期が続くと、退陣に追い込まれる
         gov.low = gov.approval < g.lowApproval ? gov.low + 1 : 0;
-        if (gov.low >= g.lowTurns) { retire(state, 'ousted'); return { ok: true, ended: true }; }
+        if (gov.low >= g.lowTurns && !state.scenario) { retire(state, 'ousted'); return { ok: true, ended: true }; }   // 史実シナリオ(R17)では退陣せず、解散の時期は首相が決める
       } else {
         changeApproval(cr, (g.aiMean - gov.approval) * g.aiRevert + R.normal(state) * g.aiNoise);
       }
@@ -784,12 +798,16 @@ Game.Career = (function () {
       lines.push({ label: '首相に就任', value: (cr.pmTerms || 1) + '回、政権を担った', pts: L.pm });
       lines.push({ label: '首相の在任', value: ((cr.pmTurns || 0) / 2).toFixed(1).replace('.0', '') + '年', pts: Math.min(L.pmTurnMax, (cr.pmTurns || 0) * L.pmTurn) });
     }
+    // 史実シナリオ(R17):目標ごとに点
+    const scEnd = Game.Scenario.ending(state);
+    if (scEnd) scEnd.goals.forEach(function (g) { lines.push({ label: '目標', value: g.text + (g.ok ? '(達成)' : '(届かず)'), pts: g.ok ? B.scenario.goalPoints : 0 }); });
     const score = Math.max(0, lines.reduce(function (a, l) { return a + l.pts; }, 0));
     let grade = 'D';
     for (let i = 0; i < L.grades.length; i++) if (score >= L.grades[i][1]) { grade = L.grades[i][0]; break; }
     const pmNow = isPM(cr);
     const great = !!(pmNow && reason !== 'ousted' && reason !== 'scandal' && cr.gov.approval >= 50);   // 名宰相として惜しまれつつ
-    const title = reason === 'scandal' ? (cr.wasPM ? '政治とカネの疑惑で、首相の座を去る' : cr.leader ? '政治とカネの疑惑で、党首を辞して政界を去る' : '裏金の発覚で、議員を辞職する')
+    const title = scEnd && reason === 'scenario' ? scEnd.title + ':' + scEnd.verdict
+      : reason === 'scandal' ? (cr.wasPM ? '政治とカネの疑惑で、首相の座を去る' : cr.leader ? '政治とカネの疑惑で、党首を辞して政界を去る' : '裏金の発覚で、議員を辞職する')
       : reason === 'ousted' ? '支持を失い、首相の座を追われる'
       : pmNow ? (great ? '名宰相として惜しまれつつ、政界を去る' : '首相を務めあげて、政界を去る')
       : cr.wasPM ? '元首相として、政界を去る'
@@ -799,7 +817,7 @@ Game.Career = (function () {
       : (cr.bestRank || 0) >= 4 ? '党の重鎮として、政界を去る'
         : cr.bestRank === 3 ? '大臣を務めあげて、政界を去る'
           : cr.bestRank >= 1 ? rank.name + 'まで務めて、政界を去る' : '陣笠議員のまま、政界を去る';
-    state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice(), great: great };
+    state.ending = { reason: reason, title: title, score: score, grade: grade, lines: lines, elections: cr.elections, history: cr.history.slice(), great: great, scenario: scEnd };
     state.ending.paper = Game.Future.paper(state);   // 30年後の新聞(R14)
     state.screen = 'ending';
     return state.ending;
@@ -811,6 +829,6 @@ Game.Career = (function () {
     autoPromise: autoPromise, seated: seated, nextRank: nextRank, retire: retire, raceStrength: raceStrength, runRace: runRace, quickLeader: quickLeader,
     isPM: isPM, canDissolve: canDissolve, dissolve: dissolve, changeApproval: changeApproval, termDeck: termDeck,
     answerBy: answerBy, answerRedistrict: answerRedistrict, chooseSeat: chooseSeat,
-    canFound: canFound, matesOf: matesOf, cleanName: cleanName, foundParty: foundParty, mergeParty: mergeParty, mergeRank: mergeRank, answerNp: answerNp,
+    beginScenarioTerm: beginScenarioTerm, canFound: canFound, matesOf: matesOf, cleanName: cleanName, foundParty: foundParty, mergeParty: mergeParty, mergeRank: mergeRank, answerNp: answerNp,
   };
 })();

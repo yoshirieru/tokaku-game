@@ -393,7 +393,7 @@ Game.TermView = (function () {
         (p.unity ? '<p>党のために働いてきたことで、党がまとまっている。総選挙は全ブロックの支持が +' + p.unity + ' から始まる。</p>' : ''),
         [{ label: '選挙戦へ', primary: true, onClick: function () { K.toCampaign(s); Game.clearUndo(); Game.ui.card = null; Game.save(); Game.render(); } }]);
     } else {
-      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
+      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + (p.kicker ? '・' + UI.esc(p.kicker) : '') + '</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
         [{ label: 'わかった', primary: true, onClick: next }]);
     }
   }

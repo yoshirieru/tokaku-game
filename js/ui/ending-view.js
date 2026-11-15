@@ -8,7 +8,7 @@ Game.EndingView = (function () {
 
   function render(app) {
     const s = Game.state, en = s.ending;
-    const kicker = en.reason === 'scandal' ? '政治とカネの疑惑が、すべてを奪った' : en.reason === 'dropped' ? '続けて議席を得られず、党の公認を失った' : en.reason === 'resigned' ? '総選挙で議席を大きく減らし、党首を辞した' : en.reason === 'ousted' ? '内閣支持率の低迷で、退陣に追い込まれた' : '自分の意思で、身を引いた';
+    const kicker = en.reason === 'scandal' ? '政治とカネの疑惑が、すべてを奪った' : en.reason === 'dropped' ? '続けて議席を得られず、党の公認を失った' : en.reason === 'resigned' ? '総選挙で議席を大きく減らし、党首を辞した' : en.reason === 'ousted' ? '内閣支持率の低迷で、退陣に追い込まれた' : en.reason === 'scenario' ? '史実シナリオの総選挙が終わった' : '自分の意思で、身を引いた';
     const rows = en.lines.map(function (l) {
       return '<div class="en-row"><span>' + l.label + '</span><b>' + UI.esc(l.value) + '</b><span class="en-pts' + (l.pts < 0 ? ' minus' : '') + '">' + UI.signed(l.pts) + '</span></div>';
     }).join('');
@@ -24,8 +24,8 @@ Game.EndingView = (function () {
     app.innerHTML = '<div class="ending">' +
       '<header class="en-head"><p class="m-kicker">' + kicker + '</p><h1>' + UI.esc(s.player.name) + '、' + UI.esc(en.title) + '</h1>' +
       '<div class="en-grade"><span>評価</span><b>' + en.grade + '</b><small>' + en.score + '点</small></div></header>' +
-      '<div class="en-body">' + Game.HallView.endingStrip(en.hall) + '<section class="panel"><h2>評価の内訳</h2>' + rows +
-      '<p class="pr-note">評価は、当選回数・役職・約束・総選挙・首相としての在任で決まる。</p></section>' +
+      '<div class="en-body">' + Game.ScenarioView.endingPanel(en.scenario) + Game.HallView.endingStrip(en.hall) + '<section class="panel"><h2>評価の内訳</h2>' + rows +
+      '<p class="pr-note">評価は、当選回数・役職・約束・総選挙・首相としての在任で決まる。' + (en.scenario ? '史実シナリオは、目標1つにつき ' + Game.Balance.scenario.goalPoints + '点。殿堂には記録しない。' : '') + '</p></section>' +
       '<section class="panel"><h2>政治家としての歩み<small>選挙 ' + en.elections + '回</small></h2><ol class="en-history">' + history + '</ol></section></div>' +
       '<footer class="ct-btns"><button type="button" class="btn" id="title">タイトルへ</button><button type="button" class="btn" id="hall">殿堂を見る</button>' +
       (en.paper ? '<button type="button" class="btn" id="paper">30年後の新聞</button>' : '') +

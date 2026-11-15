@@ -212,6 +212,10 @@ Game.CampaignView = (function () {
         li.push([cb.govBonus > 0 ? 'kept' : 'broken', gw + (cb.govBonus > 0 ? '追い風になっている' : '逆風になっている') + '(全ブロック ' + UI.signed(cb.govBonus) + ')。']);
       }
       if (cb.fatigue) li.push(['broken', '長く政権を担ってきたことに、飽きが出ている(全ブロック ' + UI.signed(cb.fatigue) + ')。']);
+      if (cb.scenario) Object.keys(cb.scenario).forEach(function (k) {   // 史実シナリオ(R17)の局面
+        const v = cb.scenario[k];
+        if (v) li.push([(k === s.player.party) === (v > 0) ? 'kept' : 'broken', 'この選挙の局面:' + Game.Data.PARTIES[k].name + 'は始まりの支持が全ブロック平均で ' + UI.signed(v) + '。']);
+      });
       if (cb.unity) li.push(['kept', '党のために働いてきたことで、党がまとまっている(全ブロック +' + cb.unity + ')。']);
       if (cb.kept) li.push(['kept', '党首が約束を守ってきたことが、信頼になっている(全ブロック +' + cb.kept + ')。']);
       if (cb.broken) li.push(['broken', '党首が約束を破ったことが、全国で報じられている(全ブロック ' + cb.broken + ')。']);
@@ -287,7 +291,7 @@ Game.CampaignView = (function () {
       UI.modal('<div class="surge-head"><p class="m-kicker">' + UI.esc(p.kicker) + '</p><h2 class="surge-title">奔流</h2><p class="surge-sub">眠っていた票が、動き出す</p></div><p>' + UI.esc(p.text) + '</p>',
         [{ label: 'わかった', primary: true, onClick: next }], 'surge');
     } else {
-      UI.modal('<p class="m-kicker">' + camp.day + '日目</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
+      UI.modal('<p class="m-kicker">' + (p.kicker ? UI.esc(p.kicker) : camp.day + '日目') + '</p><h2>' + UI.esc(p.title) + '</h2><p>' + UI.esc(p.text) + '</p>',
         [{ label: 'わかった', primary: true, onClick: function () { pendingFx = pendingFx.concat(p.fx || []); next(); } }]);
     }
   }

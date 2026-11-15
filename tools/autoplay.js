@@ -7,6 +7,7 @@
 //   VERSUS=1 node tools/autoplay.js 300               対戦モード(2人ともボット。BOTS=中級,上級 で 1P と 2P のボット。党の組み合わせごとに 1P・2P・AI の勝ち)
 //   URA=1 で資金のカードの収入を載せない(裏金。R9)、DIRTY=1 で買収を黙認し怪文書に反撃する(選挙違反。R10)。立会人は上級ボットが送る
 //   SURGE=1 node tools/autoplay.js 300                最初の選挙で、奔流の起きた割合・投票率・だれが勝ったか(R15)
+//   SCENARIO=1 node tools/autoplay.js 200            史実シナリオ(目標ごとの達成の割合、議席、政権での立場。SCENARIOS=reform,change で絞る)(R17)
 //   CAREER=1 NEWPARTY=1 node tools/autoplay.js 200     当選2回で党を割り、合流の誘いは受ける(NEWPARTY=stay は断る、race は党首選に敗れたときだけ割る)(R16)
 //   SEATS=all node tools/autoplay.js 300              選挙区ごとに(SEATS=touou7,biyou2 のように選べる。ないときは北陽3区だけ)
 //   node tools/autoplay.js 300 "B.playerRoles.newcomer=0.7;"   ファイルを変えずに数値を試す(B は Game.Balance)
@@ -19,7 +20,7 @@ const root = path.resolve(__dirname, '..');
 const sandbox = { console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/scandal.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/data/future.js', 'js/engine/future.js', 'js/engine/upper.js', 'js/engine/career.js', 'js/engine/versus.js', 'js/data/achievements.js', 'js/engine/hall.js'].forEach((f) => {
+['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/scandal.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/data/future.js', 'js/engine/future.js', 'js/engine/upper.js', 'js/engine/career.js', 'js/engine/versus.js', 'js/data/achievements.js', 'js/engine/hall.js', 'js/data/scenarios.js', 'js/engine/scenario.js'].forEach((f) => {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 });
 const Game = sandbox.Game;
@@ -257,6 +258,37 @@ if (process.env.VERSUS) {
     const ai = Game.Data.PARTIES[P.filter((k) => k !== a && k !== b)[0]].short;
     console.log(`${Game.Data.PARTIES[a].short}(1P)対 ${Game.Data.PARTIES[b].short}(2P):対戦の勝ち 1P ${pct(win[0], N)}・2P ${pct(win[1], N)}  議席 1P ${pct(seat[0], N)}・2P ${pct(seat[1], N)}・AI(${ai})${pct(seat[2], N)}  得票率の差 ${(gap / N).toFixed(1)}`);
   }));
+} else if (process.env.SCENARIO) {
+  // ---- 史実シナリオ(R17)----
+  const bots = (process.env.BOTS || '中級').split(',');
+  const ids = process.env.SCENARIOS ? process.env.SCENARIOS.split(',') : Game.Data.SCENARIOS.map((x) => x.id);
+  console.log(`各 ${N} 回。史実シナリオ:目標ごとの達成の割合 / 自分の党の議席(平均と幅)/ 政権での立場`);
+  ids.forEach((id) => {
+    const sc = Game.Scenario.find(id);
+    bots.forEach((b) => {
+      const hit = sc.goals.map(() => 0), roles = {}, mine = [];
+      let all = 0;
+      for (let i = 0; i < N; i++) {
+        const seed = (i + 1) * 7919 + id.length * 104729;
+        const state = { player: { name: '相田 翔', party: sc.party, seat: 'hokuyo3' }, rng: seed };
+        const rnd = botRnd(seed);
+        Game.Scenario.start(state, id);
+        for (let g = 0; g < 4 && state.screen !== 'ending'; g++) {
+          if (state.screen === 'term') { playTerm(state, 'まじめ'); if (state.screen === 'term') Game.Career.toCampaign(state); }
+          if (state.screen === 'campaign') { playCampaign(state, b, rnd); Game.Career.afterElection(state); }
+        }
+        const en = state.ending;
+        if (!en || !en.scenario) continue;
+        en.scenario.goals.forEach((g, k) => { hit[k] += g.ok ? 1 : 0; });
+        if (en.scenario.hit === sc.goals.length) all++;
+        if (en.scenario.seats) mine.push(en.scenario.seats[sc.party]);
+        roles[en.scenario.gov] = (roles[en.scenario.gov] || 0) + 1;
+      }
+      mine.sort((x, y) => x - y);
+      const avg = mine.length ? (mine.reduce((a, x) => a + x, 0) / mine.length).toFixed(0) : '—';
+      console.log(`${sc.year} ${sc.title}(${Game.Data.PARTIES[sc.party].short}・${b})\n      ${sc.goals.map((g, k) => g.text + ' ' + pct(hit[k], N)).join(' / ')}  すべて ${pct(all, N)}  議席 ${avg}(${mine[Math.floor(mine.length * 0.1)]}〜${mine[Math.floor(mine.length * 0.9)]}、選挙前 ${sc.seats[sc.party]})  首相 ${pct(roles.pm || 0, N)}・連立与党 ${pct(roles.junior || 0, N)}・野党 ${pct(roles.opposition || 0, N)}`);
+    });
+  });
 } else if (process.env.NATION) {
   // ---- 党首として戦う総選挙(1回)----
   const bots = (process.env.BOTS || 'ランダム,中級,上級').split(',');

@@ -216,7 +216,7 @@ Game.NationalView = (function () {
       '<p class="pr-note">掲げた公約:' + (promises ? '<b>' + promises + '</b>(政権に入れば任期のうちに果たす。野党に回れば白紙)' : 'なし') + '</p></section></div>' +
       seatTiles(e, cands) + '</div>' +
       '<footer class="ct-btns"><button type="button" class="btn" id="title">タイトルへ</button>' +
-      '<button type="button" class="btn btn-primary btn-lg" id="again">' + (willResign ? '党首を辞する' : e.meMajority ? '首相として政権を担う' : choose ? '政権づくりへ' : '野党党首として国会へ') + '</button></footer></div>';
+      '<button type="button" class="btn btn-primary btn-lg" id="again">' + (s.scenario && !choose ? 'シナリオの結末へ' : willResign ? '党首を辞する' : e.meMajority ? '首相として政権を担う' : choose ? '政権づくりへ' : '野党党首として国会へ') + '</button></footer></div>';
     app.querySelector('.result').classList.add('nat');
     if (stamp && !e.resultSeen) UI.sound('stamp');
     e.resultSeen = true;

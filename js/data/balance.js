@@ -453,6 +453,11 @@ Game.Balance = {
     outsider: 20,   // ほかの党に合流した「外様」は、その党の党首選で強さ −outsider(はじめの党に戻れば、なし)
   },
 
+  // ---- 史実シナリオ(R17。js/data/scenarios.js・js/engine/scenario.js)----
+  //   swingScale シナリオの swing(最初の総選挙の、党ごとの始まりの支持の上げ下げ)にかける倍率 / upperNext シナリオのあいだ参院選は来ない(会期)
+  //   goalPoints 達成した目標1つあたりの評価の点
+  scenario: { swingScale: 1, upperNext: 12, goalPoints: 8 },
+
   hall: { maxRecords: 50, veteranSeats: 5, hardGuide: 35, keeperKept: 5, longPMTurns: 12, cleanTerms: 3 },
 
   // ---- 党首選(党三役になると、任期の2会期目に立候補できる)----

@@ -55,7 +55,8 @@ Game.Campaign = (function () {
     ethic.upper = upperWind;
     const all = wind + unity + kept + broken + govBonus + fatigue + ethic.clean + ethic.penalty + upperWind;
     if (all) regions().forEach(function (r) { applyGain(camp, r.id, 'me', all); });
-    camp.comeback = { national: true, wind: wind, unity: unity, kept: kept, broken: broken, money: carryMoney, prevMine: cr.partySeats,
+    const scSwing = Game.Scenario.swing(state, camp, function (cp, rid, who, g) { return applyGain(cp, rid, who, g); });   // 史実シナリオ(R17)の局面
+    camp.comeback = { national: true, scenario: scSwing, wind: wind, unity: unity, kept: kept, broken: broken, money: carryMoney, prevMine: cr.partySeats,
       fatigue: fatigue, govBonus: govBonus, govRole: cr.gov ? cr.gov.role : null, approval: cr.gov ? Math.round(cr.gov.approval) : null, ethic: ethic };
     camp.deck = R.shuffle(state, NB.deck.concat(NB.manifesto[party]));
     planSurge(state, camp);   // 奔流(R15)

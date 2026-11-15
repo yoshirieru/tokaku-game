@@ -651,6 +651,33 @@ h1, h2, p { margin: 0; }
   font: 800 20px/1.3 var(--font-head); letter-spacing: .12em; transform: rotate(-7deg);
 }
 .stamp.new { animation: stamp-in .5s cubic-bezier(.2, 1.5, .4, 1) both; }
+/* 史実シナリオ(R17) */
+.scn-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.scn-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; text-align: left; border: 1px solid var(--line); border-top: 4px solid var(--pc); border-radius: var(--radius); background: var(--panel); color: var(--ink); cursor: pointer; }
+.scn-card.on { border-color: var(--gold); border-top-color: var(--pc); box-shadow: 0 0 0 2px var(--gold); }
+.scn-year { font: 800 13px var(--font-head); color: var(--gold); letter-spacing: .1em; }
+.scn-title { font: 800 18px var(--font-head); }
+.scn-role { font-size: 12px; color: var(--sub); }
+.scn-detail { display: flex; flex-direction: column; gap: 8px; }
+.scn-detail h3 { font: 700 14px var(--font-head); margin-bottom: 6px; }
+.scn-detail h3 small { margin-left: 6px; color: var(--sub); font-weight: 400; }
+.scn-cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.scn-bar { position: relative; display: flex; height: 26px; border-radius: 4px; overflow: hidden; }
+.scn-bar span { display: flex; align-items: center; gap: 4px; padding: 0 6px; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--on-accent); background: var(--pc); }
+.scn-maj { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+.scn-goals { display: flex; flex-direction: column; gap: 4px; padding-left: 1.2em; font-size: 14px; }
+.scn-goals.done { list-style: none; padding-left: 0; }
+.scn-goals.done li span { display: inline-block; min-width: 4em; margin-right: 8px; padding: 0 6px; border-radius: 4px; font-size: 12px; font-weight: 700; text-align: center; }
+.scn-goals.done li.ok span { background: var(--gold); color: var(--on-gold); }
+.scn-goals.done li.ng span { background: var(--track); color: var(--sub); }
+.scn-after { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 13px; }
+.scn-after b { font: 800 18px var(--font-head); }
+.scn-history { margin-top: 8px; font-size: 13.5px; color: var(--sub); }
+.scn-history b { margin-right: 8px; color: var(--gold); }
+@media (max-width: 760px) {
+  .scn-grid { grid-template-columns: 1fr 1fr; }
+  .scn-cols { grid-template-columns: minmax(0, 1fr); }
+}
 /* 新党の名前を決める(R16) */
 .np-form { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px 12px; margin-top: 4px; }
 .np-form .field { max-width: none; }
