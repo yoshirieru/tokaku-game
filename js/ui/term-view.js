@@ -155,7 +155,10 @@ Game.TermView = (function () {
   function foundModal(s, done, cancelLabel) {
     const cr = s.career, NP = Game.Balance.newParty, from = Game.Data.PARTIES[s.player.party];
     const lost = cr.rank ? Game.Balance.ranks[cr.rank].name + 'の役職を失う。' : '';
-    const pick = function (i) { return function () { const r = K.foundParty(s, i); Game.clearUndo(); Game.ui.card = null; Game.save(); UI.sound('stamp'); done(r); }; };
+    let name = null, short = null, color = Game.Data.NEW_PARTY_COLORS[0], shortTouched = false;
+    const found = function () { const r = K.foundParty(s, { name: name.value, short: short.value, color: color }); Game.clearUndo(); Game.ui.card = null; Game.save(); UI.sound('stamp'); done(r); };
+    const swatches = Game.Data.NEW_PARTY_COLORS.map(function (c, i) { return '<button type="button" class="np-sw' + (i === 0 ? ' on' : '') + '" data-c="' + c + '" style="--pc:' + c + '" aria-label="色 ' + (i + 1) + '"></button>'; }).join('');
+    const examples = Game.Data.NEW_PARTIES.map(function (n, i) { return '<button type="button" class="np-ex" data-i="' + i + '">' + UI.esc(n.name) + '</button>'; }).join('');
     UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・党を割る</p><h2>新党を立ち上げる</h2>' +
       '<p>' + from.name + 'を離れ、自分の旗を揚げる。同志 <b>' + K.matesOf(cr) + '人</b>がついてくる。</p>' +
       '<ul class="m-lines">' +
@@ -163,10 +166,37 @@ Game.TermView = (function () {
         '<li class="ml-broken">党の組織は離れる(地力は元の党の ' + Math.round(NP.carry * 100) + '%)。比例復活はほぼ望めない。</li>' +
         '<li class="ml-kept">最初の選挙は<b>新党ブーム</b>。浮動票・若者の地区ほど伸びる。地盤と、地元の団体との約束はそのまま。</li>' +
         '<li class="ml-kept">議席を積めば、ほかの党から<b>合流</b>の誘いが来る。持ってきた議席しだいで、合流先の役職が決まる。</li>' +
-      '</ul><p class="m-kicker">党の名前</p>',
-      Game.Data.NEW_PARTIES.map(function (n, i) {
-        return { label: '<b><span class="pchip" style="--pc:' + n.color + '">' + UI.esc(n.short) + '</span> ' + UI.esc(n.name) + '</b><span>' + UI.esc(n.motto) + '</span>', onClick: pick(i) };
-      }).concat([{ label: '<b>' + (cancelLabel || 'やめておく') + '</b><span>' + from.name + 'に残る</span>', onClick: function () { done(null); } }]), 'choices');
+      '</ul>' +
+      '<div class="np-form">' +
+        '<label class="field np-name">党の名前<input id="npName" maxlength="' + NP.nameMax + '" placeholder="' + UI.esc(Game.Data.NEW_PARTIES[0].name) + '" autocomplete="off"></label>' +
+        '<label class="field np-short">略称(' + NP.shortMax + '文字まで)<input id="npShort" maxlength="' + NP.shortMax + '" placeholder="' + UI.esc(Game.Data.NEW_PARTIES[0].short) + '" autocomplete="off"></label>' +
+        '<div class="np-colors"><span>党の色</span>' + swatches + '</div>' +
+        '<div class="np-exs"><span>例</span>' + examples + '</div>' +
+        '<p class="np-preview"><span class="pchip" id="npChip" style="--pc:' + color + '">' + UI.esc(Game.Data.NEW_PARTIES[0].short) + '</span> <b id="npPrev">' + UI.esc(Game.Data.NEW_PARTIES[0].name) + '</b></p>' +
+      '</div>',
+      [{ label: cancelLabel || 'やめておく', onClick: function () { done(null); } }, { label: 'この名前で旗を揚げる', primary: true, onClick: found }]);
+    // 入力:略称は、自分で書きかえるまで名前の頭2文字。プレビューを打つたびに更新
+    const box = document.querySelector('.modal-back:last-child .modal');
+    name = box.querySelector('#npName'); short = box.querySelector('#npShort');
+    const chip = box.querySelector('#npChip'), prev = box.querySelector('#npPrev');
+    const preview = function () {
+      const c = K.cleanName({ name: name.value, short: short.value, color: color });
+      chip.textContent = c.short; chip.style.setProperty('--pc', c.color); prev.textContent = c.name;
+    };
+    name.oninput = function () { if (!shortTouched) short.value = name.value.replace(/\s/g, '').slice(0, 2); preview(); };
+    short.oninput = function () { shortTouched = short.value !== ''; preview(); };
+    box.querySelectorAll('.np-sw').forEach(function (b) {
+      b.onclick = function () { color = b.dataset.c; box.querySelectorAll('.np-sw').forEach(function (x) { x.classList.toggle('on', x === b); }); preview(); };
+    });
+    box.querySelectorAll('.np-ex').forEach(function (b) {
+      b.onclick = function () {
+        const ex = Game.Data.NEW_PARTIES[+b.dataset.i];
+        name.value = ex.name; short.value = ex.short; shortTouched = true; color = ex.color;
+        box.querySelectorAll('.np-sw').forEach(function (x) { x.classList.toggle('on', x.dataset.c === color); });
+        preview();
+      };
+    });
+    name.focus();
   }
 
   // ---------- 知らせ ----------

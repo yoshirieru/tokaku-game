@@ -449,6 +449,7 @@ Game.Balance = {
     dissolveAt: 1, prLine: 99,
     merge: { chance: 0.4, rankBySeats: [[12, 4], [8, 3], [5, 2], [3, 1]], rejoinRank: -1, meritPerSeat: 3 },
     meritKeep: 0.5,
+    nameMax: 12, shortMax: 3,   // 自分で決める党の名前と略称の長さ
     outsider: 20,   // ほかの党に合流した「外様」は、その党の党首選で強さ −outsider(はじめの党に戻れば、なし)
   },
 

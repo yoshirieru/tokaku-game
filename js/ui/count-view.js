@@ -104,7 +104,7 @@ Game.CountView = (function () {
     app.innerHTML = '<div class="count">' +
       '<header class="ct-head panel"><span class="ct-live">開票速報</span><h1>' + UI.esc(Game.Data.DISTRICT.name) + '</h1>' +
       '<span class="ct-clock">' + (prShown ? '1:30' : tick.time) + '</span><span class="ct-pct">開票率 <b>' + Math.round(tick.pct * 100) + '</b>%</span></header>' +
-      '<div class="ct-body"><section class="ct-cands panel">' + rows + prBox + '</section>' +
+      '<div class="ct-body"><section class="ct-cands panel' + (prShown || cands.length > 3 ? ' compact' : '') + '">' + rows + prBox + '</section>' +
       '<div class="map-cell">' + UI.mapHtml(fill, null) + '</div></div>' +
       '<div class="ct-ticker panel' + (fc && t === fc.retract && !prShown ? ' alert' : '') + '"><span class="tk-lab">速報</span><span>' + UI.esc(prShown ? prText : narration(s, t)) + '</span></div>' +
       '<footer class="ct-btns">' +
@@ -113,6 +113,7 @@ Game.CountView = (function () {
       (canResult ? '<button type="button" class="btn' + (t === last ? ' btn-primary btn-lg' : '') + '" id="result">' + (pr && !prShown ? '比例代表の結果へ' : '結果を見る') + '</button>' : '') +
       '</footer></div>';
     app.querySelector('#pins').innerHTML = pins;
+    if (prShown) { const pc = app.querySelector('.ct-cands'); pc.scrollTop = pc.scrollHeight; }   // 比例代表の結果が欄に入りきらなければ、そこまで送る
 
     // 棒と票数を、前の時刻からなめらかに動かす
     requestAnimationFrame(function () {

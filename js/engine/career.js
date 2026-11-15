@@ -643,11 +643,20 @@ Game.Career = (function () {
     const M = NPB().mates;
     return Math.max(0, Math.min(M.max, Math.round(M.base + cr.wins * M.perWin + cr.merit * M.perMerit)));
   }
-  // 結党する。idx は Game.Data.NEW_PARTIES の何番目か
-  function foundParty(state, idx) {
+  // 自分で決めた名前を整える(長さを切り、記号を除く。空なら例の1つめ)
+  function cleanName(spec) {
+    const N = NPB(), ex = Game.Data.NEW_PARTIES[0];
+    const strip = function (v, max) { return String(v || '').replace(/[<>&"'`\s]/g, '').slice(0, max); };
+    const name = strip(spec.name, N.nameMax) || ex.name;
+    const short = strip(spec.short, N.shortMax) || name.slice(0, 2);
+    const color = Game.Data.NEW_PARTY_COLORS.indexOf(spec.color) >= 0 ? spec.color : Game.Data.NEW_PARTY_COLORS[0];
+    return { name: name, short: short, color: color, motto: strip(spec.motto, 24) };
+  }
+  // 結党する。spec は { name, short, color }(自分で決めた名前)か、Game.Data.NEW_PARTIES の何番目か
+  function foundParty(state, spec) {
     const cr = state.career;
     if (!canFound(state)) return null;
-    const preset = Game.Data.NEW_PARTIES[idx] || Game.Data.NEW_PARTIES[0], from = state.player.party;
+    const preset = cleanName(spec && typeof spec === 'object' ? spec : Game.Data.NEW_PARTIES[spec || 0] || Game.Data.NEW_PARTIES[0]), from = state.player.party;
     const mates = matesOf(cr);
     cr.np = { id: 'shinto', name: preset.name, short: preset.short, color: preset.color, motto: preset.motto, from: from, mates: mates, seats: null, best: 0, elections: 0, boomPending: true, last: null, offered: true };
     cr.npFounded = (cr.npFounded || 0) + 1;
@@ -730,7 +739,7 @@ Game.Career = (function () {
     cr.news = (rejoin ? name + 'に復党した。' : '「' + np.name + '」は' + name + 'に合流した。') + (cr.rank ? ranks[cr.rank].name + 'として迎えられる。' : '');
     return { party: target, rank: cr.rank, rejoin: rejoin };
   }
-  // 知らせへの答え:npOffer('found' + idx / 'stay')、npMerge(true / false)、npDissolve(党の id / 'retire')
+  // 知らせへの答え:npOffer('found' + spec / 'stay')、npMerge(true / false)、npDissolve(党の id / 'retire')
   function answerNp(state, answer, idx) {
     const cr = state.career, p = cr.pending[0];
     if (!p) return null;
@@ -802,6 +811,6 @@ Game.Career = (function () {
     autoPromise: autoPromise, seated: seated, nextRank: nextRank, retire: retire, raceStrength: raceStrength, runRace: runRace, quickLeader: quickLeader,
     isPM: isPM, canDissolve: canDissolve, dissolve: dissolve, changeApproval: changeApproval, termDeck: termDeck,
     answerBy: answerBy, answerRedistrict: answerRedistrict, chooseSeat: chooseSeat,
-    canFound: canFound, matesOf: matesOf, foundParty: foundParty, mergeParty: mergeParty, mergeRank: mergeRank, answerNp: answerNp,
+    canFound: canFound, matesOf: matesOf, cleanName: cleanName, foundParty: foundParty, mergeParty: mergeParty, mergeRank: mergeRank, answerNp: answerNp,
   };
 })();
