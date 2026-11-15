@@ -20,7 +20,7 @@ Game.Hall = (function () {
   function facts(state) {
     const cr = state.career, en = state.ending, q = cr.quickStart || { wins: 0, kept: 0 };
     const hist = cr.history || [];
-    const seat = state.player.seat || 'hokuyo3', party = state.player.party;
+    const seat = state.player.seat || 'hokuyo3', party = state.player.party === 'shinto' && cr.np ? cr.np.from : state.player.party;   // 新党(R16)は、元の党として記録する
     const seated = function (h) { return h.national || h.won || h.revived; };
     let lostBefore = false, comeback = false;
     hist.forEach(function (h) {
@@ -33,7 +33,7 @@ Game.Hall = (function () {
     hist.forEach(function (h) { if (!h.national && seated(h)) seatsWon[h.seat || seat] = true; });
     const hardWin = hist.some(function (h) {
       const S = Game.Balance.seats[h.seat || seat];
-      return !h.national && h.won && !h.by && S && S.guide[party] < H().hardGuide;
+      return !h.national && h.won && !h.by && S && S.guide[h.party || party] < H().hardGuide;
     });
     const sc = state.scandal || {};
     return {
@@ -47,6 +47,7 @@ Game.Hall = (function () {
       rank: cr.quick ? 0 : (cr.bestRank || 0),   // 近道は党首から始まるので、役職の実績(大臣の椅子)は数えない
       raceWon: !!cr.raceWon, majority: !!cr.wonMajority, coalPM: !!cr.coalPM,
       pm: !!cr.wasPM, pmTurns: cr.pmTurns || 0, great: !!en.great, grade: en.grade,
+      npWon: !!cr.npWon, mergePM: !!(cr.npPast && cr.wasPM),
     };
   }
   // この1回で達成した実績(セーブデータをまたぐものは、殿堂に積み重ねてから判定する)
@@ -70,6 +71,8 @@ Game.Hall = (function () {
       longPM: f.pmTurns >= L.longPMTurns,
       greatPM: f.great,
       gradeS: f.grade === 'S',
+      newParty: f.npWon,
+      mergePM: f.mergePM,
       allSeats: Game.Data.SEAT_ORDER.every(function (k) { return hall.seatsWon[k]; }),
       threeParties: Object.keys(Game.Data.PARTIES).every(function (k) { return hall.pmParties[k]; }),
     };

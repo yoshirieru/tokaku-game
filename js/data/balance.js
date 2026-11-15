@@ -49,6 +49,7 @@ Game.Balance = {
     nat_kyowa:  { mult: 1, gain: 5, actions: [3, 3, 3, 3, 3, 3, 3, 3] },
     nat_mirai:  { mult: 1, gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },
     challenger: { mult: 1.2,  gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },   // プレイヤーに議席を奪われた前の現職(画面では元職)。巻き返しをねらう
+    assassin:   { mult: 1.0,  gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },   // 新党を作ったプレイヤーに、元の党が送りこむ刺客(R16。党の組織がまるごとつく)
   },
   // プレイヤーの立場ごとの、始まりの支持の倍率(新人 / 当選して現職 / 落選した元職)
   // revived は、小選挙区で負けて比例復活した現職(議席はあるが、選挙区には勝った相手がいる)
@@ -202,7 +203,7 @@ Game.Balance = {
   // 引退したときの評価(点数)。grades は [評価, 点数の下限]
   //   seatsPer 総選挙の最多議席をこの数で割った点(上限 seatsMax)/ majority 総選挙で単独過半数を取った
   //   pm 首相になった / pmTurn 首相として務めた会期1つあたり(上限 pmTurnMax)
-  legacy: { win: 4, winMax: 40, rank: 9, kept: 2, keptMax: 20, broken: -4, seatsPer: 20, seatsMax: 15, majority: 10, pm: 20, pmTurn: 2, pmTurnMax: 30, grades: [['S', 175], ['A', 130], ['B', 80], ['C', 30]] },
+  legacy: { win: 4, winMax: 40, rank: 9, kept: 2, keptMax: 20, broken: -4, seatsPer: 20, seatsMax: 15, majority: 10, pm: 20, pmTurn: 2, pmTurnMax: 30, npSeat: 1, npMax: 12, grades: [['S', 175], ['A', 130], ['B', 80], ['C', 30]] },
 
   // 任期の結果が、次の選挙に返ってくる(推薦・破った約束のカードは cards.js が約束ごとに作る)
   comeback: {
@@ -430,6 +431,27 @@ Game.Balance = {
   //   maxRecords 歴代の記録に残す数 / veteranSeats「ベテラン議員」の議席の回数 / hardGuide「逆風を越えて」:選挙区の難しさの目安(guide)がこれ未満
   //   keeperKept「約束を守り抜く」の守った約束の数 / longPMTurns「長期政権」の首相の会期(半年)の数
   //   cleanTerms「清廉潔白」:「クリーン」の評判を最高にした任期の数(R9)
+  // ---- 新党結成・党を割る(R16。js/engine/career.js の foundParty / mergeParty ほか)----
+  //   当選 minWins 回から(議員・浪人。党首は除く)、任期の ≡ メニューか、党首選に敗れたあとの知らせで党を割れる
+  //   結党すると:役職を失い(党内評価は半分)、元の党は次の選挙で刺客(roles.assassin)を送る。小選挙区は4人の争いになる
+  //     新党の地力 = 元の党の地力 × carry(後援会と、ついてきた支持者)。刺客は元の党の地力 × left
+  //     結党して最初の選挙は新党ブーム:全地区 +boom(ぶれ boomSd、浮動票・若者の地区は × floatMult)
+  //     同志(ついてくる議員)= mates.base + 当選回数 × perWin + 党内評価 × perMerit(max まで)。同志の数で「党幹部の応援」のカードが来る(starPer 人に1枚、2枚まで)
+  //   選挙のあと、新党の議席 = 自分 + 同志が小選挙区で勝った数(1人ずつ mateWin の見込み)+ 比例(同志 × prPer × ブームの倍率)
+  //     議席が dissolveAt 以下なら解党(ほかの党に合流する)。比例復活のラインは prLine(小さな党は比例の議席が少ない)
+  //   合流の誘い:選挙のあとの任期に、merge.chance の見込みで、ほかの党(元の党なら「復党」)から。合流先での役職は持ってきた議席で決まる
+  //     はじめの党でない党に合流すると「外様」。その党の党首選で強さ −outsider
+  newParty: {
+    minWins: 2, carry: 0.5, left: 0.8,
+    boom: 4, boomSd: 3, floatMult: 1.5,
+    mates: { base: 1, perWin: 1, perMerit: 0.06, max: 14 }, starPer: 4,
+    mateWin: { base: 0.22, perBoom: 0.03, meWon: 0.12 }, prPer: 0.3,
+    dissolveAt: 1, prLine: 99,
+    merge: { chance: 0.4, rankBySeats: [[12, 4], [8, 3], [5, 2], [3, 1]], rejoinRank: -1, meritPerSeat: 3 },
+    meritKeep: 0.5,
+    outsider: 20,   // ほかの党に合流した「外様」は、その党の党首選で強さ −outsider(はじめの党に戻れば、なし)
+  },
+
   hall: { maxRecords: 50, veteranSeats: 5, hardGuide: 35, keeperKept: 5, longPMTurns: 12, cleanTerms: 3 },
 
   // ---- 党首選(党三役になると、任期の2会期目に立候補できる)----

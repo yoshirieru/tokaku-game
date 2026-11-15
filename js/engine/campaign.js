@@ -70,19 +70,26 @@ Game.Campaign = (function () {
     Game.Data.setHome(state.player.seat);   // 立候補している選挙区(はじめのセーブにはないので、北陽3区になる)
     Game.Data.useArena(cr && cr.leader ? 'nation' : 'home');
     if (cr && cr.leader) return newNational(state);
-    const D = Game.Data.DISTRICT;
-    const roles = (cr && cr.rivalRoles) || D.roles[party];
+    const D = Game.Data.DISTRICT, np = cr && cr.np, NP = B.newParty;
+    // 新党(R16):元の党は刺客を送る。小選挙区は4人の争い
+    const roles = (cr && cr.rivalRoles) || (np ? newPartyRoles(D, np) : D.roles[party]);
     const cands = [{ id: 'me', party: party, name: state.player.name, short: state.player.name.split(/[ 　]/)[0], role: cr ? cr.role : 'newcomer', player: true }];
     Object.keys(roles).forEach(function (p) {
       const who = D.people[p];
-      cands.push({ id: p, party: p, name: who.name, short: who.short, role: roles[p] });
+      cands.push({ id: p, party: p, name: who.name, short: who.short, role: roles[p], tag: roles[p] === 'assassin' ? '刺客' : undefined });
     });
+    // 党の地力。新党は元の党の地力の一部(後援会と、ついてきた支持者)、刺客は元の党の組織の大半
+    const partyBase = function (rid, p) {
+      const b = baseOf(rid);
+      if (!np) return b[p];
+      return p === 'shinto' ? b[np.from] * NP.carry : p === np.from ? b[p] * NP.left : b[p];
+    };
     const shares = {};
     regions().forEach(function (r) {
       const raw = {};
       let sum = 0;
       cands.forEach(function (c) {
-        raw[c.id] = baseOf(r.id)[c.party] * (c.player ? B.playerRoles[c.role] : B.roles[c.role].mult * (B.seats[D.id].rivalMult || 1));
+        raw[c.id] = partyBase(r.id, c.party) * (c.player ? B.playerRoles[c.role] : B.roles[c.role].mult * (B.seats[D.id].rivalMult || 1));
         sum += raw[c.id];
       });
       shares[r.id] = {};
@@ -100,16 +107,17 @@ Game.Campaign = (function () {
     ethic.upper = Game.Upper.takeWind(state);   // 参院選の勢い(R12)
     let deck = B.deck.slice();
     if (ethic.unendorsed) deck = deck.filter(function (id) { return id !== 'star'; });
+    const pp = np ? np.from : party;   // 約束のカードは、新党でも地元の団体との約束のまま
     if (!cr) {
-      deck = deck.concat(B.partyPromises[party]);
+      deck = deck.concat(B.partyPromises[pp]);
     } else {
       const N = cr.next;
-      const stars = ethic.unendorsed ? 0 : Game.Career.extraStars(cr);
+      const stars = ethic.unendorsed ? 0 : np ? Math.min(CB.starExtraMax, Math.floor(np.mates / NP.starPer)) : Game.Career.extraStars(cr);   // 新党は同志の数で
       for (let i = 0; i < stars; i++) deck.push('star');
       // 約束のカード:持ち越した約束・破った約束の団体には、今回は約束できない
       const closed = {};
       N.carried.concat(N.broken, N.light).forEach(function (id) { closed[id] = true; });
-      B.partyPromises[party].forEach(function (id) { if (!closed[B.cards[id].promise]) deck.push(id); });
+      B.partyPromises[pp].forEach(function (id) { if (!closed[B.cards[id].promise]) deck.push(id); });
       N.endorse.forEach(function (id) { deck.push('e_' + id); });
       N.broken.forEach(function (id) { deck.push('b_' + id); });
       camp.promises = N.carried.slice();
@@ -130,7 +138,17 @@ Game.Campaign = (function () {
       // 役職の重み:顔が売れているぶん、全地区で少し上がる
       const rk = cr.status === 'member' ? B.ranks[cr.rank || 0] : null;
       if (rk && rk.startAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', rk.startAll); });
-      camp.comeback = { wind: wind, rank: rk && rk.startAll ? { name: rk.name, gain: rk.startAll } : null, stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney, ethic: ethic };
+      // 新党ブーム(R16):結党して最初の選挙だけ。浮動票・若者の地区ほど大きい
+      let npInfo = null;
+      if (np) {
+        const boom = np.boomPending ? Math.round(NP.boom + R.normal(state) * NP.boomSd) : 0;
+        np.boomPending = false;
+        np.lastBoom = boom;
+        if (boom) regions().forEach(function (r) { applyGain(camp, r.id, 'me', boom * (r.tags.some(function (t) { return t === 'float' || t === 'youth'; }) ? NP.floatMult : 1)); });
+        const as = cands.filter(function (c) { return c.role === 'assassin'; })[0];
+        npInfo = { name: np.name, boom: boom, assassin: as ? as.name : null, from: np.from, mates: np.mates };
+      }
+      camp.comeback = { np: npInfo, wind: wind, rank: rk && rk.startAll ? { name: rk.name, gain: rk.startAll } : null, stars: stars, endorse: N.endorse.slice(), broken: N.broken.slice(), light: N.light.slice(), carried: N.carried.slice(), base: baseSum, money: carryMoney, ethic: ethic };
     }
     const ethicAll = ethic.clean + ethic.penalty + ethic.upper;
     if (ethicAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', ethicAll); });
@@ -139,6 +157,14 @@ Game.Campaign = (function () {
     state.camp = camp;
     startDay(state);
     return camp;
+  }
+
+  // 新党(R16)の小選挙区の顔ぶれ:元の党の立場から見た相手2人と、元の党の刺客
+  function newPartyRoles(D, np) {
+    const out = {};
+    Object.keys(D.roles[np.from]).forEach(function (k) { out[k] = D.roles[np.from][k]; });
+    out[np.from] = 'assassin';
+    return out;
   }
 
   // ---------- 計算 ----------
@@ -523,7 +549,7 @@ Game.Campaign = (function () {
     baseOf: baseOf, turnoutOf: turnoutOf,
     // 対戦モード(js/engine/versus.js)が、日の進め方を組み立て直すときに使う
     draw: draw, planIntents: planIntents, morningEvent: morningEvent, pollHeadline: pollHeadline,
-    trackClose: trackClose, closeBoost: closeBoost,
+    trackClose: trackClose, closeBoost: closeBoost, newPartyRoles: newPartyRoles,
     planSurge: planSurge, surgeMorning: surgeMorning, surgeTick: surgeTick, surgeTurnout: surgeTurnout, surgeShares: surgeShares,
   };
 })();

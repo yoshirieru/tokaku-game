@@ -32,8 +32,23 @@ Game.Data.ROLES = {
   kyowa:  { minsei: 'incumbent', mirai: 'newcomer' },
   mirai:  { minsei: 'former', kyowa: 'newcomer' },
 };
-Game.Data.ROLE_NAMES = { incumbent: '現職', revived: '現職(比例)', former: '元職', challenger: '元職', newcomer: '新人', leader: '党首', nat_minsei: '党首', nat_kyowa: '党首', nat_mirai: '党首' };
-Game.Data.ROLE_ORDER = ['incumbent', 'revived', 'former', 'challenger', 'newcomer'];   // 開票特番の並び(テレビと同じ)
+Game.Data.ROLE_NAMES = { incumbent: '現職', revived: '現職(比例)', former: '元職', challenger: '元職', newcomer: '新人', assassin: '新人', leader: '党首', nat_minsei: '党首', nat_kyowa: '党首', nat_mirai: '党首' };
+Game.Data.ROLE_ORDER = ['incumbent', 'revived', 'former', 'challenger', 'newcomer', 'assassin'];
+
+// 新党(R16)。結党のときに名前を選ぶ。党の id はいつも 'shinto'
+// Game.Data.PARTIES には「数えない」(列挙されない)形で足す。全国の総選挙・参院選・準備の画面は3党のまま
+Game.Data.NEW_PARTIES = [
+  { name: '新しい日本の会', short: '新日', color: '#16a37f', motto: '古い政治を、終わらせる' },
+  { name: '国民改革新党',   short: '改新', color: '#8b5cf6', motto: '改革を、国民の手に' },
+  { name: '希望の結(ゆい)', short: '結', color: '#ec4899', motto: 'ひとりひとりを、結ぶ政治' },
+];
+Game.Data.setNewParty = function (np) {
+  if (!np) { delete Game.Data.PARTIES.shinto; return; }
+  Object.defineProperty(Game.Data.PARTIES, 'shinto', {
+    value: { id: 'shinto', name: np.name, short: np.short, color: np.color, position: '新党', description: np.motto, isNew: true },
+    enumerable: false, configurable: true, writable: true,
+  });
+};   // 開票特番の並び(テレビと同じ)
 
 // 地区の性格(カードの効き方に出る)
 Game.Data.TAGS = {

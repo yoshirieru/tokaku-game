@@ -7,6 +7,7 @@
 //   VERSUS=1 node tools/autoplay.js 300               対戦モード(2人ともボット。BOTS=中級,上級 で 1P と 2P のボット。党の組み合わせごとに 1P・2P・AI の勝ち)
 //   URA=1 で資金のカードの収入を載せない(裏金。R9)、DIRTY=1 で買収を黙認し怪文書に反撃する(選挙違反。R10)。立会人は上級ボットが送る
 //   SURGE=1 node tools/autoplay.js 300                最初の選挙で、奔流の起きた割合・投票率・だれが勝ったか(R15)
+//   CAREER=1 NEWPARTY=1 node tools/autoplay.js 200     当選2回で党を割り、合流の誘いは受ける(NEWPARTY=stay は断る、race は党首選に敗れたときだけ割る)(R16)
 //   SEATS=all node tools/autoplay.js 300              選挙区ごとに(SEATS=touou7,biyou2 のように選べる。ないときは北陽3区だけ)
 //   node tools/autoplay.js 300 "B.playerRoles.newcomer=0.7;"   ファイルを変えずに数値を試す(B は Game.Balance)
 //     ※ 推薦・破った約束のカードの数値(B.comeback.endorse / curse)は読み込み時に写すので、ここからは変えられない
@@ -183,17 +184,23 @@ function playTerm(state, termBot) {
         }
         Game.Future.answerBudget(state, pickB);
       }
+      // 新党(R16):NEWPARTY=1 なら党を割り、合流の誘いは受ける(NEWPARTY=stay なら断る)。解党のときは、その選挙区でいちばん強い党へ
+      else if (t === 'npOffer') Game.Career.answerNp(state, process.env.NEWPARTY ? 'found' : 'stay', 0);
+      else if (t === 'npMerge') { npStats.offers++; const yes = process.env.NEWPARTY !== 'stay'; if (yes) npStats.merges++; Game.Career.answerNp(state, yes); }
+      else if (t === 'npDissolve') { npStats.dissolved++; const seat = state.player.seat || 'hokuyo3'; const to = Object.keys(Game.Data.PARTIES).sort((a, b) => B.seats[seat].guide[b] - B.seats[seat].guide[a])[0]; Game.Career.answerNp(state, to); }
+      else if (t === 'npResult') { npStats.results++; npStats.seats += p.last.seats; npStats.me += p.last.me ? 1 : 0; Game.Career.answerNp(state); }
       else if (t === 'redistrict') { ethics.redistrict++; Game.Career.answerRedistrict(state, 'race'); }
       else if (t === 'upperElection') {   // 参院選(R12):党首は UPPER(tour / manifesto / none。省くと tour)、議員は応援
         const r = Game.Upper.run(state, cr.leader ? (process.env.UPPER || 'tour') : 'support');
-        ethics.upper++; ethics.upperWon += r.won[state.player.party];
+        ethics.upper++; ethics.upperWon += r.won[state.player.party] || 0;
         if (cr.gov && cr.gov.role === 'pm') { ethics.pmUpper++; if (r.twisted) ethics.twist++; }
         if (r.wind > 0) ethics.windUp++; else if (r.wind < 0) ethics.windDown++;
         Game.Career.dismiss(state);
       }
       else if (t === 'moveSeat') {   // 国替え:いちばん勝ちやすい選挙区へ
         ethics.moved++;
-        const best = Game.Scandal.movableSeats(state).sort((a, b) => B.seats[b].guide[state.player.party] - B.seats[a].guide[state.player.party])[0];
+        const gp = cr.np ? cr.np.from : state.player.party;
+        const best = Game.Scandal.movableSeats(state).sort((a, b) => B.seats[b].guide[gp] - B.seats[a].guide[gp])[0];
         Game.Career.chooseSeat(state, best);
       } else {
         if (/裏金/.test(p.title || '')) { ethics.found++; if (p.retire) ethics.resigned++; }
@@ -202,6 +209,7 @@ function playTerm(state, termBot) {
       }
     }
     if (state.screen !== 'term' || cr.pending.length) break;
+    if (process.env.NEWPARTY && process.env.NEWPARTY !== 'race' && !cr.npFounded && Game.Career.canFound(state)) { Game.Career.foundParty(state, 0); npStats.founded++; }   // 当選2回で党を割る(NEWPARTY=race なら、党首選に敗れたときだけ)
     TERM_BOTS[termBot](state);
     turns += 1;
     if (Game.Career.canDissolve(cr) && cr.turn >= 4 && cr.gov.approval >= 55 && !cr.promises.length) { Game.Career.dissolve(state); break; }
@@ -211,6 +219,7 @@ function playTerm(state, termBot) {
   return turns;
 }
 const stats = { races: 0, raceWins: 0 };
+const npStats = { founded: 0, results: 0, seats: 0, me: 0, offers: 0, merges: 0, dissolved: 0 };   // 新党(R16)
 let curSeat = 'hokuyo3';
 function newState(party, seed) {
   Game.Data.setHome(curSeat);
@@ -290,6 +299,7 @@ if (process.env.VERSUS) {
     const ach = {};   // 1回の歩みで達成した実績(セーブデータをまたぐものは数えない)
     const papers = { tone: {}, delta: {}, decisions: 0, heads: {} };   // 30年後の新聞(R14)
     stats.races = 0; stats.raceWins = 0;
+    Object.keys(npStats).forEach((k) => { npStats[k] = 0; }); let npPM = 0, npEnd = 0;
     for (let i = 0; i < N; i++) {
       const seed = (i + 1) * 7919 + p.length * 104729;
       const state = newState(p, seed);
@@ -325,11 +335,14 @@ if (process.env.VERSUS) {
         Object.keys(pp.ind).forEach((k) => { papers.delta[k] = (papers.delta[k] || 0) + pp.ind[k].delta; });
       }
       if (state.career.wasPM) { pmEver++; pmTurns += state.career.pmTurns || 0; }
+      if (state.career.npPast && state.career.wasPM) npPM++;
+      if (state.career.np) npEnd++;
     }
     console.log(`${Game.Data.PARTIES[p].short}: 回ごとの議席 ${seat.map((w) => pct(w, N)).join(' / ')}(うち小選挙区 ${dist.map((w) => pct(w, N)).join(' / ')})`);
     console.log(`      現職が議席を守る ${pct(incSeat, inc)}  落選からの返り咲き ${pct(outSeat, out)}  公認を失って引退 ${pct(dropped, N)}  任期の平均 ${(turns / terms).toFixed(1)}会期`);
     console.log(`      1任期あたり:守った ${(kept / terms).toFixed(2)}  途中まで ${(light / terms).toFixed(2)}  破った ${(broken / terms).toFixed(2)}  持ち越し ${(carried / terms).toFixed(2)}  地盤の合計 ${(base / terms).toFixed(1)}  応援の追加 ${(stars / terms).toFixed(2)}`);
     console.log(`      到達した役職 ${B.ranks.map((r, k) => r.name + ' ' + pct(ranks[k], N)).join(' / ')}  評価 ${['S', 'A', 'B', 'C', 'D'].map((g) => g + ' ' + pct(grades[g] || 0, N)).join(' ')}(平均 ${(score / N).toFixed(0)}点)`);
+    if (process.env.NEWPARTY) console.log(`      新党:結党 ${npStats.founded}回  新党で戦った選挙 ${npStats.results}回(自分が議席 ${pct(npStats.me, npStats.results)}・党の議席 平均 ${npStats.results ? (npStats.seats / npStats.results).toFixed(1) : '—'})  合流の誘い ${npStats.offers}回・合流 ${npStats.merges}回  解党 ${npStats.dissolved}回  新党のまま引退 ${pct(npEnd, N)}  合流して首相 ${pct(npPM, N)}`);
     console.log(`      党首選 ${stats.races}回のうち勝ち ${pct(stats.raceWins, stats.races)}  党首としての総選挙 ${natN}回:平均 ${natN ? (natSeats / natN).toFixed(0) : '—'}議席・過半数 ${pct(natMaj, natN)}  議席を減らして辞任 ${pct(resigned, N)}`);
     console.log(`      首相になった ${pct(pmEver, N)}(平均の在任 ${pmEver ? (pmTurns / pmEver / 2).toFixed(1) : '—'}年)  支持率の低迷で退陣 ${pct(ousted, N)}`);
     console.log(`      参院選 ${ethics.upper}回(自分の党の改選の平均 ${ethics.upper ? (ethics.upperWon / ethics.upper).toFixed(1) : '—'}議席、次の衆院選に追い風 ${pct(ethics.windUp, ethics.upper)}・逆風 ${pct(ethics.windDown, ethics.upper)})  首相のときの参院選 ${ethics.pmUpper}回のうち、ねじれ ${pct(ethics.twist, ethics.pmUpper)}`);

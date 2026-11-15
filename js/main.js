@@ -82,6 +82,7 @@ window.Game = window.Game || {};
     const camp = s && (s.screen === 'campaign' || s.screen === 'count' || s.screen === 'result' || s.screen === 'coalition') ? s.camp : null;
     const leaderTerm = s && s.screen === 'term' && s.career && s.career.leader;   // 党首の任期は全国の地図
     if (s) Game.Data.setHome(s.player.seat);   // 立候補している選挙区(R6 より前のセーブは北陽3区)
+    if (s) Game.Data.setNewParty(s.career && s.career.np);   // 新党(R16)の名前と色
     Game.Data.useArena((camp && camp.arena === 'nation') || leaderTerm ? 'nation' : 'home');
   }
   Game.continueGame = function () {

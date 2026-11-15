@@ -60,6 +60,10 @@ Game.Upper = (function () {
         { id: 'none', share: 0, note: '党の候補に任せ、国会に専念する' },
       ];
     }
+    if (cr.np) return [   // 新党(R16)は参院に候補を立てていない
+      { id: 'support', share: 0, note: '他党の候補の応援で顔をつなぐ。同志が1人増える' },
+      { id: 'local', share: 0, note: '選んでいる地区の地盤 +' + u.local },
+    ];
     return [
       { id: 'support', share: cr.status === 'member' ? u.memberShare : u.memberShare / 2, note: '党への貢献 +' + u.support + '。党の得票も少し上がる' },
       { id: 'local', share: 0, note: '選んでいる地区の地盤 +' + u.local },
@@ -75,6 +79,7 @@ Game.Upper = (function () {
     let note = '';
     if (choice === 'tour') { cr.energy = Math.max(0, cr.energy - B.tourEnergy); note = '全国の候補を応援して回った。'; }
     else if (choice === 'manifesto') note = ch.share ? '果たした公約を前に出して戦った。' : '公約を訴えたが、まだ実績がない。';
+    else if (choice === 'support' && cr.np) { cr.np.mates = Math.min(Game.Balance.newParty.mates.max, cr.np.mates + 1); note = '他党の候補の応援に回り、新党に加わる議員が1人増えた。'; }
     else if (choice === 'support') { cr.contrib += B.support; cr.merit = Math.max(0, cr.merit + B.support); note = '党の候補の応援に回った(党への貢献 +' + B.support + ')。'; }
     else if (choice === 'local') { const r = cr.sel; cr.base[r] = Math.min(Game.Balance.comeback.baseMax, (cr.base[r] || 0) + B.local); note = '自分の地元を固めた。'; }
     else note = '党の候補に任せ、国会に専念した。';
@@ -103,7 +108,7 @@ Game.Upper = (function () {
     const rs = rul.reduce(function (a, p) { return a + after[p]; }, 0);
     u.twisted = twisted(state);
     // 次の衆院選の勢い(自分の党):改選前の組と比べて、議席が増えたか
-    const delta = won[me] - old[me];
+    const delta = won[me] != null ? won[me] - old[me] : 0;   // 新党(R16)は参院に議席がない
     const w = Math.max(-B.wind.max, Math.min(B.wind.max, Math.round(delta / B.wind.per)));
     u.wind[me] = w;
     // 首相の党が大きく負けると、内閣支持率が下がる
@@ -112,7 +117,7 @@ Game.Upper = (function () {
     u.next = B.every;
     u.last = { won: won, old: old, before: before, after: after, ruling: rul, rulingSeats: rs, twisted: u.twisted, wasTwisted: wasTwisted, wind: w, hit: hit, note: note, approval: Math.round(approval) };
     cr.pending[0] = Object.assign({ type: 'upperResult' }, u.last);
-    cr.news = '参院選の結果:' + Game.Data.PARTIES[me].short + 'は ' + won[me] + '議席(改選前 ' + old[me] + ')。' + (u.twisted ? '与党は参院の過半数を失い、ねじれ国会になった。' : '');
+    cr.news = '参院選の結果:' + (won[me] != null ? Game.Data.PARTIES[me].short + 'は ' + won[me] + '議席(改選前 ' + old[me] + ')。' : '') + (u.twisted ? '与党は参院の過半数を失い、ねじれ国会になった。' : '');
     return u.last;
   }
 

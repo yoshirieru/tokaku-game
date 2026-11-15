@@ -235,7 +235,7 @@ Game.Vote = (function () {
 
     // 比例復活:惜敗率が、その選挙での党の復活ラインに届いたか(乱数は開票の計算のあとに引く)
     const lossRatio = totals.me / totals[winner] * 100;
-    const prLine = B.pr.line[state.player.party] + R.normal(state) * B.pr.noise;
+    const prLine = (B.pr.line[state.player.party] || B.newParty.prLine) + R.normal(state) * B.pr.noise;   // 新党(R16)は比例の議席が少なく、復活しにくい
     const pr = camp.vs ? null : { line: prLine, revived: winner !== 'me' && lossRatio >= prLine };   // 対戦モードは比例復活なし
 
     state.election = {

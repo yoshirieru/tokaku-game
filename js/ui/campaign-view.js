@@ -226,6 +226,11 @@ Game.CampaignView = (function () {
       const org = function (id) { return Game.Data.PROMISES[id].org; };
       const li = [];
       li.push(['', '今回は<b>' + Game.Data.ROLE_NAMES[me.role] + '</b>として戦う。']);
+      if (cb.np) {   // 新党(R16)
+        li.push(['', '新党「<b>' + UI.esc(cb.np.name) + '</b>」の公認で戦う。同志 ' + cb.np.mates + '人も全国で戦っている。']);
+        if (cb.np.assassin) li.push(['broken', Game.Data.PARTIES[cb.np.from].name + 'は、<b>刺客</b>として' + UI.esc(cb.np.assassin) + '氏を立てた。党の組織は相手につく。']);
+        if (cb.np.boom) li.push([cb.np.boom > 0 ? 'kept' : 'broken', cb.np.boom > 0 ? '<b>新党ブーム</b>。全地区 +' + cb.np.boom + '(浮動票・若者の地区はさらに大きい)。' : '新党への期待はしぼんでいる(全地区 ' + cb.np.boom + ')。']);
+      }
       if (cb.wind) li.push([cb.wind > 0 ? 'kept' : 'broken', '今回の選挙は、' + Game.Data.PARTIES[me.party].name + 'に<b>' + (cb.wind > 0 ? '追い風' : '逆風') + '</b>が吹いている(全地区 ' + UI.signed(cb.wind) + ')。']);
       if (cb.rank) li.push(['kept', cb.rank.name + 'の重みで、全地区の支持が +' + cb.rank.gain + '。']);
       if (cb.base) li.push(['kept', '任期のあいだに固めた地盤が、始まりの支持になった(地区の合計 +' + cb.base + ')。']);
@@ -233,7 +238,7 @@ Game.CampaignView = (function () {
       cb.broken.forEach(function (id) { li.push(['broken', org(id) + 'との約束を破った。' + Game.Data.REGION[Game.Data.PROMISES[id].region].name + 'の支持が下がり、<b>「破った約束」のカード</b>が山札に混ざっている。']); });
       cb.light.forEach(function (id) { li.push(['light', org(id) + 'との約束は途中までだった。' + Game.Data.REGION[Game.Data.PROMISES[id].region].name + 'の支持が少し下がっている。']); });
       cb.carried.forEach(function (id) { li.push(['carried', org(id) + 'との約束は、持ち越したまま背負っている。']); });
-      if (cb.stars) li.push(['kept', '党への貢献が認められ、党幹部の応援が ' + cb.stars + '枚 増えた。']);
+      if (cb.stars) li.push(['kept', cb.np ? '同志が応援に来る。応援のカードが ' + cb.stars + '枚 増えた。' : '党への貢献が認められ、党幹部の応援が ' + cb.stars + '枚 増えた。']);
       if (cb.money) li.push(['', '任期で集めた資金 ' + cb.money + '万円を持ち込んだ。']);
       ethicLines(cb.ethic, li, '全地区');
       UI.modal('<p class="m-kicker">' + (cr.elections + 1) + '回目の選挙・公示</p><h2>' + (me.role === 'revived' ? '選挙区を取りにいく戦い' : cr.status === 'member' ? '議席を守る戦い' : '議席を取り戻す戦い') + '</h2>' +

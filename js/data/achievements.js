@@ -20,6 +20,8 @@ Game.Data.ACHIEVEMENTS = [
   { id: 'greatPM',    mark: '名', title: '名宰相',           desc: '首相のまま、支持率50%以上で政界を去る' },
   { id: 'gradeS',     mark: '史', title: '歴史に名を刻む',   desc: '評価 S で政界を去る' },
   { id: 'cleanHands', mark: '清', title: '清廉潔白',         desc: '一度も裏金に手を出さず、3つの任期で「クリーン」の評判を最高にして政界を去る' },
+  { id: 'newParty',   mark: '旗', title: '旗を揚げる',       desc: '党を割って新党を作り、新党の公認で議席を得る' },
+  { id: 'mergePM',    mark: '還', title: '割って、還って',   desc: '新党を作ったあと、ほかの党に合流して首相になる' },
   { id: 'allSeats',   mark: '国', title: '全国を渡り歩く',   desc: 'すべての選挙区(6つ)で議席を得る(セーブデータをまたいで)', cross: true },
   { id: 'threeParties', mark: '三', title: '3党で総理',      desc: '民政・共和・未来それぞれで首相になる(セーブデータをまたいで)', cross: true },
 ];

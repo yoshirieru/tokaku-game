@@ -59,7 +59,8 @@ Game.Career = (function () {
     cr.promises = got ? camp.promises.map(function (id) { return old[id] ? { id: id, progress: old[id].progress, turns: old[id].turns } : { id: id, progress: 0, turns: 0 }; }) : [];
     cr.dropped = got ? 0 : camp.promises.length;
     cr.next = { endorse: [], broken: [], light: [], carried: [], carriedFull: [] };
-    cr.history.push({ seat: state.player.seat || 'hokuyo3', won: won, revived: got && !won, voided: ban || undefined, votes: e.totals.me, lossRatio: e.lossRatio, role: camp.cands[0].role });
+    if (cr.np) npAfterElection(state, won, got);   // 新党(R16):党全体の議席
+    cr.history.push({ party: state.player.party, np: cr.np ? cr.np.name : undefined, seat: state.player.seat || 'hokuyo3', won: won, revived: got && !won, voided: ban || undefined, votes: e.totals.me, lossRatio: e.lossRatio, role: camp.cands[0].role });
     state.career = cr;
     cr.banNow = ban;
 
@@ -85,6 +86,12 @@ Game.Career = (function () {
       cr.banNow = false;
     }
     if (got) personnel(cr);
+    // 新党(R16):党全体の結果。議席がほとんどなければ解党して、ほかの党に合流する
+    if (cr.np) {
+      cr.np.offered = false;
+      if (cr.np.last) cr.pending.push({ type: 'npResult', last: cr.np.last });
+      if (cr.np.last && cr.np.last.seats <= Game.Balance.newParty.dissolveAt) cr.pending.push({ type: 'npDissolve' });
+    }
     cr.deck = R.shuffle(state, termDeck(cr));
     state.screen = 'term';
     startTurn(state);
@@ -129,7 +136,7 @@ Game.Career = (function () {
   // ---------- 党首選 ----------
   function raceStrength(cr) {
     const L = Game.Balance.leaderRace;
-    return Math.max(5, Math.round(L.base + cr.merit * L.merit + cr.kept * L.kept + cr.broken * L.broken + cr.wins * L.win));
+    return Math.max(5, Math.round(L.base + cr.merit * L.merit + cr.kept * L.kept + cr.broken * L.broken + cr.wins * L.win - (cr.outsider ? Game.Balance.newParty.outsider : 0)));   // 外様(R16)
   }
   // 党三役なら、任期の決まった会期に党首選の知らせが来る(相手の強さは、このとき決まる)
   function offerRace(state) {
@@ -197,6 +204,7 @@ Game.Career = (function () {
       cr.news = cr.gov.role === 'pm' ? '党首選に勝った。与党の党首として、首相に指名された。' : '党首選に勝った。次の総選挙は、党首として全国を戦う。';
     } else {
       addMerit(cr, L.loseMerit);
+      cr.splitOffer = true;   // 新党(R16):次の会期に、陣営から「党を割ろう」という声
       cr.news = '党首選に敗れた。次の総選挙のあとに、また機会がある。';
     }
     cr.pending[0] = { type: 'leaderResult', appeal: appeal, note: note, first: first, runoff: runoff, won: won, rivals: ev.rivals };
@@ -228,7 +236,7 @@ Game.Career = (function () {
   // 人事:条件(当選回数と党内評価)を満たしていれば、1つ上の役職に就く
   function personnel(cr) {
     const nx = nextRank(cr);
-    if (cr.status !== 'member' || !nx || nx.wins > 0 || nx.merit > 0) return false;
+    if (cr.np || cr.status !== 'member' || !nx || nx.wins > 0 || nx.merit > 0) return false;
     cr.rank += 1;
     cr.bestRank = Math.max(cr.bestRank, cr.rank);
     cr.pending.push({ type: 'promotion', rank: cr.rank });
@@ -428,7 +436,8 @@ Game.Career = (function () {
       });
     }
     // 党首選:党三役なら立候補できる
-    if (cr.turn === Game.Balance.leaderRace.turn && cr.status === 'member' && !cr.leader && Game.Balance.ranks[cr.rank + 1] && Game.Balance.ranks[cr.rank + 1].leader) offerRace(state);
+    if (cr.turn === Game.Balance.leaderRace.turn && cr.status === 'member' && !cr.leader && !cr.np && Game.Balance.ranks[cr.rank + 1] && Game.Balance.ranks[cr.rank + 1].leader) offerRace(state);
+    npTurn(state);   // 新党(R16):党を割ろうという声、合流の誘い
     Game.Future.tick(state);   // 年を進め、毎年の通常国会で予算編成の決定(R14)
     const upper = Game.Upper.tick(state);   // 参院選(R12)。3年ごと
     // 裏金・補欠選挙・区割り改定(scandal.js)は参院選の会期にも進む。ふだんの出来事は、そのどれもない会期だけ
@@ -623,6 +632,127 @@ Game.Career = (function () {
     state.screen = 'campaign';
   }
 
+  // ---------- 新党結成・党を割る(R16)----------
+  const NPB = function () { return Game.Balance.newParty; };
+  // 党を割れるか(議員・浪人で、当選 minWins 回から。党首と、すでに新党にいるときは割れない)
+  function canFound(state) {
+    const cr = state.career;
+    return !!cr && !cr.leader && !cr.np && !cr.over && (cr.wins || 0) >= NPB().minWins;
+  }
+  function matesOf(cr) {
+    const M = NPB().mates;
+    return Math.max(0, Math.min(M.max, Math.round(M.base + cr.wins * M.perWin + cr.merit * M.perMerit)));
+  }
+  // 結党する。idx は Game.Data.NEW_PARTIES の何番目か
+  function foundParty(state, idx) {
+    const cr = state.career;
+    if (!canFound(state)) return null;
+    const preset = Game.Data.NEW_PARTIES[idx] || Game.Data.NEW_PARTIES[0], from = state.player.party;
+    const mates = matesOf(cr);
+    cr.np = { id: 'shinto', name: preset.name, short: preset.short, color: preset.color, motto: preset.motto, from: from, mates: mates, seats: null, best: 0, elections: 0, boomPending: true, last: null, offered: true };
+    cr.npFounded = (cr.npFounded || 0) + 1;
+    cr.homeParty = cr.homeParty || from;   // はじめの党(合流先がこの党でなければ「外様」)
+    Game.Data.setNewParty(cr.np);
+    state.player.party = 'shinto';
+    const lostRank = cr.rank ? Game.Balance.ranks[cr.rank].name : null;
+    cr.rank = 0;
+    cr.merit = Math.round(cr.merit * NPB().meritKeep);
+    cr.contrib = 0;
+    cr.splitOffer = false;
+    // 元の党は刺客を送る(議席を守っていた相手の地盤はそのまま)
+    if (cr.rivalRoles) cr.rivalRoles[from] = 'assassin';
+    // 山札:役職の公務は外れる
+    cr.deck = R.shuffle(state, termDeck(cr));
+    cr.discard = [];
+    cr.news = Game.Data.PARTIES[from].name + 'を離れ、新党「' + preset.name + '」を立ち上げた。同志 ' + mates + '人が加わる。';
+    return { name: preset.name, mates: mates, lostRank: lostRank, from: from };
+  }
+  // 選挙のあと:新党全体の議席(自分と、同志の小選挙区・比例)
+  function npAfterElection(state, won, got) {
+    const cr = state.career, np = cr.np, N = NPB(), boom = np.lastBoom || 0;
+    const p = Math.max(0.03, Math.min(0.8, N.mateWin.base + N.mateWin.perBoom * boom + (won ? N.mateWin.meWon : 0)));
+    let mateSeats = 0;
+    for (let i = 0; i < np.mates; i++) if (R.next(state) < p) mateSeats += 1;
+    const pr = Math.round(np.mates * N.prPer * Math.max(0.3, 1 + boom * 0.1));
+    const seats = (got ? 1 : 0) + mateSeats + pr;
+    np.last = { seats: seats, me: got, mateSeats: mateSeats, pr: pr, mates: np.mates, boom: boom, prev: np.seats };
+    np.seats = seats;
+    np.best = Math.max(np.best || 0, seats);
+    np.elections += 1;
+    np.mates = Math.min(N.mates.max, mateSeats + pr + 1);   // 議席を得た同志と、新しく加わる1人
+    if (got) cr.npWon = true;   // 殿堂の実績「旗を揚げる」
+  }
+  // 合流先での役職:持ってきた議席しだい(当選回数の条件は守る)。復党は1段下がる
+  function mergeRank(cr, target, seats) {
+    const M = NPB().merge, ranks = Game.Balance.ranks;
+    let rank = 0;
+    for (let i = 0; i < M.rankBySeats.length; i++) if (seats >= M.rankBySeats[i][0]) { rank = M.rankBySeats[i][1]; break; }
+    if (cr.np && target === cr.np.from) rank += M.rejoinRank;
+    while (rank > 0 && (ranks[rank].leader || ranks[rank].wins > cr.wins)) rank -= 1;
+    return Math.max(0, rank);
+  }
+  // 会期の始まり:党を割ろうという声(党首選に敗れたあと)と、合流の誘い
+  function npTurn(state) {
+    const cr = state.career;
+    if (cr.splitOffer && canFound(state) && cr.turn >= 2) {
+      cr.splitOffer = false;
+      cr.pending.push({ type: 'npOffer', mates: matesOf(cr) });
+      return;
+    }
+    const np = cr.np;
+    if (!np || np.offered || np.elections < 1 || cr.turn < 2 || cr.pending.some(function (p) { return p.type === 'npDissolve'; })) return;
+    if (R.next(state) >= NPB().merge.chance) return;
+    np.offered = true;
+    const others = Object.keys(Game.Data.PARTIES);
+    const target = R.pick(state, others);
+    cr.pending.push({ type: 'npMerge', party: target, rank: mergeRank(cr, target, np.seats || 0), seats: np.seats || 0 });
+  }
+  // 合流する(解党も同じ)。target は合流先の党。rank を渡さなければ、議席から決める
+  function mergeParty(state, target, rank) {
+    const cr = state.career, np = cr.np;
+    if (!np || !Game.Data.PARTIES[target] || target === 'shinto') return null;
+    const r = rank != null ? rank : mergeRank(cr, target, np.seats || 0), ranks = Game.Balance.ranks;
+    const rejoin = target === np.from;
+    cr.npPast = { name: np.name, best: np.best || 0, from: np.from, to: target };
+    cr.np = null;
+    Game.Data.setNewParty(null);
+    state.player.party = target;
+    cr.outsider = target !== cr.homeParty;
+    cr.rank = cr.status === 'member' ? r : 0;
+    cr.bestRank = Math.max(cr.bestRank || 0, cr.rank);
+    cr.merit = Math.max(cr.merit, ranks[cr.rank].merit) + (np.seats || 0) * NPB().merge.meritPerSeat;   // 持ってきた議席のぶん、党内での重み
+    // 小選挙区:合流先の党は、自分の党になる(その党の候補は立たない)。元の党の刺客は、相手として残る
+    if (cr.rivalRoles) { delete cr.rivalRoles[target]; if (!rejoin && cr.rivalRoles[np.from] === 'assassin') cr.rivalRoles[np.from] = 'newcomer'; }
+    if (cr.rivalSolid) delete cr.rivalSolid[target];
+    cr.deck = R.shuffle(state, termDeck(cr));
+    cr.discard = [];
+    const name = Game.Data.PARTIES[target].name;
+    cr.news = (rejoin ? name + 'に復党した。' : '「' + np.name + '」は' + name + 'に合流した。') + (cr.rank ? ranks[cr.rank].name + 'として迎えられる。' : '');
+    return { party: target, rank: cr.rank, rejoin: rejoin };
+  }
+  // 知らせへの答え:npOffer('found' + idx / 'stay')、npMerge(true / false)、npDissolve(党の id / 'retire')
+  function answerNp(state, answer, idx) {
+    const cr = state.career, p = cr.pending[0];
+    if (!p) return null;
+    let out = null;
+    if (p.type === 'npOffer') {
+      cr.pending.shift();
+      if (answer === 'found') out = foundParty(state, idx || 0);
+      else cr.news = '党に残ることにした。次の党首選をめざす。';
+    } else if (p.type === 'npMerge') {
+      cr.pending.shift();
+      if (answer) out = mergeParty(state, p.party, p.rank);
+      else cr.news = Game.Data.PARTIES[p.party].name + 'からの合流の誘いを断った。新党の旗を守る。';
+    } else if (p.type === 'npDissolve') {
+      cr.pending.shift();
+      if (answer === 'retire') return { ending: retire(state, 'retire') };
+      out = mergeParty(state, answer, 0);
+    } else if (p.type === 'npResult') {
+      cr.pending.shift();
+    }
+    return out || { ok: true };
+  }
+
   // ---------- 引退とエンディング ----------
   // reason: 'retire' 自分で引退 / 'dropped' 続けて落選し、党の公認を失った / 'resigned' 総選挙で議席を大きく減らし、党首を辞めた
   //         'ousted' 内閣支持率の低迷で、首相を退陣に追い込まれた
@@ -639,6 +769,8 @@ Game.Career = (function () {
       lines.push({ label: '総選挙の最多議席', value: (cr.bestSeats || 0) + '議席', pts: Math.min(L.seatsMax, Math.floor((cr.bestSeats || 0) / L.seatsPer)) });
       lines.push({ label: '単独過半数', value: cr.wonMajority ? '取った' : '届かず', pts: cr.wonMajority ? L.majority : 0 });
     }
+    const npRec = cr.np && cr.npPast ? ((cr.np.best || 0) >= (cr.npPast.best || 0) ? cr.np : cr.npPast) : cr.np || cr.npPast;   // 2度割ったときは、議席の多かったほう
+    if (npRec) lines.push({ label: '新党を結成', value: '「' + npRec.name + '」最多 ' + (npRec.best || 0) + '議席', pts: Math.min(L.npMax, (npRec.best || 0) * L.npSeat) });
     if (cr.wasPM) {
       lines.push({ label: '首相に就任', value: (cr.pmTerms || 1) + '回、政権を担った', pts: L.pm });
       lines.push({ label: '首相の在任', value: ((cr.pmTurns || 0) / 2).toFixed(1).replace('.0', '') + '年', pts: Math.min(L.pmTurnMax, (cr.pmTurns || 0) * L.pmTurn) });
@@ -653,6 +785,7 @@ Game.Career = (function () {
       : pmNow ? (great ? '名宰相として惜しまれつつ、政界を去る' : '首相を務めあげて、政界を去る')
       : cr.wasPM ? '元首相として、政界を去る'
       : cr.leader ? (cr.wonMajority ? '総選挙に勝った党首として、政界を去る' : '党首として、政界を去る')
+      : cr.np ? '新党「' + cr.np.name + '」を率いて、政界を去る'
       : !cr.wins ? '国会に届かないまま、政界を去る'
       : (cr.bestRank || 0) >= 4 ? '党の重鎮として、政界を去る'
         : cr.bestRank === 3 ? '大臣を務めあげて、政界を去る'
@@ -669,5 +802,6 @@ Game.Career = (function () {
     autoPromise: autoPromise, seated: seated, nextRank: nextRank, retire: retire, raceStrength: raceStrength, runRace: runRace, quickLeader: quickLeader,
     isPM: isPM, canDissolve: canDissolve, dissolve: dissolve, changeApproval: changeApproval, termDeck: termDeck,
     answerBy: answerBy, answerRedistrict: answerRedistrict, chooseSeat: chooseSeat,
+    canFound: canFound, matesOf: matesOf, foundParty: foundParty, mergeParty: mergeParty, mergeRank: mergeRank, answerNp: answerNp,
   };
 })();

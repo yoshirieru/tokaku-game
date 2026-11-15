@@ -25,7 +25,7 @@ Game.TermView = (function () {
     const me = { party: s.player.party };
     return '<header class="hud panel">' +
       '<div class="who"><span class="seat">' + UI.esc(Game.Data.DISTRICT.name) + '</span>' + UI.partyChip(me) + '<b class="pname">' + UI.esc(s.player.name) + '</b>' +
-      '<span class="hud-badge">' + (Game.GovView.active(cr) ? Game.GovView.badge(cr) : cr.status === 'member' ? Game.Balance.ranks[cr.rank || 0].name + '・当選' + cr.wins + '回' : '浪人中') + '</span></div>' +
+      '<span class="hud-badge">' + (Game.GovView.active(cr) ? Game.GovView.badge(cr) : cr.np ? UI.esc(cr.np.short) + '代表・' + (cr.status === 'member' ? '当選' + cr.wins + '回' : '浪人中') : cr.status === 'member' ? Game.Balance.ranks[cr.rank || 0].name + '・当選' + cr.wins + '回' : '浪人中') + '</span></div>' +
       '<ol class="days" aria-label="任期の会期">' + dots + '</ol>' +
       '<div class="res"><span class="lab">資金</span><b>' + cr.money + '</b><small>万円</small></div>' +
       '<div class="ticker"><span class="tk-lab">' + UI.esc(Game.Data.sessionName(cr.turn)) + '</span><span id="news">' + UI.esc(cr.news) + '</span></div>' +
@@ -150,6 +150,25 @@ Game.TermView = (function () {
       '</div><div class="cards" id="cards" aria-label="手札">' + cards + '</div></footer>';
   }
 
+  // ---------- 新党(R16)----------
+  // 結党の窓:名前を選ぶ。done は結党したあと(またはやめたとき)に呼ぶ
+  function foundModal(s, done, cancelLabel) {
+    const cr = s.career, NP = Game.Balance.newParty, from = Game.Data.PARTIES[s.player.party];
+    const lost = cr.rank ? Game.Balance.ranks[cr.rank].name + 'の役職を失う。' : '';
+    const pick = function (i) { return function () { const r = K.foundParty(s, i); Game.clearUndo(); Game.ui.card = null; Game.save(); UI.sound('stamp'); done(r); }; };
+    UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・党を割る</p><h2>新党を立ち上げる</h2>' +
+      '<p>' + from.name + 'を離れ、自分の旗を揚げる。同志 <b>' + K.matesOf(cr) + '人</b>がついてくる。</p>' +
+      '<ul class="m-lines">' +
+        '<li class="ml-broken">' + lost + '党内評価は半分になる。' + from.short + 'は次の選挙で、あなたの選挙区に<b>刺客</b>を立てる(小選挙区は4人の争い)。</li>' +
+        '<li class="ml-broken">党の組織は離れる(地力は元の党の ' + Math.round(NP.carry * 100) + '%)。比例復活はほぼ望めない。</li>' +
+        '<li class="ml-kept">最初の選挙は<b>新党ブーム</b>。浮動票・若者の地区ほど伸びる。地盤と、地元の団体との約束はそのまま。</li>' +
+        '<li class="ml-kept">議席を積めば、ほかの党から<b>合流</b>の誘いが来る。持ってきた議席しだいで、合流先の役職が決まる。</li>' +
+      '</ul><p class="m-kicker">党の名前</p>',
+      Game.Data.NEW_PARTIES.map(function (n, i) {
+        return { label: '<b><span class="pchip" style="--pc:' + n.color + '">' + UI.esc(n.short) + '</span> ' + UI.esc(n.name) + '</b><span>' + UI.esc(n.motto) + '</span>', onClick: pick(i) };
+      }).concat([{ label: '<b>' + (cancelLabel || 'やめておく') + '</b><span>' + from.name + 'に残る</span>', onClick: function () { done(null); } }]), 'choices');
+  }
+
   // ---------- 知らせ ----------
   function showPending(app) {
     const s = Game.state, cr = s.career, p = cr.pending[0], T = Game.Balance.term;
@@ -199,6 +218,40 @@ Game.TermView = (function () {
         '<p>' + UI.esc(p.note) + '</p><p class="m-kicker">1回目の投票' + (p.runoff ? '(過半数なし)' : '') + '</p>' + firstRows + runoff +
         '<p>' + (p.won ? '次の総選挙は、党首として全国の11ブロックを戦う。公務が増え、地元に帰る時間は減る。' : '党内評価が ' + Game.Balance.leaderRace.loseMerit + '。次の総選挙のあとに、また機会がある。') + '</p>',
         [{ label: p.won ? '党首として立つ' : '出直す', primary: true, onClick: function () { if (p.won) UI.sound('stamp'); next(); } }]);
+    } else if (p.type === 'npOffer') {   // R16:党首選に敗れたあと、党を割ろうという声
+      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・党首選のあと</p><h2>「党を割りましょう」</h2>' +
+        '<p>党首選で戦った陣営の議員たちが、事務所に集まってきた。「この党にいても、もう目はない。新しい旗を揚げるなら、ついていく」。同志は <b>' + p.mates + '人</b>。</p>',
+        [{ label: '<b>話を聞く</b><span>新党の名前と、割ったあとのことを見て決める</span>', onClick: function () {
+          K.answerNp(s, 'stay'); Game.save();   // 知らせは閉じ、結党の窓で決める(やめれば党に残る)
+          foundModal(s, function () { render(app); }, '党に残る');
+        } },
+        { label: '<b>党に残る</b><span>次の党首選をめざす</span>', onClick: function () { K.answerNp(s, 'stay'); after(); } }], 'choices');
+    } else if (p.type === 'npResult') {   // R16:新党の選挙結果
+      const L = p.last, np = cr.np, d = L.prev != null ? L.seats - L.prev : null;
+      UI.modal('<p class="m-kicker">新党の選挙結果</p><h2>「' + UI.esc(np.name) + '」' + L.seats + '議席</h2>' +
+        '<ul class="m-lines">' +
+          '<li class="ml-' + (L.me ? 'kept' : 'broken') + '">' + (L.me ? 'あなたは議席を守った。' : 'あなたは議席に届かなかった。') + '</li>' +
+          '<li class="ml-' + (L.mateSeats ? 'kept' : 'light') + '">同志 ' + L.mates + '人のうち、小選挙区で ' + L.mateSeats + '人が勝った。比例代表で ' + L.pr + '議席。</li>' +
+          (L.boom > 0 ? '<li class="ml-kept">新党ブームが追い風になった。</li>' : '') +
+          (d != null ? '<li class="ml-' + (d >= 0 ? 'kept' : 'broken') + '">前の選挙から ' + UI.signed(d) + '議席。</li>' : '') +
+          (L.seats > Game.Balance.newParty.dissolveAt ? '<li>議席を積めば、ほかの党から合流の誘いが来る(合流先の役職は議席しだい)。</li>' : '<li class="ml-broken">党として立ち行かない。解党して、どこかの党に合流するしかない。</li>') +
+        '</ul>',
+        [{ label: 'わかった', primary: true, onClick: function () { K.answerNp(s); after(); } }]);
+    } else if (p.type === 'npMerge') {   // R16:合流の誘い
+      const to = Game.Data.PARTIES[p.party], rejoin = p.party === cr.np.from, rk = Game.Balance.ranks[p.rank];
+      UI.modal('<p class="m-kicker">' + UI.esc(Game.Data.sessionName(cr.turn)) + '・' + (rejoin ? '復党の誘い' : '合流の誘い') + '</p><h2>' + to.name + 'から' + (rejoin ? '「戻ってこないか」' : '「一緒にやらないか」') + '</h2>' +
+        '<p>「' + UI.esc(cr.np.name) + '」の ' + p.seats + '議席を、' + to.short + 'は欲しがっている。' + (rejoin ? '割って出た党に、頭を下げて戻る道だ。' : '') + '</p>' +
+        '<ul class="m-lines"><li class="ml-kept">' + (cr.status === 'member' ? (p.rank ? '<b>' + rk.name + '</b>として迎えられる。' : '役職はない(平議員から)。') : '浪人なので、役職はない。') + '党内評価 +' + p.seats * Game.Balance.newParty.merge.meritPerSeat + '。' + to.short + 'の党首選にも、いずれ立てる。</li>' +
+          '<li class="ml-' + (rejoin ? 'kept' : 'light') + '">' + (rejoin ? '刺客はいなくなり、' + to.short + 'の組織がまた味方につく。' : to.short + 'の公認で戦う。' + Game.Data.PARTIES[cr.np.from].short + 'の候補は、相手として残る。') + '</li>' +
+          '<li class="ml-light">新党の旗は降ろす。</li></ul>',
+        [{ label: '<b>' + (rejoin ? '復党する' : '合流する') + '</b><span>' + to.name + 'の一員になる</span>', onClick: function () { K.answerNp(s, true); UI.sound('stamp'); after(); } },
+          { label: '<b>断る</b><span>新党の旗を守る</span>', onClick: function () { K.answerNp(s, false); after(); } }], 'choices');
+    } else if (p.type === 'npDissolve') {   // R16:解党
+      const P3 = Game.Data.PARTIES;
+      UI.modal('<p class="m-kicker">解党</p><h2>「' + UI.esc(cr.np.name) + '」を解党する</h2><p>議席がほとんど残らず、党として立ち行かなくなった。どこかの党に身を寄せるか、ここで政界を去るか。</p>',
+        Object.keys(P3).map(function (k) {
+          return { label: '<b>' + P3[k].name + 'に' + (k === cr.np.from ? '復党する' : '合流する') + '</b><span>役職はない。' + UI.esc(Game.Data.DISTRICT.name) + 'では' + P3[k].short + 'の候補として戦う</span>', onClick: function () { K.answerNp(s, k); after(); } };
+        }).concat([{ label: '<b>政界を去る</b><span>ここで歩みを終え、評価を受ける</span>', onClick: function () { K.answerNp(s, 'retire'); Game.clearUndo(); Game.save(); Game.render(); } }]), 'choices');
     } else if (p.type === 'promotion') {
       const rk = Game.Balance.ranks[p.rank], li = [];
       if (rk.startAll) li.push('役職の重みで、次の選挙は全地区の始まりの支持が +' + rk.startAll + '。');
@@ -398,8 +451,10 @@ Game.TermView = (function () {
         UI.modal('<h2>政界を引退する</h2><p>ここで政治家としての歩みを終え、評価を受ける。取り消すことはできない。</p>',
           [{ label: 'やめておく' }, { label: '引退する', primary: true, onClick: function () { K.retire(s, 'retire'); Game.clearUndo(); Game.ui.card = null; Game.save(); Game.render(); } }]);
       };
-      UI.modal('<h2>メニュー</h2><p>ここまでは自動で記録されている。タイトルの「つづきから」で再開できる。</p>',
-        [{ label: 'とじる' }, { label: '政界を引退する', onClick: askRetire }, { label: 'タイトルへ', primary: true, onClick: Game.toTitle }]);
+      const split = K.canFound(s) && !cr.pending.length ? [{ label: '党を割る(新党)', onClick: function () { foundModal(s, function () { render(app); }); } }] : [];   // R16
+      UI.modal('<h2>メニュー</h2><p>ここまでは自動で記録されている。タイトルの「つづきから」で再開できる。</p>' +
+        (!cr.leader && !cr.np && !K.canFound(s) && (cr.wins || 0) < Game.Balance.newParty.minWins ? '<p class="pr-note">当選 ' + Game.Balance.newParty.minWins + '回からは、党を割って新党を作れる。</p>' : ''),
+        [{ label: 'とじる' }].concat(split, [{ label: '政界を引退する', onClick: askRetire }, { label: 'タイトルへ', primary: true, onClick: Game.toTitle }]));
     };
 
     if (cr.pending.length) showPending(app);
