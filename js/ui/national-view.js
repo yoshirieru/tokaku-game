@@ -9,7 +9,7 @@ Game.NationalView = (function () {
   function byId(cands, id) { return cands.filter(function (c) { return c.id === id; })[0]; }
   // 並びは開票中ずっと固定(党の並び)
   function fixedOrder(cands) {
-    const ord = Object.keys(Game.Data.PARTIES);
+    const ord = Game.Data.partyOrder();   // 3党、小さな党(R19)
     return cands.slice().sort(function (a, b) { return ord.indexOf(a.party) - ord.indexOf(b.party); });
   }
   const pname = function (c) { return Game.Data.PARTIES[c.party].name; };
@@ -35,9 +35,9 @@ Game.NationalView = (function () {
   function seatChart(s, e, cands) {
     const NB = Game.Balance.nation, P = Game.Data.PARTIES, total = NB.seats;
     const now = seatsByParty(e, cands), before = prevSeats(s), me = s.player.party;
-    const ruling = Game.Upper.ruling(s);
+    const ruling = Game.Upper.ruling(s).filter(function (k) { return now[k] != null; });   // この選挙に出た党だけ(閣外協力の党を含む。R19)
     const order = ruling.slice().sort(function (a, b) { return now[b] - now[a]; })
-      .concat(Object.keys(P).filter(function (k) { return ruling.indexOf(k) < 0; }).sort(function (a, b) { return now[b] - now[a]; }));
+      .concat(Object.keys(now).filter(function (k) { return ruling.indexOf(k) < 0; }).sort(function (a, b) { return now[b] - now[a]; }));
     const sum = function (obj, keys) { return keys.reduce(function (a, k) { return a + (obj[k] || 0); }, 0); };
     const opp = order.filter(function (k) { return ruling.indexOf(k) < 0; });
     const rN = sum(now, ruling), oN = sum(now, opp), rB = sum(before, ruling), oB = sum(before, opp);
@@ -82,7 +82,7 @@ Game.NationalView = (function () {
       return '<div class="sm-tile" style="grid-column:' + col + ';grid-row:' + row + ' / span ' + span + '"><b>' + r.name + '<small>(' + r.smd + ')</small></b>' +
         '<div class="sm-seats">' + sq + '</div><small class="sm-pr">比例 ' + pr + '</small></div>';
     }).join('');
-    const legend = Object.keys(P).map(function (k) { return '<span><i style="--pc:' + P[k].color + '">' + mark(k) + '</i>' + P[k].name + '</span>'; }).join('');
+    const legend = Game.Data.partyOrder().filter(function (k) { return cands.some(function (c) { return c.party === k; }); }).map(function (k) { return '<span><i style="--pc:' + P[k].color + '">' + mark(k) + '</i>' + P[k].short + '</span>'; }).join('');
     return '<section class="panel seat-tiles"><h2>小選挙区 当選一覧<small>( )内は小選挙区の数</small></h2><div class="sm-grid">' + tiles + '</div><div class="sm-legend">' + legend + '</div></section>';
   }
 
@@ -139,7 +139,7 @@ Game.NationalView = (function () {
     app.innerHTML = '<div class="count national">' +
       '<header class="ct-head panel"><span class="ct-live">開票速報</span><h1>衆議院総選挙</h1>' +
       '<span class="ct-clock">' + tick.time + '</span><span class="ct-pct">開票率 <b>' + Math.round(tick.pct * 100) + '</b>%</span></header>' +
-      '<div class="ct-body"><section class="ct-cands panel">' + rows + '<p class="maj-note">縦の線が過半数(' + NB.majority + '議席)</p></section>' +
+      '<div class="ct-body"><section class="ct-cands panel' + (cands.length > 4 ? ' compact many' : '') + '">' + rows + '<p class="maj-note">縦の線が過半数(' + NB.majority + '議席)</p>' + UI.ballotCard(e, cands, t, function (rid) { return tick.regionPct[rid] > 0; }, true) + '</section>' +
       '<div class="map-cell">' + UI.mapHtml(fill, null) + '</div></div>' +
       '<div class="ct-ticker panel"><span class="tk-lab">速報</span><span>' + UI.esc(text) + '</span></div>' +
       '<footer class="ct-btns">' +

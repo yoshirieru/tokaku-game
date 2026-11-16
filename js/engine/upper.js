@@ -7,32 +7,34 @@ window.Game = window.Game || {};
 Game.Upper = (function () {
   const R = Game.Rng;
   const U = function () { return Game.Balance.upper; };
-  const PARTIES = function () { return Object.keys(Game.Data.PARTIES); };
+  // 参院に議席を持つ党は、いまの議席の組から読む(小さな党(R19)を含む。史実シナリオと R19 より前のセーブは3党のまま)
+  let cur = null;
+  const PARTIES = function () { return cur ? Object.keys(cur.classes[0]) : Object.keys(U().start); };
+  const baseOf = function (p) { const B = U(); return PARTIES().length <= 3 ? B.base3[p] : B.base[p] || 0; };
 
   function get(state) {
     if (!state.upper) {
       const u = U(), a = {}, b = {};
-      PARTIES().forEach(function (p) { a[p] = Math.ceil(u.start[p] / 2); b[p] = u.start[p] - a[p]; });
+      Object.keys(u.start).forEach(function (p) { a[p] = Math.ceil(u.start[p] / 2); b[p] = u.start[p] - a[p]; });
       state.upper = { classes: [a, b], next: u.firstIn, wind: {}, twisted: false, last: null };
     }
+    cur = state.upper;
     return state.upper;
   }
   function total(u) {
     const t = {};
-    PARTIES().forEach(function (p) { t[p] = u.classes[0][p] + u.classes[1][p]; });
+    Object.keys(u.classes[0]).forEach(function (p) { t[p] = u.classes[0][p] + (u.classes[1][p] || 0); });
     return t;
   }
-  // いまの与党(首相の党と連立相手)。党首でなければ、世の中は民政の政権
+  // いまの与党(首相の党、連立相手、閣外協力の党)。党首でなければ、世の中は民政と公正の政権
   function ruling(state) {
     const g = state.career && state.career.gov, me = state.player.party;
-    if (!g) return [U().worldRuling];
-    if (g.role === 'pm') return g.partner ? [me, g.partner] : [me];
-    if (g.role === 'junior') return [g.pm, me];
-    return g.partner ? [g.pm, g.partner] : [g.pm];   // 野党:相手の党(と、その連立相手)が与党
+    if (!g) return U().worldRuling.slice();
+    return Game.Gov.members(g, me);
   }
   function rulingSeats(state) {
     const t = total(get(state));
-    return ruling(state).reduce(function (a, p) { return a + t[p]; }, 0);
+    return ruling(state).reduce(function (a, p) { return a + (t[p] || 0); }, 0);
   }
   // ねじれ国会:自分が与党(首相・連立与党)なのに、与党が参院の過半数を持っていない。いつでも、いまの議席と政権から決める
   function twisted(state) {
@@ -89,10 +91,11 @@ Game.Upper = (function () {
     const share = {};
     let sum = 0;
     PARTIES().forEach(function (p) {
-      let v = B.base[p] + (rul.indexOf(p) >= 0 ? 1 : -1) * (approval - 50) * B.approvalWeight / (rul.indexOf(p) >= 0 ? rul.length : PARTIES().length - rul.length);
-      v += R.normal(state) * B.noise;
+      const base = baseOf(p);
+      let v = base + (rul.indexOf(p) >= 0 ? 1 : -1) * (approval - 50) * B.approvalWeight / (rul.indexOf(p) >= 0 ? rul.length : Math.max(1, PARTIES().length - rul.length));
+      v += R.normal(state) * B.noise * Math.min(1, Math.sqrt(base / B.noiseRef));   // 小さな党(R19)のぶれは小さく
       if (p === me) v += ch.share;
-      share[p] = Math.max(0.03, v);
+      share[p] = Math.max(PARTIES().length <= 3 ? 0.03 : B.floor, v);
       sum += share[p];
     });
     PARTIES().forEach(function (p) { share[p] /= sum; });

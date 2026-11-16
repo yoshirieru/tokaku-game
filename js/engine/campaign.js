@@ -7,9 +7,56 @@ Game.Campaign = (function () {
   const bal = function () { return Game.Balance; };
   const regions = function () { return Game.Data.DISTRICT.regions; };
   // いまの舞台の、地区ごとの党の地力(選挙区は balance.js の seats、全国は partyBase)
-  function baseOf(rid) {
+  // three:小さな党のいない全国の総選挙(史実シナリオ。camp.base3)は、R19 より前の3党の地力(partyBase3)
+  function baseOf(rid, three) {
     const B = bal(), S = B.seats[Game.Data.DISTRICT.id];
-    return S ? S.base[rid] : B.partyBase[rid];
+    return S ? S.base[rid] : (three ? B.partyBase3 : B.partyBase)[rid];
+  }
+  // 党の地力(地区ごと)。選挙区の小さな党(R19)は、地区の性格から決める(balance.js の minors.district)
+  function strengthOf(rid, p) {
+    const b = baseOf(rid);
+    if (b[p] != null) return b[p];
+    const d = bal().minors.district[p];
+    if (!d) return 0;
+    return d.base + Game.Data.REGION[rid].tags.reduce(function (a, t) { return a + (d.tags[t] || 0); }, 0);
+  }
+  // 選挙区の小さな党の候補(R19)の始まりの支持:地力の割合のぶんを、ほかの候補から同じポイントずつ取る(候補どうしの差は変わらない)。
+  // 割合で取ると上位の候補ほど多く減って差が縮み、負けている側がずっと楽になったため(東央7区の民政 34% → 52% など)
+  function takeMinors(cands, s, raw, sum) {
+    const floor = bal().campaign.shareFloor;
+    cands.forEach(function (c) {
+      if (!c.minor) return;
+      let t = raw[c.id] / sum * 100;
+      s[c.id] = t;
+      // 下限に届く候補からは取りきれないので、残りの候補で分ける
+      for (let pass = 0; pass < 3 && t > 1e-9; pass++) {
+        const keys = Object.keys(s).filter(function (k) { return k !== c.id && s[k] > floor + 1e-9; });
+        if (!keys.length) break;
+        const each = t / keys.length;
+        keys.forEach(function (k) { const d = Math.min(each, s[k] - floor); s[k] -= d; t -= d; });
+      }
+    });
+  }
+  // 小さな党の候補の始まりの支持を覚える。1日の終わりに、ここへ近づく(steady)
+  function anchorMinors(camp) {
+    camp.cands.forEach(function (c) {
+      if (!c.minor) return;
+      camp.anchor = camp.anchor || {};
+      camp.anchor[c.id] = {};
+      regions().forEach(function (r) { camp.anchor[c.id][r.id] = camp.shares[r.id][c.id]; });
+    });
+  }
+  // 1日の終わり:小さな党の支持が、始まりの支持に近づく(組織の票は揺れにくい)。奔流の対象の党は除く
+  function steady(camp) {
+    if (!camp.anchor) return;
+    const k = bal().minors.steady, sg = camp.surge;
+    Object.keys(camp.anchor).forEach(function (id) {
+      if (sg && sg.active && sg.target === id) return;
+      regions().forEach(function (r) {
+        const d = (camp.anchor[id][r.id] - camp.shares[r.id][id]) * k;
+        if (Math.abs(d) > 0.01) applyGain(camp, r.id, id, d, 'uniform');
+      });
+    });
   }
   // いまの選挙区の、地区ごとの投票率の基準
   function turnoutOf(rid) { return bal().seats[Game.Data.DISTRICT.id].turnout[rid]; }
@@ -26,16 +73,22 @@ Game.Campaign = (function () {
       const who = Game.Data.LEADERS[p];
       cands.push({ id: p, party: p, name: who.name, short: who.short, role: 'nat_' + p });
     });
+    // 小さな党(R19):比例代表で議席を取る。史実シナリオには出ない
+    const three = !Game.Data.activeMinors(state).length;
+    Game.Data.activeMinors(state).forEach(function (p) {
+      const who = Game.Data.LEADERS[p];
+      cands.push({ id: p, party: p, name: who.name, short: who.short, role: 'nat_minor', minor: true });
+    });
     const shares = {};
     regions().forEach(function (r) {
       let sum = 0;
-      cands.forEach(function (c) { sum += baseOf(r.id)[c.party]; });
+      cands.forEach(function (c) { sum += baseOf(r.id, three)[c.party]; });
       shares[r.id] = {};
-      cands.forEach(function (c) { shares[r.id][c.id] = baseOf(r.id)[c.party] / sum * 100; });
+      cands.forEach(function (c) { shares[r.id][c.id] = baseOf(r.id, three)[c.party] / sum * 100; });
     });
     const carryMoney = Math.min(CB.moneyCarryMax, cr.money || 0);
     const camp = {
-      arena: 'nation', day: 0, energy: 0, money: NB.startMoney + carryMoney, sel: 'kinki',
+      arena: 'nation', base3: three || undefined, day: 0, energy: 0, money: NB.startMoney + carryMoney, sel: 'kinki',
       cands: cands, shares: shares, shields: {}, promises: [],
       deck: [], discard: [], hand: [], uid: 0,
       intents: [], blocked: {}, today: {}, pending: [], news: '', played: 0, comeback: null,
@@ -59,6 +112,8 @@ Game.Campaign = (function () {
     camp.comeback = { national: true, scenario: scSwing, wind: wind, unity: unity, kept: kept, broken: broken, money: carryMoney, prevMine: cr.partySeats,
       fatigue: fatigue, govBonus: govBonus, govRole: cr.gov ? cr.gov.role : null, approval: cr.gov ? Math.round(cr.gov.approval) : null, ethic: ethic };
     camp.deck = R.shuffle(state, NB.deck.concat(NB.manifesto[party]));
+    anchorMinors(camp);   // 小さな党(R19)
+    Game.Voters.create(state, camp);   // 1万人の有権者(R18)
     planSurge(state, camp);   // 奔流(R15)
     state.camp = camp;
     startDay(state);
@@ -79,9 +134,16 @@ Game.Campaign = (function () {
       const who = D.people[p];
       cands.push({ id: p, party: p, name: who.name, short: who.short, role: roles[p], tag: roles[p] === 'assassin' ? '刺客' : undefined });
     });
+    // 小さな党の候補(R19。seats.js の minors)。いつも新人として立つ
+    Object.keys(D.minors || {}).forEach(function (p) {
+      if (roles[p] || p === party || Game.Data.activeMinors(state).indexOf(p) < 0) return;
+      const who = D.minors[p];
+      cands.push({ id: p, party: p, name: who.name, short: who.short, role: 'minor', minor: true });
+    });
     // 党の地力。新党は元の党の地力の一部(後援会と、ついてきた支持者)、刺客は元の党の組織の大半
     const partyBase = function (rid, p) {
       const b = baseOf(rid);
+      if (b[p] == null) return strengthOf(rid, p);   // 小さな党
       if (!np) return b[p];
       return p === 'shinto' ? b[np.from] * NP.carry : p === np.from ? b[p] * NP.left : b[p];
     };
@@ -94,7 +156,9 @@ Game.Campaign = (function () {
         sum += raw[c.id];
       });
       shares[r.id] = {};
-      cands.forEach(function (c) { shares[r.id][c.id] = raw[c.id] / sum * 100; });
+      const big = cands.reduce(function (a, c) { return c.minor ? a : a + raw[c.id]; }, 0);
+      cands.forEach(function (c) { if (!c.minor) shares[r.id][c.id] = raw[c.id] / big * 100; });
+      takeMinors(cands, shares[r.id], raw, sum);
     });
     const camp = {
       arena: D.id, day: 0, energy: 0, money: B.campaign.startMoney, sel: 'downtown',
@@ -154,6 +218,8 @@ Game.Campaign = (function () {
     const ethicAll = ethic.clean + ethic.penalty + ethic.upper;
     if (ethicAll) regions().forEach(function (r) { applyGain(camp, r.id, 'me', ethicAll); });
     camp.deck = R.shuffle(state, deck);
+    anchorMinors(camp);   // 小さな党(R19)
+    Game.Voters.create(state, camp);   // 1万人の有権者(R18)
     planSurge(state, camp);   // 奔流(R15)
     state.camp = camp;
     startDay(state);
@@ -172,13 +238,24 @@ Game.Campaign = (function () {
   function cand(camp, id) { return camp.cands.filter(function (c) { return c.id === id; })[0]; }
   function rivals(camp) { return camp.cands.filter(function (c) { return !c.player; }); }
   // who の支持を g だけ動かす(マイナスも可)。実際に動いた量を返す
-  function applyGain(camp, regionId, who, g) {
+  // 有権者(R18)がいれば、地区の支持はちょうど同じだけ動き、kind でどの有権者が動くかが決まる(voters.js の weights)
+  function applyGain(camp, regionId, who, g, kind) {
     const C = bal().campaign, s = camp.shares[regionId];
     const old = s[who];
     const nw = Math.max(C.shareFloor, Math.min(C.shareCap, old + g));
+    if (camp.voters) { const d = Game.Voters.shift(camp, regionId, who, nw - old, kind); if (d != null) return d; }
     const k = (100 - nw) / (100 - old);
     Object.keys(s).forEach(function (c) { s[c] = c === who ? nw : s[c] * k; });
     return nw - old;
+  }
+  // カードがどの有権者に効くか(R18)
+  function cardKind(id) {
+    const B = bal(), V = B.voters, b = B.cards[id] || {};
+    if (V.cardTarget[id]) return V.cardTarget[id];
+    const pid = b.endorse || b.promise;
+    if (pid && V.promiseGroup[pid]) return 'group:' + V.promiseGroup[pid];
+    if (pid && V.promiseTopic[pid]) return 'topic:' + V.promiseTopic[pid];
+    return 'uniform';
   }
   function overall(camp) {
     const out = {};
@@ -260,7 +337,7 @@ Game.Campaign = (function () {
     const fx = [];
     let msg;
     if (isTarget(id)) {
-      const d = applyGain(camp, regionId, 'me', cardGain(camp, id, regionId));
+      const d = applyGain(camp, regionId, 'me', cardGain(camp, id, regionId), cardKind(id));
       fx.push({ region: regionId, who: 'me', gain: Math.round(d) });
       camp.sel = regionId;
       msg = Game.Data.REGION[regionId].name + 'で' + name + '。支持が ' + Math.round(d) + ' ポイント伸びた。';
@@ -276,8 +353,10 @@ Game.Campaign = (function () {
     } else {
       regions().forEach(function (r) {
         const g = cardGain(camp, id, r.id);
-        if (g) fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', g)) });
+        if (g) fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', g, cardKind(id))) });
       });
+      // 推薦(R18):その団体の人の投票率が上がり、投票の理由に残る
+      if (b.endorse && camp.voters && B.voters.promiseGroup[b.endorse]) Game.Voters.endorse(camp, B.voters.promiseGroup[b.endorse], 'me');
       if (b.curse) {
         msg = Game.Data.PROMISES[b.curse].org + 'に頭を下げに行った。許されたわけではないが、「破った約束」は手札から消えた。';
       } else if (b.endorse) {
@@ -335,7 +414,7 @@ Game.Campaign = (function () {
           const s = camp.shares[reg.id], my = s[c.id];
           let best = 0;
           Object.keys(s).forEach(function (k) { if (k !== c.id && s[k] > best) best = s[k]; });
-          let w = reg.voters * (1 / (1 + Math.abs(my - best) / A.closeScale)) * (baseOf(reg.id)[c.party] / A.affinityBase);
+          let w = reg.voters * (1 / (1 + Math.abs(my - best) / A.closeScale)) * (baseOf(reg.id, camp.base3)[c.party] / A.affinityBase);
           if (Math.abs(my - s.me) < A.defendWithin) w *= A.defendMult;
           if (chosen[reg.id]) w *= 0.25;
           return w;
@@ -358,7 +437,8 @@ Game.Campaign = (function () {
       title = '朝から雨';
       text = '今日は街頭演説が届きにくい(' + E.rain.speech + ')。雨の中の戸別訪問は心に残る(+' + E.rain.door + ')。';
     } else if (id === 'tailwind' || id === 'headwind') {
-      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', E[id].all)) }); });
+      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', E[id].all, id === 'tailwind' ? 'uniform' : 'sns')) }); });
+      if (camp.voters) Game.Voters.rumor(camp, 'me', id === 'tailwind' ? 1 : -1, id === 'tailwind' ? 'interest' : 'sns');   // 評判・噂が口コミで広がる(R18)
       title = id === 'tailwind' ? '党に追い風' : '党に逆風';
       text = id === 'tailwind'
         ? party + 'の党首の発言が好評。全地区で支持が ' + E.tailwind.all + ' ポイント上がった。'
@@ -366,7 +446,8 @@ Game.Campaign = (function () {
           : party + 'の幹部の発言が批判を浴びている。全地区で支持が ' + (-E.headwind.all) + ' ポイント下がった。';
     } else if (id === 'gaffe') {
       const who = cand(camp, topRival(camp));
-      regions().forEach(function (r) { fx.push({ region: r.id, who: who.id, gain: Math.round(applyGain(camp, r.id, who.id, E.gaffe.all)) }); });
+      regions().forEach(function (r) { fx.push({ region: r.id, who: who.id, gain: Math.round(applyGain(camp, r.id, who.id, E.gaffe.all, 'interest')) }); });
+      if (camp.voters) Game.Voters.rumor(camp, who.id, -1, 'interest');
       title = '相手の失言';
       text = who.name + '候補の演説での一言が波紋を広げている。' + who.short + '候補の支持が全地区で ' + (-E.gaffe.all) + ' ポイント下がった。';
     } else {
@@ -425,21 +506,22 @@ Game.Campaign = (function () {
     } else if (opt === 'attack') {
       const who = cand(camp, topRival(camp));
       if (R.next(state) < D.attack.chance) {
-        regions().forEach(function (r) { fx.push({ region: r.id, who: who.id, gain: Math.round(applyGain(camp, r.id, who.id, D.attack.hit)) }); });
+        regions().forEach(function (r) { fx.push({ region: r.id, who: who.id, gain: Math.round(applyGain(camp, r.id, who.id, D.attack.hit, 'interest')) }); });
+        if (camp.voters) Game.Voters.rumor(camp, who.id, -1, 'interest');   // 討論会を見た人から、口コミで広がる(R18)
         text = who.short + '候補の実績の弱いところを突いた。相手は言葉に詰まり、会場がどよめいた。' + who.short + '候補の支持が全地区で ' + (-D.attack.hit) + ' ポイント下がった。';
       } else {
-        regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', D.attack.miss)) }); });
+        regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', D.attack.miss, 'interest')) }); });
         text = '相手を追及したが、うまくかわされた。「揚げ足取りだ」と受け取られ、全地区で支持が ' + (-D.attack.miss) + ' ポイント下がった。';
       }
     } else if (opt === 'local') {
       regions().forEach(function (r) {
         if (r.tags.some(function (t) { return D.local.tags.indexOf(t) >= 0; })) {
-          fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', D.local.gain)) });
+          fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', D.local.gain, 'interest')) });
         }
       });
       text = '地元の暮らしの話に、会場のお年寄りと親たちがうなずいた。高齢層・子育て世帯の地区で支持が ' + D.local.gain + ' ポイント伸びた。';
     } else {
-      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', D.policy.all)) }); });
+      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(applyGain(camp, r.id, 'me', D.policy.all, 'interest')) }); });
       text = '政策を落ち着いて語った。派手さはないが、全地区で支持が ' + D.policy.all + ' ポイント伸びた。';
     }
     camp.pending[0] = { type: 'event', id: 'debateResult', title: '公開討論会を終えて', text: text, fx: fx };
@@ -452,8 +534,10 @@ Game.Campaign = (function () {
     const S = bal().surge;
     if (R.next(state) >= S.chance) { camp.surge = null; return; }
     // 対象は、プレイヤーではない候補のうち、いちばん支持の低い候補(1人用・全国)。対戦モードは2人も含めて、いちばん低い候補
-    const o = overall(camp);
-    const target = Object.keys(o).filter(function (k) { return camp.vs || k !== 'me'; }).sort(function (a, b) { return o[a] - o[b]; })[0];
+    // 小さな党(R19)は、全国の総選挙の新興の党(balance.js の minors.surge)だけが対象になれる
+    const o = overall(camp), nat = Game.Data.DISTRICT.national;
+    const able = function (k) { const c = cand(camp, k); return !c.minor || (nat && bal().minors.surge.indexOf(c.party) >= 0); };
+    const target = Object.keys(o).filter(function (k) { return (camp.vs || k !== 'me') && able(k); }).sort(function (a, b) { return o[a] - o[b]; })[0];
     camp.surge = { day: S.dayMin + Math.floor(R.next(state) * (S.dayMax - S.dayMin + 1)), target: target, party: cand(camp, target).party, active: false,
       luck: 1 + S.spread * (2 * R.next(state) - 1) };   // 隠れた票の大きさのぶれ
   }
@@ -486,7 +570,7 @@ Game.Campaign = (function () {
     const sg = camp.surge;
     if (!sg || !sg.active) return;
     regions().forEach(function (r) {
-      const d = applyGain(camp, r.id, sg.target, sg.daily);
+      const d = applyGain(camp, r.id, sg.target, sg.daily, 'uniform');
       if (fx) fx.push({ region: r.id, who: sg.target, gain: Math.round(d) });
     });
   }
@@ -513,6 +597,16 @@ Game.Campaign = (function () {
     const ord = Object.keys(o).sort(function (a, b) { return o[b] - o[a]; });
     camp.close = o[ord[0]] - o[ord[1]] < V.margin ? (camp.close || 0) + 1 : Math.max(0, (camp.close || 0) - 1);
   }
+  // 1日の終わりの口コミ(R18):知り合いの好みに近づき、噂が広がる。自分の支持が動いた地区を浮かぶ数字に足す
+  function mouth(camp, fx) {
+    if (!camp.voters) return;
+    const moved = Game.Voters.spread(camp);
+    if (!moved || !fx) return;
+    Object.keys(moved).forEach(function (rid) {
+      const g = Math.round(moved[rid].me || 0);
+      if (g) fx.push({ region: rid, who: 'me', gain: g, mouth: true });
+    });
+  }
   // 接戦で上がる投票率(ポイント。地区の性格の倍率をかける前)
   function closeBoost(camp) { const V = bal().vote.close; return Math.min(V.max, (camp.close || 0) * V.perDay); }
   // この日を終える:相手の動きが効き、次の日へ。最終日のあとは投票へ
@@ -528,11 +622,13 @@ Game.Campaign = (function () {
         camp.shields[it.region] -= 1;
         shielded = true;
       }
-      fx.push({ region: it.region, who: it.who, gain: Math.round(applyGain(camp, it.region, it.who, g)), shielded: shielded });
+      fx.push({ region: it.region, who: it.who, gain: Math.round(applyGain(camp, it.region, it.who, g, it.what === '戸別訪問' ? 'few' : 'interest')), shielded: shielded });
     });
     camp.hand.forEach(function (c) { camp.discard.push(c.id); });
     camp.hand = [];
+    steady(camp);   // 小さな党の支持は揺れにくい(R19)
     surgeTick(camp, fx);   // 奔流の候補が伸びる(R15)
+    mouth(camp, fx);   // 口コミ(R18)
     if (!Game.Data.DISTRICT.national) trackClose(camp);
     if (camp.day >= B.campaign.days) {
       camp.intents = [];
@@ -548,10 +644,10 @@ Game.Campaign = (function () {
     newCampaign: newCampaign, play: play, endDay: endDay, dismiss: dismiss, chooseDebate: chooseDebate,
     canPlay: canPlay, cardGain: cardGain, isTarget: isTarget, overall: overall, margin: margin, ranking: ranking,
     mark: mark, cand: cand, saturated: saturated, rivals: rivals, topRival: topRival, applyGain: applyGain,
-    baseOf: baseOf, turnoutOf: turnoutOf,
+    baseOf: baseOf, turnoutOf: turnoutOf, strengthOf: strengthOf, steady: steady,
     // 対戦モード(js/engine/versus.js)が、日の進め方を組み立て直すときに使う
     draw: draw, planIntents: planIntents, morningEvent: morningEvent, pollHeadline: pollHeadline,
-    trackClose: trackClose, closeBoost: closeBoost, newPartyRoles: newPartyRoles,
+    trackClose: trackClose, closeBoost: closeBoost, newPartyRoles: newPartyRoles, cardKind: cardKind, mouth: mouth,
     planSurge: planSurge, surgeMorning: surgeMorning, surgeTick: surgeTick, surgeTurnout: surgeTurnout, surgeShares: surgeShares,
   };
 })();

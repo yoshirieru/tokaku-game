@@ -104,7 +104,8 @@ Game.CountView = (function () {
     app.innerHTML = '<div class="count">' +
       '<header class="ct-head panel"><span class="ct-live">開票速報</span><h1>' + UI.esc(Game.Data.DISTRICT.name) + '</h1>' +
       '<span class="ct-clock">' + (prShown ? '1:30' : tick.time) + '</span><span class="ct-pct">開票率 <b>' + Math.round(tick.pct * 100) + '</b>%</span></header>' +
-      '<div class="ct-body"><section class="ct-cands panel' + (prShown || cands.length > 3 ? ' compact' : '') + '">' + rows + prBox + '</section>' +
+      '<div class="ct-body"><section class="ct-cands panel' + (prShown || cands.length > 3 ? ' compact' : '') + (cands.length > 4 ? ' many' : '') + (cands.length > 5 ? ' crowd' : '') + '">' + rows + prBox +
+      (prShown ? '' : UI.ballotCard(e, cands, t, function (rid) { return tick.regionPct[rid] > 0; })) + '</section>' +
       '<div class="map-cell">' + UI.mapHtml(fill, null) + '</div></div>' +
       '<div class="ct-ticker panel' + (fc && t === fc.retract && !prShown ? ' alert' : '') + '"><span class="tk-lab">速報</span><span>' + UI.esc(prShown ? prText : narration(s, t)) + '</span></div>' +
       '<footer class="ct-btns">' +

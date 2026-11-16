@@ -82,6 +82,7 @@ Game.Versus = (function () {
       if (camp.surge) { const o2 = C.overall(camp); camp.surge.target = Object.keys(o2).sort(function (a, b) { return o2[a] - o2[b]; })[0]; camp.surge.party = C.cand(camp, camp.surge.target).party; }
     }
     if (camp.surge) camp.surge.slot = camp.surge.target === 'me' ? 0 : camp.surge.target === 'vs' ? 1 : -1;   // 視点を入れ替えても追えるように
+    Game.Voters.create(state, camp);   // 1万人の有権者(R18。ハンデのあとの支持で)
     state.screen = 'campaign';
     startDay(state);
     return camp;
@@ -97,6 +98,7 @@ Game.Versus = (function () {
       if (c.id === 'me') { c.id = 'vs'; c.player = false; } else if (c.id === 'vs') { c.id = 'me'; c.player = true; }
     });
     camp.cands.sort(function (a, b) { return (b.id === 'me') - (a.id === 'me'); });   // 'me' を先頭に(1人用と同じ並び)
+    Game.Voters.swapIds(camp);   // 有権者の好みの列の名前も入れ替える(R18)
     if (camp.surge && (camp.surge.target === 'me' || camp.surge.target === 'vs')) camp.surge.target = camp.surge.target === 'me' ? 'vs' : 'me';
     vs.active = 1 - vs.active;
     state.player.name = vs.names[vs.active];
@@ -191,9 +193,10 @@ Game.Versus = (function () {
         if (theirs > 0) vs.stash.shields[it.region] -= 1;
         shielded = true;
       }
-      fx.push({ region: it.region, who: it.who, gain: Math.round(C.applyGain(camp, it.region, it.who, g)), shielded: shielded });
+      fx.push({ region: it.region, who: it.who, gain: Math.round(C.applyGain(camp, it.region, it.who, g, it.what === '戸別訪問' ? 'few' : 'interest')), shielded: shielded });
     });
     C.surgeTick(camp, fx);   // 奔流の候補が伸びる(R15)
+    C.mouth(camp, fx);   // 口コミ(R18)
     C.trackClose(camp);   // 接戦が続くと投票率が上がる(R13)
     if (camp.day >= B.campaign.days) {
       camp.intents = [];

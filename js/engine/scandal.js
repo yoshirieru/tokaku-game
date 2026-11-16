@@ -51,7 +51,8 @@ Game.Scandal = (function () {
     let text, fx = [], retire = null;
     const leader = cr && cr.leader, pm = cr && cr.gov && cr.gov.role === 'pm' && leader;
     if (where === 'campaign') {
-      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(Game.Campaign.applyGain(state.camp, r.id, 'me', L.campaignHit)) }); });
+      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(Game.Campaign.applyGain(state.camp, r.id, 'me', L.campaignHit, 'sns')) }); });
+      if (state.camp.voters) Game.Voters.rumor(state.camp, 'me', -1, 'sns');   // SNSで炎上し、口コミで広がる(R18)
       if (t === 'resign') t = 'unendorsed';   // 選挙戦の最中は辞職できない。選挙のあとに公認を失う
       text = head + 'SNSで炎上し、全地区で支持が ' + (-L.campaignHit) + ' 下がった。' +
         (state.camp.vs ? '' : t === 'drop' ? '党内の評価も下がる。' : '党は「次の選挙では公認しない」と表明した。');
@@ -133,7 +134,8 @@ Game.Scandal = (function () {
     }
     if (!camp.vs && camp.day === B.debateDay && sc.hidden > 0 && sc.exposure >= L.attackAt) {
       const rv = Game.Campaign.cand(camp, Game.Campaign.topRival(camp)), fx = [];
-      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(Game.Campaign.applyGain(camp, r.id, 'me', L.attackHit)) }); });
+      regions().forEach(function (r) { fx.push({ region: r.id, who: 'me', gain: Math.round(Game.Campaign.applyGain(camp, r.id, 'me', L.attackHit, 'interest')) }); });
+      if (camp.voters) Game.Voters.rumor(camp, 'me', -1, 'interest');
       sc.exposure = Math.min(100, sc.exposure + L.attackExposure);
       camp.pending.unshift({ type: 'event', id: 'slushAttack', title: '討論会で疑惑を追及された', fx: fx,
         text: rv.short + '候補が「収支報告書に載らないお金があるのでは」と切り込んできた。答えに詰まり、全地区で支持が ' + (-L.attackHit) + ' 下がった(発覚度 ' + Math.round(sc.exposure) + ')。' });
@@ -144,7 +146,8 @@ Game.Scandal = (function () {
   // 対戦モード:公開討論会で、もう1人の人間の裏金を追及する(相手の視点に切り替えて当てる)
   function pvpAttack(state) {
     const L = SL(), camp = state.camp, fx = [];
-    regions().forEach(function (r) { fx.push({ region: r.id, who: 'vs', gain: Math.round(Game.Campaign.applyGain(camp, r.id, 'vs', L.pvpHit)) }); });
+    regions().forEach(function (r) { fx.push({ region: r.id, who: 'vs', gain: Math.round(Game.Campaign.applyGain(camp, r.id, 'vs', L.pvpHit, 'interest')) }); });
+    if (camp.voters) Game.Voters.rumor(camp, 'vs', -1, 'interest');
     const other = camp.vs.stash.scandal;
     other.exposure = Math.min(100, other.exposure + L.pvpExposure);
     const name = Game.Campaign.cand(camp, 'vs').short;
@@ -196,7 +199,7 @@ Game.Scandal = (function () {
     if (p.kind === 'bribe') {
       const reg = Game.Data.REGION[p.region];
       if (opt === 'accept') {
-        fx.push({ region: p.region, who: 'me', gain: Math.round(C.applyGain(camp, p.region, 'me', F.bribe.gain)) });
+        fx.push({ region: p.region, who: 'me', gain: Math.round(C.applyGain(camp, p.region, 'me', F.bribe.gain, 'few')) });   // 買収:少数に強く(R18)
         sc.probe += F.bribe.probe;
         text = '見て見ぬふりをした。' + reg.name + 'で票がまとまりはじめた(+' + F.bribe.gain + ')。だが、捜査当局の目が陣営に向いている(捜査ゲージ ' + sc.probe + ')。';
       } else {
@@ -206,9 +209,10 @@ Game.Scandal = (function () {
       const rv = C.cand(camp, p.who);
       if (opt === 'fight') {
         regions().forEach(function (r) {
-          fx.push({ region: r.id, who: p.who, gain: Math.round(C.applyGain(camp, r.id, p.who, F.smear.hit)) });
-          fx.push({ region: r.id, who: 'me', gain: Math.round(C.applyGain(camp, r.id, 'me', F.smear.self)) });
+          fx.push({ region: r.id, who: p.who, gain: Math.round(C.applyGain(camp, r.id, p.who, F.smear.hit, 'seed')) });
+          fx.push({ region: r.id, who: 'me', gain: Math.round(C.applyGain(camp, r.id, 'me', F.smear.self, 'seed')) });
         });
+        if (camp.voters) { Game.Voters.rumor(camp, p.who, -1, 'seed'); Game.Voters.rumor(camp, 'me', -1, 'seed'); }   // 泥仕合の噂が広がる(R18)
         text = rv.short + '陣営のしわざだと訴え、言い返した。相手は全地区 ' + F.smear.hit + '。泥仕合に有権者はうんざりし、こちらも全地区 ' + F.smear.self + '。';
       } else {
         regions().forEach(function (r) { if (r.tags.indexOf('float') >= 0) fx.push({ region: r.id, who: 'me', gain: Math.round(C.applyGain(camp, r.id, 'me', F.smear.fair)) }); });

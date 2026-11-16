@@ -85,7 +85,7 @@ Game.Scenario = (function () {
         else if (g.type === 'seats') hit = e.seats.me >= g.n;
         else if (g.type === 'first') hit = e.won;
         else if (g.type === 'noMajority') hit = seatsOf(g.party) < NB.majority;
-        else if (g.type === 'notRuling') hit = !!cr.gov && cr.gov.pm !== g.party && cr.gov.partner !== g.party;
+        else if (g.type === 'notRuling') hit = !!cr.gov && Game.Gov.members(cr.gov, state.player.party).indexOf(g.party) < 0;
         else if (g.type === 'inGov') hit = !!cr.gov && cr.gov.role !== 'opposition';
         else if (g.type === 'pm') hit = !!cr.gov && cr.gov.role === 'pm';
       }

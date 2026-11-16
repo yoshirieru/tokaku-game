@@ -18,6 +18,7 @@ Game.Career = (function () {
 
   // ---------- 選挙のあと:任期を始める(続けて落選すると、ここで引退になる) ----------
   function afterElection(state) {
+    if (state.camp) state.camp.voters = null;   // 有権者(R18)は選挙ごと。セーブを小さく
     if (state.election.national) return afterNational(state);
     const B = Game.Balance, e = state.election, camp = state.camp;
     const cr = state.career || { wins: 0, elections: 0, kept: 0, broken: 0, base: {}, history: [] };
@@ -42,6 +43,7 @@ Game.Career = (function () {
     cr.rivalRoles = {};
     cr.rivalSolid = {};   // 現職のまま勝った相手は、次の選挙までに地盤を固める
     camp.cands.forEach(function (c) {
+      if (c.minor) return;   // 小さな党の候補(R19)は、次の選挙も新人として立てなおす(seats.js の minors)
       if (!c.player && c.id === e.winner && c.role === 'incumbent') cr.rivalSolid[c.party] = true;
       if (!c.player) cr.rivalRoles[c.party] = c.id === e.winner ? 'incumbent' : (c.role === 'incumbent' ? 'challenger' : c.role);
     });

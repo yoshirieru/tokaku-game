@@ -20,7 +20,7 @@ const root = path.resolve(__dirname, '..');
 const sandbox = { console };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/scandal.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/data/future.js', 'js/engine/future.js', 'js/engine/upper.js', 'js/engine/career.js', 'js/engine/versus.js', 'js/data/achievements.js', 'js/engine/hall.js', 'js/data/scenarios.js', 'js/engine/scenario.js'].forEach((f) => {
+['js/data/balance.js', 'js/data/district.js', 'js/data/seats.js', 'js/data/nation.js', 'js/data/cards.js', 'js/engine/rng.js', 'js/engine/scandal.js', 'js/data/voters.js', 'js/engine/voters.js', 'js/engine/campaign.js', 'js/engine/vote.js', 'js/engine/government.js', 'js/data/future.js', 'js/engine/future.js', 'js/engine/upper.js', 'js/engine/career.js', 'js/engine/versus.js', 'js/data/achievements.js', 'js/engine/hall.js', 'js/data/scenarios.js', 'js/engine/scenario.js'].forEach((f) => {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), sandbox, { filename: f });
 });
 const Game = sandbox.Game;

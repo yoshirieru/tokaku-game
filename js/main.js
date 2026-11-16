@@ -14,6 +14,7 @@ window.Game = window.Game || {};
   Game.save = function () {
     if (!Game.state) return;
     Game.state.savedAt = Date.now();
+    if (Game.state.camp) Game.Voters.persist(Game.state.camp);   // 有権者の変わった値を書く(R18)
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.state)); } catch (e) { console.warn('セーブできませんでした', e); }
   };
   Game.loadSave = function () {
@@ -117,7 +118,7 @@ window.Game = window.Game || {};
   };
 
   // ---- 行動の取り消し:その日のうちなら、カードを使う前に戻せる。乱数の状態も戻るので結果は変わらない ----
-  Game.pushUndo = function () { undoStack.push(JSON.stringify(Game.state)); };
+  Game.pushUndo = function () { if (Game.state && Game.state.camp) Game.Voters.persist(Game.state.camp); undoStack.push(JSON.stringify(Game.state)); };
   Game.canUndo = function () { return undoStack.length > 0; };
   Game.clearUndo = function () { undoStack = []; };
   Game.undo = function () {

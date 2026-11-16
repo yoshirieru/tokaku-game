@@ -37,6 +37,13 @@
   --paper-good: #1f6e43;                    /* 30年後の新聞(R14):良くなった指標 */
   --paper-bad: #a3262a;                     /* 悪くなった指標 */
   --film-dark: rgba(8, 6, 3, .9);           /* 昔の映画風の演出の暗がり */
+  /* タイトルの背景の本会議場(木の壁、赤い幕とじゅうたん)。上に夜の紺を重ねて沈める */
+  --hall-ceil: #2b170c; --hall-wood: #6b3c1d; --hall-wood-dark: #3d200f; --hall-wood-light: #8a5629;
+  --hall-wall: #9a774a; --hall-wall-line: #7b5a33; --hall-gold: #c9a24a; --hall-light: #fff0c4;
+  --hall-curtain: #a4272b; --hall-curtain-dark: #661317; --hall-sheer: #e6d8c4; --hall-chair: #b8333a;
+  --hall-carpet: #7b3a28; --hall-desk: #2a1b14; --hall-desk-top: #4c3426; --hall-plate: #d9d2c2; --hall-screen: #1a2440;
+  --hall-tint: rgba(6, 10, 28, .42);        /* 絵の上に重ねる夜の紺 */
+  --hall-tint-strong: rgba(6, 10, 28, .86); /* ロゴとメニューの側は、さらに沈める */
   --font: 'Zen Kaku Gothic New', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', Meiryo, system-ui, sans-serif;
   --font-head: 'Shippori Mincho B1', 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
 }
@@ -173,6 +180,36 @@ h1, h2, p { margin: 0; }
 .rail { fill: none; stroke: var(--map-stroke); stroke-width: 2; stroke-dasharray: 7 5; opacity: .55; pointer-events: none; }
 .map-lbl { fill: var(--sub); font: 700 15px var(--font-head); letter-spacing: .3em; pointer-events: none; }
 .map-lbl.small { font-size: 10.5px; letter-spacing: .1em; opacity: .7; }
+
+/* 有権者の点(R18。UI.voterDots):1つの点が、その地区の決まった1人。ゆうべの口コミで投票先が変わった人は、前の色から変わって輪がつく */
+.vdot { stroke: var(--ink); stroke-width: .8; stroke-opacity: .75; pointer-events: none; }
+.vdot.flip { stroke: var(--gold); stroke-width: 2; stroke-opacity: 1; transform-box: fill-box; transform-origin: center; animation: dotflip 1.5s ease-out both; }
+@keyframes dotflip {
+  0%, 30% { fill: var(--from); transform: scale(1); }
+  55% { transform: scale(1.9); }
+  100% { fill: var(--to); transform: scale(1.35); }
+}
+
+.dot-legend {
+  position: absolute; left: 8px; bottom: 6px; display: flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px;
+  background: var(--pin-bg); color: var(--sub); font-size: 11px; pointer-events: none;
+}
+.nat .dot-legend { top: 6px; bottom: auto; }   /* 全国の地図は左下に九州・四国があるので、空いている左上に */
+@media (max-width: 700px) { .dot-legend { font-size: 10px; padding: 1px 6px; } }
+.lg-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--sub); border: 1px solid var(--ink); }
+.lg-dot.flip { margin-left: 6px; border: 2px solid var(--gold); }
+/* 「この人の一票」(R18。UI.ballotCard):開票特番の候補の欄の下 */
+.map-cell { position: relative; }
+.vote-card {
+  flex: none; align-self: flex-start; max-width: 100%; padding: 6px 10px 7px; border-radius: 6px;
+  border-left: 4px solid var(--pc); background: var(--pin-bg); color: var(--ink); font-size: 12px; line-height: 1.45;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .35); animation: pop .3s ease-out; pointer-events: none;
+}
+.vote-card .vc-lab { display: inline-block; margin-bottom: 2px; padding: 0 6px; border-radius: 3px; background: var(--gold); color: var(--on-gold); font: 800 10.5px/1.5 var(--font-head); letter-spacing: .08em; }
+.vote-card p { margin: 0; }
+.vote-card b { display: block; font-weight: 800; }
+.vote-card em { font-style: normal; font-weight: 800; color: var(--num); }
+@media (max-width: 700px) { .vote-card { font-size: 11px; padding: 3px 8px 4px; } .vote-card b { display: inline; margin-right: 4px; } }
 
 .pin {
   position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -784,6 +821,22 @@ h1, h2, p { margin: 0; }
   .ct-cands { gap: 9px; padding: 10px 12px; }
   .ct-cands.compact .ct-row { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
   .ct-cands.compact .ct-votes { text-align: left; }   /* スマホは名前と票を縦に(1行だと名前が折れる) */
+  /* 候補が5人以上(小さな党の候補。R19)は、さらに詰める */
+  .ct-cands.many { gap: 5px; }
+  .ct-cands.many .ct-name { min-height: 22px; }
+  .ct-cands.many .ct-name b { font-size: 15px; }
+  .ct-cands.many .ct-bar { height: 9px; }
+  .ct-cands.many .ct-votes b { font-size: 15px; }
+  /* 6人以上(新党と刺客に、小さな党の候補)は、もう一段詰める */
+  .ct-cands.crowd { gap: 2px; padding-top: 6px; padding-bottom: 6px; }
+  .ct-cands.crowd .ct-name { min-height: 20px; }
+  .ct-cands.crowd .ct-bar { height: 7px; }
+  .ct-cands.crowd .ct-row { gap: 1px; }
+  /* 全国の総選挙は8党:党の名前と議席を1行に、党首の名前は省く */
+  .nat .ct-cands.many .ct-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 2px; }
+  .nat .ct-cands.many .ct-bar { grid-column: 1 / -1; }
+  .nat .ct-cands.many .ct-votes { grid-row: 1; grid-column: 2; text-align: right; }
+  .nat .ct-cands.many .ct-name .sub, .nat .ct-cands.many .maj-note { display: none; }
   .ct-name b { font-size: 17px; }
   .ct-bar { height: 16px; }
   .ct-votes b { font-size: 18px; }
@@ -834,20 +887,48 @@ h1, h2, p { margin: 0; }
   display: grid; grid-template-columns: minmax(0, 45fr) minmax(0, 55fr); grid-template-rows: minmax(0, 1fr) auto;
 }
 .tl-bg { position: absolute; inset: 0; overflow: hidden; background: radial-gradient(ellipse 90% 75% at 72% 42%, #1c3070 0%, #0a1232 55%, var(--night) 100%); animation: tl-fade calc(var(--s) * 1s) ease both; }
-.tl-floor {
-  position: absolute; left: -25%; right: -25%; bottom: -6%; height: 46%; opacity: .5;
-  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 64px 64px; transform: perspective(520px) rotateX(64deg); transform-origin: 50% 100%;
-  -webkit-mask-image: linear-gradient(transparent, #000 60%); mask-image: linear-gradient(transparent, #000 60%);
-  animation: tl-floor 5s linear infinite;
-}
 .tl-sweep {
   position: absolute; inset: 0; mix-blend-mode: screen;
   background: linear-gradient(100deg, transparent 42%, rgba(160, 190, 255, .11) 50%, transparent 58%) 120% 0 / 300% 100% no-repeat;
   animation: tl-sweep 9s ease-in-out infinite;
 }
+/* 本会議場の絵(title.js の chamberSvg)。紺を重ねて「開票特番の夜」に沈め、ロゴとメニューの側(左)をいっそう暗く */
+.tl-hall { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tl-bg::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, var(--hall-tint-strong) 0%, var(--hall-tint) 48%, var(--hall-tint) 100%),
+    linear-gradient(180deg, transparent 55%, var(--hall-tint-strong) 100%);
+}
+.hl-ceil { fill: var(--hall-ceil); }
+.hl-wood { fill: var(--hall-wood); }
+.hl-wood-dark { fill: var(--hall-wood-dark); }
+.hl-wood-light { fill: var(--hall-wood-light); }
+.hl-wall { fill: var(--hall-wall); }
+.hl-wall-line { fill: none; stroke: var(--hall-wall-line); stroke-width: 1.4; }
+.hl-wall-side { fill: var(--hall-wood); }
+.hl-panel { fill: var(--hall-wood-dark); opacity: .55; }
+.hl-panel-side { fill: var(--hall-wood-dark); opacity: .6; }
+.hl-box { fill: var(--hall-wood-dark); }
+.hl-rail, .hl-gold { fill: var(--hall-gold); }
+.hl-lamp { fill: var(--hall-light); }
+.hl-glow { fill: url(#hl-glow-g); }
+.hl-curtain { fill: var(--hall-curtain); }
+.hl-curtain-dark { fill: var(--hall-curtain-dark); }
+.hl-fold { fill: none; stroke: var(--hall-curtain-dark); stroke-width: 3; }
+.hl-sheer { fill: var(--hall-sheer); }
+.hl-chair { fill: var(--hall-chair); }
+.hl-step { fill: var(--hall-curtain-dark); }
+.hl-screen { fill: var(--hall-screen); }
+.hl-carpet { fill: var(--hall-carpet); }
+.hl-desk, .hl-desk-top, .hl-plate { fill: none; stroke-linecap: butt; }
+.hl-desk { stroke: var(--hall-desk); }
+.hl-desk-top { stroke: var(--hall-desk-top); }
+.hl-plate { stroke: var(--hall-plate); opacity: .7; }
+@media (max-width: 760px), (max-aspect-ratio: 4/5) {
+  /* スマホの縦画面は、ボードが上、ロゴとメニューが下 */
+  .tl-bg::after { background: linear-gradient(180deg, var(--hall-tint) 0%, var(--hall-tint) 35%, var(--hall-tint-strong) 70%); }
+}
 @keyframes tl-fade { from { opacity: 0; } }
-@keyframes tl-floor { to { background-position: 0 64px, 0 0; } }
 @keyframes tl-sweep { to { background-position: -60% 0; } }
 
 /* 情勢ボード */
@@ -979,6 +1060,6 @@ h1, h2, p { margin: 0; }
   .tl-main { gap: clamp(4px, 1vh, 10px); }
 }
 /* 動きを減らす設定:流れ・点滅・揺れを止める */
-.tl-reduced .tl-floor, .tl-reduced .tl-sweep, .tl-reduced .tl-live, .tl-reduced .tl-ticker-track { animation: none; }
+.tl-reduced .tl-sweep, .tl-reduced .tl-live, .tl-reduced .tl-ticker-track { animation: none; }
 .tl-reduced .tl-btn, .tl-reduced .tl-rg, .tl-reduced .tl-bar i, .tl-reduced .tl-called { transition: none; }
 .tl-reduced .tl-ticker-window { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }

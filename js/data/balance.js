@@ -20,13 +20,31 @@ Game.Balance = {
   },
 
   // 画面の操作:同じカードをこの時間(ミリ秒)のうちに2回押すと、ダブルクリックとしてすぐ使う(スマホのダブルタップも同じ)
-  ui: { doubleClick: 400 },
+  ui: { doubleClick: 400,
+    voterDots: { r: 3.4, pinW: 50, pinH: 26, gap: 9 },   // 地図の有権者の点(R18):半径、札のまわりの避ける幅(viewBox の単位。札の中心から左右・上下)、点どうしの間
+  },
 
   // 情勢の印:いちばん強い相手との差(ポイント)。strong 以上で ◎、lean 以上で ○、± lean の内は ▲
   marks: { strong: 10, lean: 3 },
 
   // 始まりの支持 =党の地力(地区ごと)× 立場の倍率、の比。選挙区の地力は下の seats、ここは全国のブロック(js/data/nation.js)
+  //   小さな党(R19)も入れて、選挙戦の前の議席の見込みが nation.startSeats になるように合わせてある
+  //   (全国の得票はおよそ 民政29・共和25・未来16・公正10・国声7・人民5・参画5・社平3%。小さな党はほとんど比例でしか議席を取れない)
   partyBase: {
+    hokkaido:    { minsei: 36, kyowa: 43, mirai: 19, kosei: 8.5, kokumin: 12, jinmin: 10, sankaku: 6, shahei: 7.5 },
+    tohoku:      { minsei: 44.5, kyowa: 37, mirai: 17, kosei: 8, kokumin: 8, jinmin: 6.5, sankaku: 5, shahei: 5.5 },
+    hokuriku:    { minsei: 48.5, kyowa: 33.5, mirai: 17, kosei: 8, kokumin: 8, jinmin: 6.5, sankaku: 5, shahei: 5 },
+    kitakanto:   { minsei: 43.5, kyowa: 35.5, mirai: 20, kosei: 12, kokumin: 9, jinmin: 6.5, sankaku: 6, shahei: 4 },
+    chugoku:     { minsei: 50.5, kyowa: 31.5, mirai: 17, kosei: 10.5, kokumin: 8, jinmin: 6.5, sankaku: 5, shahei: 5 },
+    kinki:       { minsei: 34, kyowa: 29.5, mirai: 34, kosei: 22.5, kokumin: 9.5, jinmin: 10, sankaku: 7.5, shahei: 3.5 },
+    tokai:       { minsei: 38, kyowa: 42, mirai: 18, kosei: 12, kokumin: 21.5, jinmin: 8, sankaku: 7.5, shahei: 5 },
+    tokyo:       { minsei: 35, kyowa: 34.5, mirai: 28.5, kosei: 17, kokumin: 9.5, jinmin: 9, sankaku: 8.5, shahei: 3.5 },
+    minamikanto: { minsei: 39.5, kyowa: 36.5, mirai: 23, kosei: 13, kokumin: 10, jinmin: 7, sankaku: 9, shahei: 4 },
+    kyushu:      { minsei: 46.5, kyowa: 34.5, mirai: 18, kosei: 14, kokumin: 8, jinmin: 6.5, sankaku: 6, shahei: 6.5 },
+    shikoku:     { minsei: 49.5, kyowa: 32.5, mirai: 17, kosei: 11.5, kokumin: 8, jinmin: 7.5, sankaku: 5, shahei: 5 },
+  },
+  // R19 より前の3党の地力。小さな党の出ない全国の総選挙(史実シナリオ)で使う(シナリオの目安を変えないため)
+  partyBase3: {
     hokkaido:    { minsei: 36, kyowa: 44, mirai: 20 },
     tohoku:      { minsei: 44, kyowa: 38, mirai: 18 },
     hokuriku:    { minsei: 48, kyowa: 34, mirai: 18 },
@@ -48,13 +66,16 @@ Game.Balance = {
     nat_minsei: { mult: 1, gain: 5, actions: [3, 3, 3, 3, 3, 3, 3, 3] },
     nat_kyowa:  { mult: 1, gain: 5, actions: [3, 3, 3, 3, 3, 3, 3, 3] },
     nat_mirai:  { mult: 1, gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },
+    // 小さな党(R19)の候補。予告する動きはなく、支持は minors.steady で毎日もとに近づく(組織の票は揺れにくい)
+    minor:      { mult: 1, gain: 0, actions: [0, 0, 0, 0, 0, 0, 0, 0] },
+    nat_minor:  { mult: 1, gain: 0, actions: [0, 0, 0, 0, 0, 0, 0, 0] },
     challenger: { mult: 1.2,  gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },   // プレイヤーに議席を奪われた前の現職(画面では元職)。巻き返しをねらう
     assassin:   { mult: 1.0,  gain: 5, actions: [2, 2, 2, 2, 2, 2, 2, 2] },   // 新党を作ったプレイヤーに、元の党が送りこむ刺客(R16。党の組織がまるごとつく)
   },
   // プレイヤーの立場ごとの、始まりの支持の倍率(新人 / 当選して現職 / 落選した元職)
   // revived は、小選挙区で負けて比例復活した現職(議席はあるが、選挙区には勝った相手がいる)
   // leader は党首として戦う総選挙(党の地力そのまま)
-  playerRoles: { newcomer: 0.68, incumbent: 0.72, revived: 0.7, former: 0.66, leader: 1 },
+  playerRoles: { newcomer: 0.69, incumbent: 0.72, revived: 0.7, former: 0.66, leader: 1 },
   // 選挙区(R6。地図・相手・約束の名前は js/data/seats.js)。地区の id は5つとも同じで、中身(名前と性格)が選挙区ごとにちがう
   //   base 党の地力(地区ごと)/ turnout 投票率の基準(%)/ rivalMult 相手の候補の強さ(始まりの支持の倍率。ないときは1)
   //     都市の地区ほどカードがよく効くので、北陽3区のほかは相手を強くして釣り合わせている
@@ -69,7 +90,7 @@ Game.Balance = {
         campus:      { minsei: 26, kyowa: 32, mirai: 37 },
       },
       turnout: { rural: 62, residential: 54, downtown: 50, industrial: 55, campus: 38 },
-      guide: { minsei: 67, kyowa: 47, mirai: 35 },
+      guide: { minsei: 69, kyowa: 47, mirai: 33 },
     },
     touou7: {    // 都会(下町・山の手は高齢層、ほかは浮動票。未来の地盤)
       base: {
@@ -81,7 +102,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 58, industrial: 52, rural: 60, campus: 40 },
       rivalMult: 1.5,
-      guide: { minsei: 34, kyowa: 31, mirai: 53 },
+      guide: { minsei: 36, kyowa: 32, mirai: 53 },
     },
     biyou2: {    // 保守王国(民政の地盤)
       base: {
@@ -93,7 +114,7 @@ Game.Balance = {
       },
       turnout: { downtown: 58, residential: 64, industrial: 56, rural: 66, campus: 42 },
       rivalMult: 1.3,
-      guide: { minsei: 77, kyowa: 22, mirai: 7 },
+      guide: { minsei: 76, kyowa: 26, mirai: 8 },
     },
     ominato4: {  // 工業都市(共和の地盤)
       base: {
@@ -105,7 +126,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 55, industrial: 58, rural: 62, campus: 38 },
       rivalMult: 1.25,
-      guide: { minsei: 34, kyowa: 76, mirai: 14 },
+      guide: { minsei: 36, kyowa: 75, mirai: 18 },
     },
     namio5: {    // 改革の地盤(未来の強い現職)
       base: {
@@ -117,7 +138,7 @@ Game.Balance = {
       },
       turnout: { downtown: 50, residential: 55, industrial: 54, rural: 60, campus: 40 },
       rivalMult: 1.45,
-      guide: { minsei: 32, kyowa: 29, mirai: 72 },
+      guide: { minsei: 34, kyowa: 29, mirai: 64 },
     },
     kitatsu1: {  // 地方の激戦区(R10。選挙違反が起きやすい:fraud は balance.js の fraud の起きやすさ)
       base: {
@@ -130,13 +151,29 @@ Game.Balance = {
       turnout: { downtown: 58, residential: 66, industrial: 60, rural: 68, campus: 46 },
       rivalMult: 1.45,
       fraud: 1,
-      guide: { minsei: 56, kyowa: 36, mirai: 25 },
+      guide: { minsei: 54, kyowa: 39, mirai: 28 },
     },
   },
   // 準備の画面の、難しさのことば(guide がこの値以上なら。どれにも届かなければ「とてもむずかしい」)
   seatLevels: [[75, 'とてもやさしい'], [52, 'やさしい'], [35, 'ふつう'], [18, 'むずかしい']],
   // 相手が入る地区の選び方:有権者の多さ × 競り合い × 党との相性。守りは、こちらに迫られた地区を重く見る
   rivalAI: { closeScale: 8, defendWithin: 10, defendMult: 1.6, affinityBase: 35 },
+
+  // ---- 小さな党(R19。js/data/district.js の MINOR_PARTIES)----
+  //   district 選挙区の候補の地力(地区ごと):base に、地区の性格ごとの tags を足す(3党の地力と同じ単位。地区の合計はおよそ 80〜100)
+  //   steady 選挙戦の1日の終わりに、始まりの支持との差をこの割合だけ戻す(組織の票は揺れにくく、ほかの候補の伸びにも削られにくい)
+  //   swing 投票日のぶれの倍率 / surge 全国の総選挙で「奔流」(R15)の対象になれる党(組織の党はならない。選挙区の小さな党の候補はならない)
+  minors: {
+    district: {
+      jinmin:  { base: 4, tags: { union: 1.5, urban: 1, youth: 0.5, elder: 0.5 } },
+      sankaku: { base: 2.5, tags: { youth: 1.5, family: 1.5, float: 1 } },
+      kokumin: { base: 4, tags: { union: 2.5, family: 1, urban: 0.5 } },
+      shahei:  { base: 2, tags: { union: 1, elder: 1 } },
+    },
+    steady: 0.7,
+    swing: 0.35,   // 投票日のぶれ(vote の swingAll・swingRegion)にかける倍率。票の少ない党のぶれは小さい
+    surge: ['sankaku', 'kokumin'],
+  },
 
   // カード。cost 体力 / money 資金(万円。マイナスは集まる)/ gain 選んだ地区の伸び / tagBonus 地区の性格ごとの上乗せ
   // all 地区を選ばず、性格の合う地区すべてが伸びる / shield 固い票 / once この選挙で1回だけ / block その地区の相手の今日の動きを止める
@@ -270,7 +307,8 @@ Game.Balance = {
   // ---- 党首として戦う総選挙(全国)----
   nation: {
     seats: 465, majority: 233,
-    startSeats: { minsei: 225, kyowa: 165, mirai: 75 },   // 党首になったときの党の議席(総選挙で増えたか減ったかの基準)
+    // 党首になったときの議席(総選挙で増えたか減ったかの基準)。R19 で小さな党を入れて変えた(民政と公正で過半数)
+    startSeats: { minsei: 210, kyowa: 145, mirai: 61, kosei: 24, kokumin: 11, jinmin: 8, sankaku: 5, shahei: 1 },
     cube: 3,             // 小選挙区の議席は、得票の割合のこの乗数の比で配る(大きい党に有利)。比例はドント式
     resignDrop: 0.15,    // 総選挙で議席をこの割合以上減らし、単独過半数も取れなかったら、責任をとって党首を辞める
     turnout: 54, turnoutNoise: 2,
@@ -292,13 +330,26 @@ Game.Balance = {
   // ---- 政権(R5)。総選挙のあと、過半数を持つ組み合わせが政権を担う ----
   gov: {
     // 党どうしの近さ(連立の前向き度の土台)。キーは党の id を辞書順に「-」でつなぐ
-    affinity: { 'minsei-mirai': 45, 'kyowa-mirai': 50, 'kyowa-minsei': 20 },
+    affinity: {
+      'minsei-mirai': 45, 'kyowa-mirai': 50, 'kyowa-minsei': 20,
+      // 小さな党(R19)
+      'kosei-minsei': 70, 'kosei-kyowa': 40, 'kosei-mirai': 35, 'kokumin-kosei': 45,
+      'kokumin-minsei': 45, 'kokumin-kyowa': 55, 'kokumin-mirai': 50,
+      'jinmin-kyowa': 40, 'jinmin-minsei': 0, 'jinmin-mirai': 10, 'jinmin-kokumin': 15, 'jinmin-kosei': 5,
+      'minsei-sankaku': 30, 'kyowa-sankaku': 5, 'mirai-sankaku': 30, 'kokumin-sankaku': 25, 'kosei-sankaku': 10, 'jinmin-sankaku': 0,
+      'kyowa-shahei': 55, 'minsei-shahei': 5, 'mirai-shahei': 15, 'kokumin-shahei': 25, 'kosei-shahei': 25, 'jinmin-shahei': 60, 'sankaku-shahei': 0,
+    },
+    // 閣外協力(R19):2党で過半数に届かなければ、首相の党と近さ allyNeed 以上の党が、近い順に加わる(組んだ相手より議席の少ない党だけ)
+    //   加わる党1つにつき、連立に要る前向き度が allyCost 上がる(まとめるのが難しくなる)
+    allyNeed: 35, allyCost: 1,
+    // いまの世の中の政権(党首になったとき。まだ総選挙を戦っていない):民政と公正の連立(大臣ポスト posts)
+    world: { pm: 'minsei', partner: 'kosei', posts: 1 },
     need: 60,                 // 前向き度がこれ以上なら、連立に応じる
-    rivalEdge: 5, gapWeight: 0.4,   // こちらが第1党でないとき、第1党も同じ相手に声をかける:要る前向き度が rivalEdge + 議席の差 × gapWeight だけ上がる
+    rivalEdge: 5, gapWeight: 0.3, gapWeight3: 0.4,   // (R19 で 0.4 → 0.3。党が増えて第1党との差が開きやすくなったため。3党だけの史実シナリオは 0.4 のまま)こちらが第1党でないとき、第1党も同じ相手に声をかける:要る前向き度が rivalEdge + 議席の差 × gapWeight だけ上がる
     post: 8, postMax: 3,      // 大臣ポスト1つあたりの前向き度(渡すと、任期の山札に「党内の不満」が1枚入る)
     pledge: 12,               // 相手の看板の公約を受け入れる(果たすべき公約が1つ増える)
     juniorNeed: 30,           // 相手の政権に入れてもらうのに要る近さ
-    pledgeOf: { minsei: 'n_agri', kyowa: 'n_wage', mirai: 'n_youth' },   // 各党の看板の公約
+    pledgeOf: { minsei: 'n_agri', kyowa: 'n_wage', mirai: 'n_youth', kosei: 'n_family', kokumin: 'n_tax', jinmin: 'n_wage', sankaku: 'n_tax', shahei: 'n_family' },   // 各党の看板の公約
     // 連立相手の満足度(首相のとき)。satLeave を下回ると連立を離れ、内閣は倒れる
     satStart: 50, satPost: 10, satPledge: 10, satDecay: 5, satLeave: 20, satKept: 30,
     // 内閣支持率
@@ -402,12 +453,17 @@ Game.Balance = {
   //   議員の選び方:応援(党への貢献 +support、党の割合 +memberShare。浪人は半分)/ 地元(選んでいる地区の地盤 +local)
   //   wind 改選前の組より per 議席増える(減る)ごとに、次の衆院選は全地区 ±1(max まで)
   //   twist ねじれ国会:首相の法案の進みが law だけ減る(重要法案 2 → 1)、野党党首の追及が attack だけ強まる
-  //   bigLoss 首相の党が改選前より これだけ以上減らすと、内閣支持率 lossApproval / worldRuling 党首でないときの世の中の政権
+  //   bigLoss 首相の党が改選前より これだけ以上減らすと、内閣支持率 lossApproval / worldRuling 党首でないときの世の中の政権(民政と公正)
+  //   小さな党(R19):ぶれは noise × √(base ÷ noiseRef)(noiseRef 以上の党は noise のまま)、得票の割合の下限は floor。はじめは民政と公正で過半数
   upper: {
-    seats: 248, majority: 125, contested: 124, start: { minsei: 126, kyowa: 74, mirai: 48 }, every: 6, firstIn: 3,
-    base: { minsei: 0.5, kyowa: 0.3, mirai: 0.2 }, approvalWeight: 0.006, noise: 0.03,
+    seats: 248, majority: 125, contested: 124, every: 6, firstIn: 3,
+    start: { minsei: 104, kyowa: 58, mirai: 27, kosei: 26, kokumin: 15, jinmin: 10, sankaku: 5, shahei: 3 },
+    base: { minsei: 0.42, kyowa: 0.23, mirai: 0.11, kosei: 0.10, kokumin: 0.06, jinmin: 0.04, sankaku: 0.025, shahei: 0.015 },
+    approvalWeight: 0.006, noise: 0.03, noiseRef: 0.2, floor: 0.005,
+    // 史実シナリオ(3党だけ)と、R19 より前のセーブの参議院の党の地力
+    base3: { minsei: 0.5, kyowa: 0.3, mirai: 0.2 },
     tour: 0.03, tourEnergy: 1, manifesto: 0.02, support: 2, memberShare: 0.01, local: 1,
-    wind: { per: 6, max: 1 }, twist: { law: 1, attack: -1 }, bigLoss: 10, lossApproval: -5, worldRuling: 'minsei',
+    wind: { per: 6, max: 1 }, twist: { law: 1, attack: -1 }, bigLoss: 10, lossApproval: -5, worldRuling: ['minsei', 'kosei'],
   },
 
   // ---- 奔流(R15。js/engine/campaign.js の planSurge ほか)----
@@ -451,6 +507,44 @@ Game.Balance = {
     meritKeep: 0.5,
     nameMax: 12, shortMax: 3,   // 自分で決める党の名前と略称の長さ
     outsider: 20,   // ほかの党に合流した「外様」は、その党の党首選で強さ −outsider(はじめの党に戻れば、なし)
+  },
+
+  // ---- 1万人の架空の有権者(R18。js/engine/voters.js・js/data/voters.js)----
+  //   count 有権者の数(地区・ブロックの有権者数に合わせて配る。1人が何人分かは地区ごと)/ dots 地図に出す点の数(地区ごと。全国のブロックは dotsNation)/ ballotsPerRegion 「この人の一票」の候補
+  //   ageBands 年齢の帯(w 重み、youth・elder・family はその性格の地区での倍率)/ jobTagMult・groupTagMult 地区の性格に合う職業・団体の倍率
+  //   interest 関心度(投票に行く見込みのもと)= base + 年齢 × perYear(+ 団体の人は member)+ ぶれ / sns SNSの利用度 = base − 年齢 × perYear + ぶれ
+  //   friends 知り合いの数と、近所(near)・職場(work)・家族(残り)の割合 / spread はじめの好みの1人ひとりのぶれ / groupLean 団体ごとの党への傾き
+  //   turnoutBase 投票に行く見込み = 地区の投票率 × (turnoutBase + 関心度)/ 地区の平均 ×(1 + 動員)
+  //   target カードがだれに効くか(重み)。doorShare 戸別訪問で会えるのは地区の有権者のこの割合(会った人は動員 doorMob)/ endorseMob 推薦した団体の人の動員
+  //   mouth.rate 1日ごとに知り合いの好みへ近づく割合 / rumor 噂(bad 悪い噂・good 良い評判が知り合いへ広がる見込み、badHit・goodHit 聞いた人の好みの動き、life 広がる日数)
+  //   partyTopics 党ごとに訴えるテーマ / promiseTopic・promiseGroup 約束ごとのテーマと団体 / cardTarget カードごとの効く相手
+  voters: {
+    count: 10000, minPerRegion: 150, dots: 40, dotsNation: 24, ballotsPerRegion: 6,
+    swingKeep: 0.8,   // 投票日の地区ごとのぶれ(vote.swingRegion)は、1人ひとりの投票のばらつきがあるぶん、この倍率に
+    ageBands: [
+      { from: 18, to: 29, w: 15, youth: 2.2, elder: 0.7, family: 0.9 },
+      { from: 30, to: 39, w: 14, youth: 1.1, elder: 0.8, family: 1.5 },
+      { from: 40, to: 49, w: 16, youth: 1, elder: 0.9, family: 1.4 },
+      { from: 50, to: 64, w: 24, youth: 0.9, elder: 1.1, family: 1 },
+      { from: 65, to: 79, w: 22, youth: 0.6, elder: 1.6, family: 0.8 },
+      { from: 80, to: 90, w: 9, youth: 0.5, elder: 1.7, family: 0.7 },
+    ],
+    jobTagMult: 2.2, groupTagMult: 1.4,
+    interest: { base: 0.3, perYear: 0.007, member: 0.1, sd: 0.15 },
+    sns: { base: 0.95, perYear: 0.014, sd: 0.15 },
+    friends: { min: 5, max: 10, near: 0.6, work: 0.25 },
+    spread: 0.45,
+    groupLean: { agri: { minsei: 0.35 }, biz: { minsei: 0.2 }, union: { kyowa: 0.4, kokumin: 0.2, jinmin: 0.1 }, seniors: { minsei: 0.15 }, religion: { kosei: 0.5 }, parents: { sankaku: 0.1 } },
+    turnoutBase: 0.35,
+    target: { interestBase: 0.3, snsBase: 0.05, topicBase: 0.15, doorShare: 0.06, doorMob: 0.06, seedShare: 0.05, endorseMob: 0.08 },
+    mouth: { rate: 0.15 },   // 地区の支持は変えない(知り合いに近づいた分は、地区ごとに合わせ直す)。点の色が変わる人の多さ
+    rumor: { seedRate: 1, bad: 0.12, good: 0.05, badHit: 0.06, goodHit: 0.04, life: 3, max: 6 },
+    partyTopics: { minsei: ['pension', 'agri'], kyowa: ['jobs', 'child'], mirai: ['edu', 'tax'], shinto: ['tax', 'env'],
+      kosei: ['child', 'pension'], kokumin: ['tax', 'jobs'], jinmin: ['jobs', 'pension'], sankaku: ['tax', 'child'], shahei: ['pension', 'env'] },
+    promiseTopic: { agri: 'agri', wage: 'jobs', family: 'child', taxcut: 'tax', tuition: 'edu', n_tax: 'tax', n_agri: 'agri', n_wage: 'jobs', n_family: 'child', n_youth: 'edu' },
+    promiseGroup: { agri: 'agri', wage: 'union', family: 'parents', taxcut: 'biz' },
+    cardTarget: { speech: 'interest', door: 'door', talk: 'interest', rally: 'interest', flyer: 'uniform', sns: 'sns', ahead: 'interest', star: 'interest',
+      nTour: 'interest', nLocal: 'door', nRally: 'interest', nTv: 'uniform', nSns: 'sns', nAd: 'uniform', nAhead: 'interest', nStar: 'interest' },
   },
 
   // ---- 史実シナリオ(R17。js/data/scenarios.js・js/engine/scenario.js)----

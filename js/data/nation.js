@@ -9,6 +9,12 @@ Game.Data.LEADERS = {
   minsei: { name: '鷹野 修一郎', short: '鷹野', title: '総裁' },
   kyowa:  { name: '真壁 透', short: '真壁', title: '代表' },
   mirai:  { name: '沢渡 健吾', short: '沢渡', title: '代表' },
+  // 小さな党(R19)の党首
+  kosei:   { name: '石動 正道', short: '石動', title: '代表' },
+  kokumin: { name: '園部 浩一', short: '園部', title: '代表' },
+  jinmin:  { name: '木暮 篤', short: '木暮', title: '委員長' },
+  sankaku: { name: '御堂 剛志', short: '御堂', title: '代表' },
+  shahei:  { name: '西園 みどり', short: '西園', title: '党首' },
 };
 // 党首選の相手:いまの党首と、もう1人の有力者
 Game.Data.LEADER_RIVALS = {

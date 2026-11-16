@@ -99,11 +99,16 @@ Game.CampaignView = (function () {
     }
     const tags = r.tags.map(function (t) { return '<span class="tag-chip">' + Game.Data.TAGS[t] + '</span>'; }).join('') +
       (camp.shields[r.id] > 0 ? '<span class="tag-chip solid">' + UI.icon('shield') + '固い票 ' + camp.shields[r.id] + '</span>' : '');
-    const rows = C.ranking(s).map(function (id) {
+    // 候補が多いとき(全国の総選挙の小さな党。R19)は上位4人と自分だけ出し、残りは「ほか」にまとめる
+    const ord = C.ranking(s), shown = ord.length > 5 ? ord.filter(function (id, i) { return i < 4 || id === 'me'; }) : ord;
+    const rest = ord.filter(function (id) { return shown.indexOf(id) < 0; });
+    const restPct = rest.reduce(function (a, id) { return a + s[id]; }, 0);
+    const rows = shown.map(function (id) {
       const c = C.cand(camp, id);
       return '<div class="row' + (c.player ? ' me' : '') + '" style="--pc:' + UI.color(c) + '">' + UI.partyChip(c) + '<span class="nm">' + UI.esc(c.short) + '</span>' +
         '<span class="bar"><i style="width:' + s[id] + '%"></i></span><span class="pct">' + Math.round(s[id]) + '%</span></div>';
-    }).join('');
+    }).join('') + (rest.length ? '<div class="row rest" style="--pc:var(--sub)" title="' + UI.esc(rest.map(function (id) { return Game.Data.PARTIES[C.cand(camp, id).party].short + ' ' + Math.round(s[id]) + '%'; }).join('・')) + '">' +
+      '<span class="pchip" style="--pc:var(--sub)">他</span><span class="nm">ほか' + rest.length + (Game.Data.DISTRICT.national ? '党' : '人') + '</span><span class="bar"><i style="width:' + restPct + '%"></i></span><span class="pct">' + Math.round(restPct) + '%</span></div>' : '');
     const detail = '<section class="panel" id="detail" aria-live="polite">' +
       '<div class="d-head"><h2>' + r.name + '</h2>' + UI.markHtml(C.margin(s)) + '<span class="voters">' + (r.smd ? '小選挙区 ' + r.smd + '・比例 ' + r.pr : '有権者 ' + man(r.voters)) + '</span></div>' +
       '<p class="d-desc">' + r.desc + '</p><div class="tags">' + tags + '</div>' + rows +
@@ -315,7 +320,7 @@ Game.CampaignView = (function () {
     const selCard = camp.hand.filter(function (c) { return c.uid === Game.ui.card; })[0] || null;
     app.innerHTML = '<div class="game' + (Game.Data.DISTRICT.national ? ' nat' : '') + '">' + hudHtml(s) + raceHtml(camp) +
       '<main class="board"><div class="map-cell">' +
-      UI.mapHtml(function (rid) { return UI.leadFill(camp.cands, camp.shares[rid]); }, camp.sel) +
+      UI.mapHtml(function (rid) { return UI.leadFill(camp.cands, camp.shares[rid]); }, camp.sel, UI.voterDots(camp)) + UI.dotLegend(camp) +
       '</div><aside class="side">' + sideHtml(camp, selCard) + '</aside></main>' + handHtml(camp, selCard) + '</div>';
     app.querySelector('#pins').innerHTML = pinsHtml(camp, selCard);
 

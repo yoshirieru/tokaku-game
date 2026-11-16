@@ -9,6 +9,8 @@ Game.GovView = (function () {
   const leaderOf = function (s, id) { return id === s.player.party ? s.player.name.split(/[ 　]/)[0] : Game.Data.LEADERS[id].short; };
   const pips = function (n, max, cls) { let h = ''; for (let i = 0; i < max; i++) h += '<i class="' + cls + (i < n ? ' on' : '') + '"></i>'; return h; };
   const ROLE = { pm: '首相', junior: '党首・連立与党', opposition: '党首・野党' };
+  // 閣外協力の党(R19)。lead は文の前につける言葉
+  const allyText = function (list, lead) { return list && list.length ? (lead || '') + '閣外協力:' + list.map(function (k) { return party(k).short; }).join('・') : ''; };
 
   function active(cr) { return !!(cr && cr.leader && cr.gov); }
   function badge(cr) { return ROLE[cr.gov.role]; }
@@ -91,16 +93,16 @@ Game.GovView = (function () {
     let body;
     if (gov.role === 'pm') {
       body = gov.partner
-        ? '<div class="pr-line">' + UI.partyChip({ party: gov.partner }) + '<span><b>' + party(gov.partner).name + '</b>と連立</span></div>' +
+        ? '<div class="pr-line">' + UI.partyChip({ party: gov.partner }) + '<span><b>' + party(gov.partner).name + '</b>と連立' + allyText(gov.allies, '。') + '</span></div>' +
           '<div class="sat"><span>満足度</span><div class="wind-bar"><i style="width:' + gov.sat + '%"></i><span class="maj-mark" style="left:' + g.satLeave + '%"></span></div><b>' + Math.round(gov.sat) + '</b></div>' +
           ''
         : '<p class="pr-note">単独過半数の政権。連立相手に気をつかう必要はない。</p>';
       body += '<p class="pr-note' + (gov.approval < g.lowApproval ? ' warn' : '') + '">' + (gov.partner ? '満足度は会期ごとに −' + g.satDecay + '。' + g.satLeave + ' を切ると連立が壊れる。' : '') + '支持率 ' + g.lowApproval + '% 未満(帯の線)が ' + g.lowTurns + ' 会期続くと、退陣。' + (gov.low ? 'いま ' + gov.low + ' 会期目。' : '') + '</p>';
     } else if (gov.role === 'junior') {
-      body = '<div class="pr-line">' + UI.partyChip({ party: gov.pm }) + '<span><b>' + leaderOf(s, gov.pm) + '内閣</b>の連立与党</span></div>' +
+      body = '<div class="pr-line">' + UI.partyChip({ party: gov.pm }) + '<span><b>' + leaderOf(s, gov.pm) + '内閣</b>の連立与党' + allyText(gov.allies, '。') + '</span></div>' +
         '<p class="pr-note">与党として公約を進められる。解散の時期は、首相が決める。</p>';
     } else {
-      body = '<div class="pr-line">' + UI.partyChip({ party: gov.pm }) + '<span>政権は<b>' + party(gov.pm).name + '</b>' + (gov.partner ? 'と' + party(gov.partner).name : '') + '</span></div>' +
+      body = '<div class="pr-line">' + UI.partyChip({ party: gov.pm }) + '<span>政権は<b>' + party(gov.pm).name + '</b>' + (gov.partner ? 'と' + party(gov.partner).name : '') + allyText(gov.allies, '。') + '</span></div>' +
         '<p class="pr-note">「国会で追及」で相手の内閣の支持率を下げると、次の総選挙で追い風になる。</p>';
     }
     return promises + prep + '<section class="panel" id="govpanel"><h2>政権</h2>' + body + '</section>';
@@ -115,7 +117,7 @@ Game.GovView = (function () {
       }).join('') + '</ul>' : '';
       if (gov.role === 'pm') {
         UI.modal('<p class="m-kicker">' + ((cr.pmStreak || 1) > 1 ? '続投' : '首班指名') + '</p><h2>内閣総理大臣に就任</h2>' +
-          '<p>' + (gov.partner ? party(gov.partner).name + 'との連立政権を率いる。' : '単独過半数の政権を率いる。') + (cr.promises.length ? '掲げた公約を、この任期のうちに果たす。' : '') + '</p>' + list +
+          '<p>' + (gov.partner ? party(gov.partner).name + 'との連立政権を率いる。' + allyText(gov.allies, '') + (gov.allies && gov.allies.length ? 'で過半数に届いた。' : '') : '単独過半数の政権を率いる。') + (cr.promises.length ? '掲げた公約を、この任期のうちに果たす。' : '') + '</p>' + list +
           '<ul class="m-list"><li>内閣支持率は会期ごとに少しずつ下がる。次の総選挙の始まりの支持になって返ってくる。</li>' +
           '<li>' + g.dissolveFrom + '会期目から、好きなときに衆議院を解散できる(上の帯の「解散する」)。</li>' +
           (gov.partner ? '<li>連立相手の満足度が ' + g.satLeave + ' を下回ると、連立を離れて内閣が倒れる。</li>' : '') +
@@ -128,7 +130,7 @@ Game.GovView = (function () {
           [{ label: '国会へ', primary: true, onClick: next }]);
       } else {
         UI.modal('<p class="m-kicker">' + (gov.lostPower ? '政権交代' : '野党') + '</p><h2>' + (gov.lostPower ? '政権を失った' : '野党党首として') + '</h2>' +
-          '<p>政権は' + party(gov.pm).name + (gov.partner ? 'と' + party(gov.partner).name : '') + '。' + (cr.dropped ? '掲げた公約は、果たす場がなく白紙になった。' : '') + '次の総選挙で政権をねらう。</p>' +
+          '<p>政権は' + party(gov.pm).name + (gov.partner ? 'と' + party(gov.partner).name : '') + allyText(gov.allies, '(') + (gov.allies && gov.allies.length ? ')' : '') + '。' + (cr.dropped ? '掲げた公約は、果たす場がなく白紙になった。' : '') + '次の総選挙で政権をねらう。</p>' +
           '<ul class="m-list"><li>「国会で追及」で相手の内閣の支持率を下げると、総選挙で追い風になる。</li><li>「党内融和」「全国行脚」で党をまとめると、全ブロックの支持が上がる。</li></ul>',
           [{ label: '国会へ', primary: true, onClick: next }]);
       }
@@ -178,6 +180,7 @@ Game.GovView = (function () {
         const sc = Game.Gov.score(s, o.partner, d), pl = P(g.pledgeOf[o.partner]);
         return '<section class="panel co-card" style="--pc:' + party(o.partner).color + '"><h2>' + party(o.partner).name + 'と連立を組む</h2>' +
           '<p class="co-sub">あなたが<b>首相</b>。合わせて ' + o.seats + '議席(過半数 ' + NB.majority + ')</p>' +
+          (o.allies.length ? '<p class="pr-note">2党では過半数に届かない。' + allyText(o.allies) + '(加わる党1つにつき、要る数 +' + g.allyCost + ')</p>' : '') +
           '<div class="co-meter"><div class="wind-bar"><i style="width:' + Math.min(100, sc.score) + '%"></i><span class="maj-mark" style="left:' + Math.min(100, sc.need) + '%"></span></div>' +
           '<span>前向き度 <b>' + sc.score + '</b> / 要る数 ' + sc.need + '</span></div>' +
           (sc.rival ? '<p class="pr-note">第1党の' + party(sc.rival).name + 'も、' + party(o.partner).short + 'に声をかけている。議席の差(' + sc.gap + ')のぶん、こちらには乗りにくい。</p>' : '') +
@@ -189,18 +192,19 @@ Game.GovView = (function () {
       if (o.type === 'join') {
         return '<section class="panel co-card" style="--pc:' + party(o.partner).color + '"><h2>' + party(o.partner).name + 'の政権に入る</h2>' +
           '<p class="co-sub">首相は' + leaderOf(s, o.partner) + '氏。あなたは<b>連立与党</b>の党首。合わせて ' + o.seats + '議席</p>' +
+          (o.allies.length ? '<p class="pr-note">' + allyText(o.allies) + '</p>' : '') +
           '<p class="pr-note">与党として、掲げた公約を進められる。内閣支持率の響きは、首相の党の半分。</p>' +
           '<button type="button" class="btn btn-primary co-go" data-i="' + i + '"' + (o.ok ? '' : ' disabled') + '>' + (o.ok ? '連立に入る' : '考えが遠く、組めない') + '</button></section>';
       }
       return '<section class="panel co-card" style="--pc:var(--sub)"><h2>野党として戦う</h2>' +
-        '<p class="co-sub">政権は' + party(o.pm).name + (o.partner ? 'と' + party(o.partner).name : '') + 'が担う</p>' +
+        '<p class="co-sub">政権は' + party(o.pm).name + (o.partner ? 'と' + party(o.partner).name : '') + 'が担う' + allyText(o.allies, '。') + (o.partner ? '' : '(少数与党)') + '</p>' +
         '<p class="pr-note">掲げた公約は白紙になる。' + (wouldResign ? '<b>議席を ' + Math.round(NB.resignDrop * 100) + '% 以上減らしたので、政権に入らなければ党首を辞することになる。</b>' : '次の総選挙で政権をねらう。') + '</p>' +
         '<button type="button" class="btn co-go" data-i="' + i + '">' + (wouldResign ? '野党に回り、党首を辞する' : '野党に回る') + '</button></section>';
     }).join('');
 
     app.innerHTML = '<div class="coalition">' +
       '<header class="co-head"><p class="m-kicker">総選挙のあと・政権づくり</p><h1>誰と組むか</h1>' +
-      '<p>どの党も、単独では過半数(' + NB.majority + ')に届かなかった。2つの党が組めば政権ができる。</p>' +
+      '<p>どの党も、単独では過半数(' + NB.majority + ')に届かなかった。2つの党が組み、足りなければ小さな党が閣外協力で加わって、政権ができる。</p>' +
       '<div class="co-seats"><div class="race-bar">' + segs + '</div><span class="maj-mark" style="left:' + (NB.majority / NB.seats * 100) + '%"></span></div></header>' +
       '<div class="co-grid">' + cards + '</div></div>';
 

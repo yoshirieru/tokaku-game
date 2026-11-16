@@ -341,6 +341,86 @@ Game.Effects.Title = (function () {
       </svg>`;
   }
 
+  // 背景の衆議院の本会議場(架空の絵。木の壁と天井の照明、赤い幕の議長席、中央の演壇、扇形に並ぶ議席と赤いじゅうたん)
+  // viewBox 1600×900。色は style.css の --hall-* の変数
+  function chamberSvg() {
+    const CX = 800, CY = 470;   // 演壇(議席の扇の中心)
+    const f = (n) => n.toFixed(1);
+    // 演壇を中心にした楕円の弧(下半分。t は度。0 が右、90 が手前)
+    const arc = (r, t0, t1) => {
+      const pts = [];
+      for (let t = t0; t <= t1 + 0.01; t += 2) { const a = t * Math.PI / 180; pts.push(f(CX + r * Math.cos(a)) + ',' + f(CY + r * 0.38 * Math.sin(a))); }
+      return pts.join(' ');
+    };
+    // 議席の列:奥から手前へ。手前ほど太い(遠近)。机の天板の明るい線と、名札の点
+    let rows = '';
+    for (let i = 0; i < 10; i++) {
+      const r = 250 + i * 118, w = 12 + i * 5.5, pts = arc(r, 6, 174);
+      rows += `<polyline class="hl-desk" points="${pts}" stroke-width="${f(w)}"/>` +
+        `<polyline class="hl-desk-top" points="${arc(r - w * 0.42, 6, 174)}" stroke-width="${f(Math.max(2, w * 0.18))}"/>` +
+        `<polyline class="hl-plate" points="${arc(r - w * 0.3, 6, 174)}" stroke-width="${f(1.2 + i * 0.25)}" stroke-dasharray="${f(3 + i)} ${f(14 + i * 6)}"/>`;
+    }
+    // 通路:まん中と左右に、手前ほど広がるじゅうたんの帯
+    const aisle = (t, w0, w1) => {
+      const a = t * Math.PI / 180, p = (r, side, w) => {
+        const x = CX + r * Math.cos(a), y = CY + r * 0.38 * Math.sin(a), nx = -Math.sin(a), ny = Math.cos(a) * 0.38, k = w / Math.hypot(nx, ny);
+        return f(x + nx * k * side) + ',' + f(y + ny * k * side);
+      };
+      return `<polygon class="hl-carpet" points="${p(200, -1, w0)} ${p(200, 1, w0)} ${p(1600, 1, w1)} ${p(1600, -1, w1)}"/>`;
+    };
+    // 天井の照明
+    let lamps = '';
+    for (let x = 100; x <= 1500; x += 140) lamps += `<circle class="hl-glow" cx="${x}" cy="44" r="34"/><circle class="hl-lamp" cx="${x}" cy="44" r="6"/>`;
+    // 奥の壁の板張り(縦の板)と、左右の扉
+    let panels = '';
+    for (let x = 300; x < 1300; x += 50) panels += `<rect class="hl-panel" x="${x + 6}" y="352" width="38" height="104" rx="3"/>`;
+    // 左右の傍聴席(壁の中の暗い窓と手すり)
+    const gallery = (flip) => {
+      const g = `<polygon class="hl-wall-side" points="0,70 300,120 300,470 0,600"/>` +
+        `<polygon class="hl-box" points="30,150 140,165 140,250 30,245"/><polygon class="hl-box" points="165,170 270,183 270,262 165,254"/>` +
+        `<polygon class="hl-rail" points="30,238 140,244 140,256 30,252"/><polygon class="hl-rail" points="165,250 270,256 270,267 165,262"/>` +
+        `<polygon class="hl-panel-side" points="30,300 270,320 270,450 30,500"/>`;
+      return flip ? `<g transform="translate(1600 0) scale(-1 1)">${g}</g>` : g;
+    };
+    return `
+      <svg class="tl-hall" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <pattern id="hl-paper" width="28" height="28" patternUnits="userSpaceOnUse">
+            <rect class="hl-wall" width="28" height="28"/><path class="hl-wall-line" d="M14 0 L28 14 L14 28 L0 14 Z"/><circle class="hl-wall-line" cx="14" cy="14" r="2"/>
+          </pattern>
+          <radialGradient id="hl-glow-g"><stop offset="0" stop-color="var(--hall-light)" stop-opacity=".55"/><stop offset="1" stop-color="var(--hall-light)" stop-opacity="0"/></radialGradient>
+        </defs>
+        <rect class="hl-wood-dark" x="0" y="0" width="1600" height="900"/>
+        <rect class="hl-carpet" x="0" y="440" width="1600" height="460"/>
+        <rect x="300" y="100" width="1000" height="240" fill="url(#hl-paper)"/>
+        <rect class="hl-wood" x="300" y="330" width="1000" height="140"/>${panels}
+        <rect class="hl-gold" x="300" y="330" width="1000" height="5"/>
+        ${gallery(false)}${gallery(true)}
+        <rect class="hl-ceil" x="0" y="0" width="1600" height="100"/>
+        <rect class="hl-wood-dark" x="0" y="88" width="1600" height="16"/><rect class="hl-gold" x="0" y="100" width="1600" height="3"/>
+        ${lamps}
+        <g class="hl-dais">
+          <rect class="hl-wood-light" x="676" y="140" width="248" height="300" rx="4"/>
+          <path class="hl-wood-dark" d="M664 150 L800 108 L936 150 Z"/><circle class="hl-gold" cx="800" cy="134" r="9"/>
+          <rect class="hl-sheer" x="700" y="176" width="200" height="232"/>
+          <path class="hl-curtain" d="M700 176 H752 C746 232 728 262 734 300 C744 340 754 380 764 408 H700 Z"/>
+          <path class="hl-curtain" d="M900 176 H848 C854 232 872 262 866 300 C856 340 846 380 836 408 H900 Z"/>
+          <path class="hl-fold" d="M716 190 C716 240 712 270 716 300 M716 312 C718 350 722 380 726 408 M884 190 C884 240 888 270 884 300 M884 312 C882 350 878 380 874 408"/>
+          <path class="hl-curtain-dark" d="M700 168 H900 V190 Q875 206 850 190 Q825 206 800 190 Q775 206 750 190 Q725 206 700 190 Z"/>
+          <rect class="hl-gold" x="724" y="294" width="16" height="7" rx="3"/><rect class="hl-gold" x="860" y="294" width="16" height="7" rx="3"/>
+          <rect class="hl-chair" x="780" y="372" width="40" height="38" rx="5"/>
+          <rect class="hl-wood" x="620" y="418" width="360" height="22"/>
+          <polygon class="hl-step" points="650,440 950,440 970,456 630,456"/><polygon class="hl-step" points="630,456 970,456 990,472 610,472"/>
+          <rect class="hl-wood-dark" x="430" y="436" width="200" height="34" rx="3"/><rect class="hl-wood-dark" x="970" y="436" width="200" height="34" rx="3"/>
+          <rect class="hl-screen" x="450" y="426" width="22" height="12"/><rect class="hl-screen" x="500" y="426" width="22" height="12"/><rect class="hl-screen" x="550" y="426" width="22" height="12"/>
+          <rect class="hl-screen" x="1030" y="426" width="22" height="12"/><rect class="hl-screen" x="1080" y="426" width="22" height="12"/><rect class="hl-screen" x="1130" y="426" width="22" height="12"/>
+          <path class="hl-wood" d="M712 478 H888 L904 534 H696 Z"/><rect class="hl-wood-light" x="708" y="474" width="184" height="10" rx="2"/>
+        </g>
+        ${rows}
+        ${aisle(90, 18, 120)}${aisle(48, 10, 60)}${aisle(132, 10, 60)}
+      </svg>`;
+  }
+
   // ---------------- 画面 ----------------
   function render(app, opts) {
     if (cleanup) cleanup();
@@ -365,7 +445,7 @@ Game.Effects.Title = (function () {
 
     app.innerHTML = `
       <div class="tl-stage ${reduced ? 'tl-reduced' : ''}" style="--s:${s}">
-        <div class="tl-bg"><div class="tl-floor"></div><div class="tl-sweep"></div></div>
+        <div class="tl-bg">${chamberSvg()}<div class="tl-sweep"></div></div>
         ${boardHtml()}
         <div class="tl-main">
           <p class="tl-kicker" ${d(T.kicker)}>衆議院総選挙 開票特番</p>

@@ -50,7 +50,7 @@ Game.UI = Game.UI || {};
 
   // 選挙区の地図。fill(regionId) は { color, mix(%) } を返す(color がなければ地の色)
   // sel は金色の枠で囲む地区。札(pins)は呼び出し側が #pins に入れる
-  UI.mapHtml = function (fill, sel) {
+  UI.mapHtml = function (fill, sel, extra) {
     const D = Game.Data.DISTRICT;
     const polys = D.regions.map(function (r) {
       const f = fill(r.id) || {};
@@ -64,9 +64,78 @@ Game.UI = Game.UI || {};
       '<defs><pattern id="scan" width="6" height="6" patternUnits="userSpaceOnUse"><line x1="0" y1="1" x2="6" y2="1" class="scanline"/></pattern></defs>' +
       '<rect class="outland" x="-900" y="-600" width="2400" height="1630"/>' +
       '<polygon class="sea" points="' + D.seaPts + '"/><polygon class="sea-tex" points="' + D.seaPts + '"/>' +
-      polys + '<path class="rail" d="' + D.rail + '"/>' +
+      polys + '<path class="rail" d="' + D.rail + '"/>' + (extra || '') +
       (sel ? '<polygon class="sel-ring" points="' + Game.Data.REGION[sel].pts + '"/>' : '') +
       labels + '</svg><div id="pins"></div></div>';
+  };
+  // 有権者の点(R18):地区ごとに決まった人たちを、いまの投票先の党の色で打つ。ゆうべの口コミで投票先が変わった人は、前の色から変わって、輪がつく
+  // 点の場所は地区の形の中に、札(地区の名前)を避けて決まった並びで置く(舞台と地区ごとに一度だけ計算)
+  const dotPos = {};
+  function dotPlaces(D, r, n) {
+    const key = D.id + ':' + r.id + ':' + n;
+    if (dotPos[key]) return dotPos[key];
+    const pts = r.pts.trim().split(/\s+/).map(function (p) { const xy = p.split(','); return [+xy[0], +xy[1]]; });
+    const inside = function (x, y) {
+      let c = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const a = pts[i], b = pts[j];
+        if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+      }
+      return c;
+    };
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    pts.forEach(function (p) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+    const px = r.x / 100 * D.viewBox[0], py = r.y / 100 * D.viewBox[1], P = Game.Balance.ui.voterDots;
+    let seed = 0;
+    for (let i = 0; i < key.length; i++) seed = (seed * 31 + key.charCodeAt(i)) >>> 0;
+    const rnd = function () { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const out = [];
+    for (let tries = 0; out.length < n && tries < n * 400; tries++) {
+      const x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0);
+      if (!inside(x, y)) continue;
+      const strict = tries < n * 200;   // はじめは札のまわりと、ほかの点のそばを避ける
+      if (strict && Math.abs(x - px) < P.pinW && Math.abs(y - py) < P.pinH) continue;
+      if (strict && out.some(function (q) { return (q[0] - x) * (q[0] - x) + (q[1] - y) * (q[1] - y) < P.gap * P.gap; })) continue;
+      out.push([Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+    }
+    return (dotPos[key] = out);
+  }
+  UI.voterDots = function (camp) {
+    if (!camp || !camp.voters || !Game.Voters.active(camp)) return '';
+    const D = Game.Data.DISTRICT, P = Game.Balance.ui.voterDots;
+    const color = function (id) { const c = camp.cands.filter(function (x) { return x.id === id; })[0]; return c ? UI.color(c) : 'var(--sub)'; };
+    let html = '<g class="vdots" aria-hidden="true">', k = 0;
+    D.regions.forEach(function (r) {
+      const list = Game.Voters.dots(camp, r.id);
+      if (!list) return;
+      const pos = dotPlaces(D, r, list.length);
+      list.forEach(function (d, i) {
+        if (!pos[i]) return;
+        const flip = d.from ? ' flip" style="--from:' + color(d.from) + ';--to:' + color(d.who) + ';animation-delay:' + ((k++ % 12) * 0.12).toFixed(2) + 's' : '';
+        html += '<circle class="vdot' + flip + '" cx="' + pos[i][0] + '" cy="' + pos[i][1] + '" r="' + P.r + '" fill="' + color(d.who) + '"/>';
+      });
+    });
+    return html + '</g>';
+  };
+  // 点の見方(地図の左下)。ゆうべの口コミで投票先が変わった人の数も
+  UI.dotLegend = function (camp) {
+    if (!camp || !camp.voters) return '';
+    let n = 0, all = 0;
+    Game.Data.DISTRICT.regions.forEach(function (r) { (Game.Voters.dots(camp, r.id) || []).forEach(function (d) { all++; if (d.from) n++; }); });
+    if (!all) return '';
+    return '<div class="dot-legend"><i class="lg-dot"></i>有権者' + (n ? '<i class="lg-dot flip"></i>ゆうべの口コミで ' + n + '人が投票先を変えた' : '(点の色は、いま入れそうな候補)') + '</div>';
+  };
+  // 「この人の一票」(R18):開票特番の候補の欄の下に、開いた地区の有権者1人の票を出す。t ごとに入れ替わる
+  //   e.ballots は vote.js が Voters.ballot から受け取ったもの({ age, job, region, who, party, why })。national なら党の名前で
+  UI.ballotCard = function (e, cands, t, opened, national) {
+    const list = (e.ballots || []).filter(function (b) { return opened(b.region); });
+    if (!list.length || t <= 0) return '';
+    const b = list[(t * 7) % list.length], c = cands.filter(function (x) { return x.id === b.who; })[0];
+    if (!c) return '';
+    const name = national ? Game.Data.PARTIES[c.party].name : c.name + '候補';
+    const reg = Game.Data.REGION[b.region] ? Game.Data.REGION[b.region].name : '';
+    return '<aside class="vote-card" style="--pc:' + UI.color(c) + '"><span class="vc-lab">この人の一票</span>' +
+      '<p><b>' + b.age + '歳・' + UI.esc(b.job) + '・' + UI.esc(reg) + '</b>' + UI.esc(b.why) + '、<em>' + UI.esc(name) + '</em>に投票</p></aside>';
   };
   // 支持の割合から、地図の塗り(リードしている候補の色と濃さ)を決める
   UI.leadFill = function (cands, shares) {

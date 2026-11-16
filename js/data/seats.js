@@ -210,6 +210,28 @@ Game.Data = Game.Data || {};
     { id: 'campus', shape: 'nw', name: '新興住宅地', voters: 42000, tags: ['family', 'youth'], desc: '短大と新しい団地。よそから来た若い家族が多い。' },
   ]);
 
+  // 小さな党の候補(R19)。日本人民党はどの選挙区にも立て、ほかの党は地盤のある選挙区だけ
+  A.minors = Game.Data.MINOR_PEOPLE;
+  SEATS.touou7.minors = {
+    jinmin:  { name: '江藤 さやか', short: '江藤', age: 48, slogan: '大企業より、あなたの暮らし' },
+    sankaku: { name: '黒瀬 拓真', short: '黒瀬', age: 36, slogan: 'しがらみを断ち、国民が決める' },
+  };
+  SEATS.biyou2.minors = {
+    jinmin:  { name: '藤谷 修', short: '藤谷', age: 63, slogan: '地方の暮らしに、まっとうな政治を' },
+  };
+  SEATS.ominato4.minors = {
+    jinmin:  { name: '水野 洋子', short: '水野', age: 52, slogan: '働く人に、まっとうな賃金を' },
+    kokumin: { name: '杉浦 航', short: '杉浦', age: 42, slogan: '手取りを増やす、ものづくりの街から' },
+  };
+  SEATS.namio5.minors = {
+    jinmin:  { name: '辻 光男', short: '辻', age: 58, slogan: '平和と暮らしを、まっすぐに' },
+    sankaku: { name: '宇佐美 玲', short: '宇佐美', age: 34, slogan: '子どもの未来を、自分たちの手で' },
+  };
+  SEATS.kitatsu1.minors = {
+    jinmin:  { name: '佐々木 守', short: '佐々木', age: 61, slogan: '港と山に、平和と暮らしを' },
+    shahei:  { name: '工藤 静江', short: '工藤', age: 66, slogan: '憲法を、暮らしに生かす' },
+  };
+
   Game.Data.SEATS = SEATS;
   Game.Data.SEAT_ORDER = ['hokuyo3', 'touou7', 'biyou2', 'ominato4', 'namio5', 'kitatsu1'];
   // 区割り改定(R11)で公認を争う、同じ党の隣の区の現職

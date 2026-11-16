@@ -26,29 +26,51 @@ Game.Vote = (function () {
     }
     return out;
   }
+  // 投票日のぶれの倍率(候補ごと)。小さな党(R19)の候補は balance.js の minors.swing
+  function swingScale(camp) {
+    const out = {};
+    camp.cands.forEach(function (c) { out[c.id] = c.minor ? Game.Balance.minors.swing : 1; });
+    return out;
+  }
   function runNational(state) {
     const camp = state.camp, B = Game.Balance, V = B.vote, NB = B.nation, C = B.count;
     const ids = camp.cands.map(function (c) { return c.id; });
     const weather = R.weighted(state, V.weather, function (w) { return w.weight; });
     const swing = {};
-    ids.forEach(function (id) { swing[id] = R.normal(state) * V.swingAll; });
+    const sk = swingScale(camp);   // 小さな党(R19)の候補は、票が少ないぶん、ぶれも小さい
+    ids.forEach(function (id) { swing[id] = R.normal(state) * V.swingAll * sk[id]; });
     const byBlock = {}, seats = {}, votes = {};
     ids.forEach(function (id) { seats[id] = 0; votes[id] = 0; });
     let total = 0;
+    // ブロックごとのぶれと投票率を先に決める
+    const adjAll = {}, turnAll = {};
+    Game.Data.DISTRICT.regions.forEach(function (r) {
+      const dd = {};
+      ids.forEach(function (id) {
+        let d = swing[id] + R.normal(state) * V.swingRegion * (camp.voters ? B.voters.swingKeep : 1) * sk[id];
+        if (id === 'me') d += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
+        if (id === 'vs' && camp.vs) d += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
+        dd[id] = d;
+      });
+      adjAll[r.id] = dd;
+      turnAll[r.id] = Game.Campaign.surgeTurnout(state, camp, r) || Math.max(20, NB.turnout + weather.turnout + R.normal(state) * NB.turnoutNoise) / 100;   // 奔流なら8割超(R15)
+    });
+    // 1万人の有権者(R18):1人ひとりが投票に行くかと投票先を決める
+    const sgH = camp.surge && camp.surge.active && camp.surge.hidden ? { who: camp.surge.target, pts: camp.surge.hidden } : null;
+    const vres = camp.voters ? Game.Voters.ballot(state, camp, { turnout: turnAll, adj: adjAll, hidden: sgH }) : null;
     Game.Data.DISTRICT.regions.forEach(function (r) {
       const p = {}, w = {}, fin = Game.Campaign.surgeShares(camp, r.id);   // 奔流の隠れた票を足した支持(R15)
       const bp = {}, bw = {};   // 奔流の隠れた票がないときの得票(開票のはじめに見える姿)
       let sum = 0, bsum = 0;
+      const vr = vres && vres.regions[r.id];
       ids.forEach(function (id) {
-        let d = swing[id] + R.normal(state) * V.swingRegion;
-        if (id === 'me') d += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
-        if (id === 'vs' && camp.vs) d += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
-        p[id] = Math.max(1, (fin ? fin[id] : camp.shares[r.id][id]) + d);
-        bp[id] = Math.max(1, camp.shares[r.id][id] + d);
+        const d = adjAll[r.id][id];
+        p[id] = vr ? Math.max(1, vr.votes[id]) : Math.max(1, (fin ? fin[id] : camp.shares[r.id][id]) + d);
+        bp[id] = vr ? Math.max(1, (vr.base || vr.votes)[id]) : Math.max(1, camp.shares[r.id][id] + d);
         sum += p[id]; bsum += bp[id];
       });
       ids.forEach(function (id) { p[id] = p[id] / sum; w[id] = Math.pow(p[id], NB.cube); bp[id] = bp[id] / bsum; bw[id] = Math.pow(bp[id], NB.cube); });
-      const turnout = Game.Campaign.surgeTurnout(state, camp, r) || Math.max(20, NB.turnout + weather.turnout + R.normal(state) * NB.turnoutNoise) / 100;   // 奔流なら8割超(R15)
+      const turnout = vr ? ids.reduce(function (a, id) { return a + vr.votes[id]; }, 0) / r.voters : turnAll[r.id];
       const ballots = Math.round(r.voters * turnout);
       const smd = largestRemainder(r.smd, w), pr = dhondt(r.pr, p);
       const st = {}, share = {};
@@ -100,7 +122,7 @@ Game.Vote = (function () {
     }
     const cr = state.career;
     state.election = {
-      exit: exit,
+      exit: exit, ballots: vres ? vres.ballots : null,   // 「この人の一票」(R18)
       national: true, surge: camp.surge && camp.surge.active ? { target: camp.surge.target, party: camp.surge.party } : null, weather: weather.id, byBlock: byBlock, seats: seats, votes: votes, total: total, order: order,
       winner: order[0], won: order[0] === 'me', majority: seats[order[0]] >= NB.majority, meMajority: seats.me >= NB.majority,
       prevMine: cr && cr.partySeats != null ? cr.partySeats : null,
@@ -130,19 +152,23 @@ Game.Vote = (function () {
 
     // 候補ごとの、選挙区全体のぶれ
     const swing = {};
-    ids.forEach(function (id) { swing[id] = R.normal(state) * V.swingAll; });
+    const sk = swingScale(camp);   // 小さな党(R19)の候補は、票が少ないぶん、ぶれも小さい
+    ids.forEach(function (id) { swing[id] = R.normal(state) * V.swingAll * sk[id]; });
 
     const regions = {}, totals = {};
     ids.forEach(function (id) { totals[id] = 0; });
     let total = 0;
     const boost = Game.Campaign.closeBoost(camp);
+    const adjAll = {}, turnAll = {};   // 有権者(R18)に渡す、地区ごとのぶれと投票率
     Game.Data.DISTRICT.regions.forEach(function (r) {
       const s = {}, bs = {}, fin = Game.Campaign.surgeShares(camp, r.id);   // 奔流の隠れた票を足した支持(R15)
       let sum = 0, bsum = 0;
+      const dd = {};
       ids.forEach(function (id) {
-        let d = swing[id] + R.normal(state) * V.swingRegion;
+        let d = swing[id] + R.normal(state) * V.swingRegion * (camp.voters ? B.voters.swingKeep : 1) * sk[id];
         if (id === 'me') d += (camp.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);
         if (id === 'vs' && camp.vs) d += (camp.vs.stash.shields[r.id] || 0) * (weather.id === 'rain' ? V.shieldRain : V.shieldVote);   // 対戦モードの2P
+        dd[id] = d;
         s[id] = Math.max(1, (fin ? fin[id] : camp.shares[r.id][id]) + d);
         bs[id] = Math.max(1, camp.shares[r.id][id] + d);   // 隠れた票がないときの姿(開票のはじめに見える)
         sum += s[id]; bsum += bs[id];
@@ -150,6 +176,7 @@ Game.Vote = (function () {
       // 接戦が続くと、関心が高まって投票率が上がる(R13)。浮動票・若者の地区ほど大きく、組織票の地区は小さく
       const cm = r.tags.some(function (t) { return t === 'float' || t === 'youth'; }) ? V.close.high : r.tags.indexOf('org') >= 0 ? V.close.low : 1;
       const turnout = Game.Campaign.surgeTurnout(state, camp, r) || Math.max(20, Math.min(95, Game.Campaign.turnoutOf(r.id) + weather.turnout + R.normal(state) * V.turnoutNoise + boost * cm)) / 100;   // 奔流なら8割超(R15)
+      adjAll[r.id] = dd; turnAll[r.id] = turnout;
       const ballots = Math.round(r.voters * turnout);
       const votes = {};
       ids.forEach(function (id) { votes[id] = Math.round(ballots * s[id] / sum); totals[id] += votes[id]; total += votes[id]; });
@@ -161,6 +188,21 @@ Game.Vote = (function () {
       }
     });
 
+    // 1万人の有権者(R18):1人ひとりが投票に行くか(関心・天気・動員)と、投票先(好み + ぶれ)を決める。上の計算は、有権者がいないとき(古いセーブ)だけ使う
+    let voterBallots = null;
+    if (camp.voters) {
+      const sgH = camp.surge && camp.surge.active && camp.surge.hidden ? { who: camp.surge.target, pts: camp.surge.hidden } : null;
+      const res = Game.Voters.ballot(state, camp, { turnout: turnAll, adj: adjAll, hidden: sgH });
+      total = 0;
+      ids.forEach(function (id) { totals[id] = 0; });
+      Game.Data.DISTRICT.regions.forEach(function (r) {
+        const v = res.regions[r.id], sum = ids.reduce(function (a, id) { return a + v.votes[id]; }, 0);
+        regions[r.id] = { turnout: sum / r.voters, votes: v.votes };
+        if (v.base) regions[r.id].base = v.base;
+        ids.forEach(function (id) { totals[id] += v.votes[id]; total += v.votes[id]; });
+      });
+      voterBallots = res.ballots;
+    }
     // 開票所の不審な動き(R10):立会人を送っていなければ、票が相手に流れることがある
     const recount = Game.Scandal.countFraud(state, regions, totals);
     if (recount && !recount.caught) total = ids.reduce(function (a, id) { return a + totals[id]; }, 0);
@@ -245,6 +287,7 @@ Game.Vote = (function () {
       pr: pr, recount: recount, closeBoost: boost, closeDays: camp.close || 0,
       surge: camp.surge && camp.surge.active ? { target: camp.surge.target, party: camp.surge.party } : null,
       falseCall: falseCall,   // 奔流で取り消された当確 { who, tick(出た時刻), retract(取り消した時刻) }
+      ballots: voterBallots,   // 「この人の一票」(R18)
       ticks: ticks, callTick: callTick, zeroCall: callTick === 0, shown: 0,
     };
     return state.election;

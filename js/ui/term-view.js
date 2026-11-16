@@ -370,7 +370,7 @@ Game.TermView = (function () {
         Game.Upper.choices(s).map(function (c) { return { label: '<b>' + names[c.id] + '</b><span>' + c.note + '</span>', onClick: run(c.id) }; }), 'choices');
     } else if (p.type === 'upperResult') {   // R12:参院選の結果
       const U = Game.Balance.upper, P3 = Game.Data.PARTIES, me = s.player.party;
-      const rows = Object.keys(P3).sort(function (a, b) { return p.won[b] - p.won[a]; }).map(function (k) {
+      const rows = Object.keys(p.won).sort(function (a, b) { return p.won[b] - p.won[a]; }).map(function (k) {
         const d = p.won[k] - p.old[k];
         return '<div class="up-row' + (k === me ? ' me' : '') + '">' + UI.partyChip({ party: k }) + '<span class="nm">' + P3[k].name + (p.ruling.indexOf(k) >= 0 ? '<small>与党</small>' : '') + '</span>' +
           '<b>' + p.won[k] + '</b><small>改選前 ' + p.old[k] + '(' + UI.signed(d) + ')</small><span class="up-total">合計 ' + p.after[k] + '</span></div>';
