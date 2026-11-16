@@ -131,6 +131,34 @@ h1, h2, p { margin: 0; }
 .howto li::before { content: counter(n); position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 900; background: var(--gold); color: var(--on-gold); }
 .setup-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
+/* セーブの枠を選ぶ画面(5つ) */
+.slots { max-width: 720px; }
+.slot-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.slot { display: flex; align-items: stretch; gap: 8px; }
+.slot-pick {
+  flex: 1; min-width: 0; display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 14px; text-align: left; cursor: pointer;
+  color: var(--ink); background: var(--card-bg); border: 1px solid var(--card-bd); border-left: 6px solid var(--accent); border-radius: var(--radius); transition: transform .12s, filter .12s;
+}
+.slot-pick:hover:not(:disabled), .slot-pick:focus-visible { transform: translateX(4px); filter: brightness(1.15); outline: none; box-shadow: 0 0 0 2px var(--gold); }
+.slot-pick:disabled { cursor: default; opacity: .5; }
+.slot.empty .slot-pick { border-left-color: var(--sub); background: var(--panel); }
+.slot-no { display: grid; place-items: center; width: 2.2em; height: 2.2em; border-radius: 50%; background: var(--gold); color: var(--on-gold); font: 900 16px var(--font-head); }
+.slot.empty .slot-no { background: var(--track); color: var(--sub); }
+.slot-body { display: flex; flex-direction: column; min-width: 0; }
+.slot-body b { font: 800 17px/1.35 var(--font-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-body b small { margin-left: 8px; font: 500 12px var(--font); color: var(--sub); }
+.slot-body > span { font-size: 12.5px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-none { color: var(--sub); }
+.slot-date { font-size: 12px; color: var(--sub); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.slot-del { flex: none; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius); background: transparent; color: var(--sub); cursor: pointer; font-size: 13px; }
+.slot-del:hover, .slot-del:focus-visible { color: var(--ink); border-color: var(--accent); outline: none; }
+@media (max-width: 560px) {
+  .slot-pick { grid-template-columns: 2.2em minmax(0, 1fr); padding: 8px 10px; gap: 10px; }
+  .slot-date { grid-column: 2; font-size: 11px; }
+  .slot-body b { font-size: 15px; }
+  .slot-del { padding: 0 10px; }
+}
+
 /* ---------- 選挙戦:骨組み ---------- */
 .game {
   flex: 1; min-height: 0; width: 100%; max-width: 1360px; margin: 0 auto; padding: 10px 14px 12px;

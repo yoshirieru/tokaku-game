@@ -3,27 +3,50 @@
 window.Game = window.Game || {};
 
 (function () {
-  const SAVE_KEY = 'tokaku2-save';   // 旧版(legacy/)のセーブ(kokusei-campaign-save-*)とは別
+  // セーブの枠(balance.js の ui.saveSlots。5つ)。枠 n は tokaku2-save-n。旧版(legacy/)のセーブ(kokusei-campaign-save-*)とは別
+  // 枠を作る前のセーブ(tokaku2-save)は、はじめて読むときに枠1へ移す
+  const OLD_KEY = 'tokaku2-save', SLOT_KEY = 'tokaku2-save-';
   const SAVE_VERSION = 2;
+  const slotCount = function () { return Game.Balance.ui.saveSlots; };
 
   Game.state = null;
-  Game.view = 'title';      // ゲームを始める前の画面:'title' | 'setup' | 'hall' | 'versus'(対戦の準備)
+  Game.view = 'title';      // ゲームを始める前の画面:'title' | 'slots'(セーブの枠を選ぶ)| 'setup' | 'hall' | 'versus'(対戦の準備)
+  Game.slot = 1;            // いま遊んでいるセーブの枠(1〜5)
+  Game.slotMode = 'new';    // 枠を選ぶ画面の使いみち:'new' はじめから / 'versus' 2人で対戦 / 'load' つづきから
   Game.ui = { card: null }; // 保存しない画面だけの状態(選んでいるカードなど)
   let undoStack = [];       // 行動の直前の state(その日のうちだけ)
 
+  function migrate() {
+    try {
+      const old = localStorage.getItem(OLD_KEY);
+      if (old == null) return;
+      if (localStorage.getItem(SLOT_KEY + 1) == null) localStorage.setItem(SLOT_KEY + 1, old);
+      localStorage.removeItem(OLD_KEY);
+    } catch (e) { /* 読めなくても遊べる */ }
+  }
   Game.save = function () {
     if (!Game.state) return;
     Game.state.savedAt = Date.now();
     if (Game.state.camp) Game.Voters.persist(Game.state.camp);   // 有権者の変わった値を書く(R18)
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.state)); } catch (e) { console.warn('セーブできませんでした', e); }
+    try { localStorage.setItem(SLOT_KEY + Game.slot, JSON.stringify(Game.state)); } catch (e) { console.warn('セーブできませんでした', e); }
   };
-  Game.loadSave = function () {
+  Game.loadSave = function (n) {
+    migrate();
     try {
-      const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+      const s = JSON.parse(localStorage.getItem(SLOT_KEY + (n || Game.slot)));
       return s && s.version === SAVE_VERSION ? s : null;
     } catch (e) { return null; }
   };
-  Game.hasSave = function () { return !!Game.loadSave(); };
+  // すべての枠:[{ slot, state(なければ null) }]
+  Game.listSaves = function () {
+    const out = [];
+    for (let n = 1; n <= slotCount(); n++) out.push({ slot: n, state: Game.loadSave(n) });
+    return out;
+  };
+  Game.hasSave = function () { return Game.listSaves().some(function (x) { return x.state; }); };
+  Game.deleteSave = function (n) {
+    try { localStorage.removeItem(SLOT_KEY + n); } catch (e) { /* 消せなくても遊べる */ }
+  };
 
   // ---- 殿堂(R7):セーブデータとは別に残す。セーブを消しても、はじめから遊んでも消えない ----
   const HALL_KEY = 'tokaku2-hall';
@@ -102,8 +125,10 @@ window.Game = window.Game || {};
     Game.Data.applyScenarioNames(s && s.scenario ? Game.Scenario.find(s.scenario.id) : null);   // 史実シナリオ(R17)だけ実名
     Game.Data.useArena((camp && camp.arena === 'nation') || leaderTerm ? 'nation' : 'home');
   }
-  Game.continueGame = function () {
-    Game.state = Game.loadSave();
+  Game.continueGame = function (n) {
+    if (n) Game.slot = n;
+    Game.state = Game.loadSave(Game.slot);
+    if (!Game.state) { Game.view = 'title'; return Game.render(); }
     syncArena(Game.state);
     Game.ui = { card: null };
     undoStack = [];
@@ -135,6 +160,10 @@ window.Game = window.Game || {};
     const s = Game.state;
     if (!s) {
       Game.Data.applyScenarioNames(null);   // タイトルや準備の画面は、架空の名前
+      // 舞台は選挙区に戻す。党首の総選挙(全国)のあとでタイトルに戻ると、全国の地図のままで、準備の画面がエラーになり「はじめから」が効かなかった
+      Game.Data.setNewParty(null);
+      Game.Data.useArena('home');
+      if (Game.view === 'slots') return Game.Screens.renderSlots(app);
       if (Game.view === 'setup') return Game.Screens.renderSetup(app);
       if (Game.view === 'hall') return Game.HallView.render(app);
       if (Game.view === 'scenario') return Game.ScenarioView.render(app);   // 史実シナリオ(R17)

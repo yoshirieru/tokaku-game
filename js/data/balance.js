@@ -20,7 +20,7 @@ Game.Balance = {
   },
 
   // 画面の操作:同じカードをこの時間(ミリ秒)のうちに2回押すと、ダブルクリックとしてすぐ使う(スマホのダブルタップも同じ)
-  ui: { doubleClick: 400,
+  ui: { doubleClick: 400, saveSlots: 5,   // saveSlots セーブの枠の数
     voterDots: { r: 3.4, pinW: 50, pinH: 26, gap: 9 },   // 地図の有権者の点(R18):半径、札のまわりの避ける幅(viewBox の単位。札の中心から左右・上下)、点どうしの間
   },
 

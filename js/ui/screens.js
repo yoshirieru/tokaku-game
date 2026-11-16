@@ -8,12 +8,88 @@ Game.Screens = (function () {
   function renderTitle(app) {
     Game.Effects.Title.render(app, {
       hasSave: Game.hasSave(),
-      onNew: function () { Game.view = 'setup'; Game.render(); },
-      onContinue: function () { Game.continueGame(); },
+      // はじめから・2人で対戦・つづきからは、まずセーブの枠を選ぶ
+      onNew: function () { Game.slotMode = 'new'; Game.view = 'slots'; Game.render(); },
+      onContinue: function () { Game.slotMode = 'load'; Game.view = 'slots'; Game.render(); },
       onHall: function () { Game.view = 'hall'; Game.render(); },
-      onVersus: function () { Game.view = 'versus'; Game.render(); },
+      onVersus: function () { Game.slotMode = 'versus'; Game.view = 'slots'; Game.render(); },
       onLegacy: function () { location.href = 'legacy/index.html'; },
       note: '登場する政党・政治家・選挙区はすべて架空です',
+    });
+  }
+
+  // ---------- セーブの枠を選ぶ(はじめから・2人で対戦・つづきから)----------
+  // 枠の中身のひとこと:名前・党・選挙区と、いまどこまで進んだか
+  function slotInfo(s) {
+    const D = Game.Data, cr = s.career, sc = s.scenario ? Game.Scenario.find(s.scenario.id) : null;
+    const partyName = function (p) {
+      if (cr && cr.np && p === 'shinto') return cr.np.short;
+      if (sc && sc.names && sc.names[p]) return sc.names[p].short;
+      return D.PARTIES[p] ? D.PARTIES[p].short : '';
+    };
+    const seat = D.SEATS[s.player.seat] ? D.SEATS[s.player.seat].name : '';
+    let who = UI.esc(s.player.name || '') + '<small>' + UI.esc(partyName(s.player.party)) + (seat ? '・' + seat : '') + '</small>';
+    let where;
+    if (s.mode === 'versus') {
+      who = UI.esc((s.camp && s.camp.vs ? s.camp.vs.names.join(' 対 ') : s.player.name) || '') + '<small>' + seat + '</small>';
+      where = '2人で対戦';
+    } else if (s.screen === 'ending') where = 'エンディング' + (s.ending && s.ending.grade ? '・評価 ' + s.ending.grade : '');
+    else if (sc) where = '史実シナリオ「' + sc.title + '」';
+    else if (cr && cr.leader) where = '党首' + (cr.gov ? '(' + { pm: '首相', junior: '連立与党', opposition: '野党' }[cr.gov.role] + ')' : '');
+    else if (cr) where = (cr.status === 'ronin' ? '浪人' : Game.Balance.ranks[cr.rank || 0].name) + '・当選' + (cr.wins || 0) + '回';
+    else where = '新人';
+    const step = s.screen === 'campaign' && s.camp ? '選挙戦 ' + s.camp.day + '日目'
+      : s.screen === 'term' && cr ? (cr.status === 'ronin' ? '浪人中' : '任期 ' + D.sessionName(cr.turn || 1))
+        : s.screen === 'count' || s.screen === 'result' ? '開票' : s.screen === 'coalition' ? '政権づくり' : '';
+    return { who: who, where: where + (step ? '・' + step : '') };
+  }
+  function slotDate(t) {
+    if (!t) return '';
+    const d = new Date(t), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function renderSlots(app) {
+    const mode = Game.slotMode, load = mode === 'load', list = Game.listSaves();
+    if (load && !list.some(function (x) { return x.state; })) { Game.view = 'title'; return Game.render(); }
+    const rows = list.map(function (x) {
+      const s = x.state, info = s ? slotInfo(s) : null;
+      return '<li class="slot' + (s ? '' : ' empty') + '">' +
+        '<button type="button" class="slot-pick" data-n="' + x.slot + '"' + (load && !s ? ' disabled' : '') + '>' +
+          '<span class="slot-no">' + x.slot + '</span>' +
+          (s ? '<span class="slot-body"><b>' + info.who + '</b><span>' + UI.esc(info.where) + '</span></span><span class="slot-date">' + slotDate(s.savedAt) + '</span>'
+            : '<span class="slot-body"><b class="slot-none">空き</b><span>' + (load ? '記録はない' : 'ここに新しく記録する') + '</span></span>') +
+        '</button>' +
+        (s ? '<button type="button" class="slot-del" data-del="' + x.slot + '" aria-label="枠' + x.slot + 'の記録を消す">消す</button>' : '') +
+        '</li>';
+    }).join('');
+    const head = load ? 'つづきから' : mode === 'versus' ? '2人で対戦:記録する枠' : 'はじめから:記録する枠';
+    const lead = load ? 'つづきから遊ぶ記録を選ぶ。' : '新しいゲームを記録する枠を選ぶ。記録のある枠を選ぶと、ゲームを始めたときに上書きされる。';
+    app.innerHTML = '<div class="setup slots">' +
+      '<h1 class="page-title">' + head + '</h1><p class="lead">' + lead + '(セーブの枠は ' + list.length + 'つ。殿堂の記録は枠と別に残る)</p>' +
+      '<ul class="slot-list">' + rows + '</ul>' +
+      '<div class="setup-btns"><button type="button" class="btn btn-primary btn-lg" id="back">もどる</button></div></div>';
+    app.querySelector('#back').onclick = function () { Game.view = 'title'; Game.render(); };
+    const go = function (n) {
+      Game.slot = n;
+      if (load) return Game.continueGame(n);
+      Game.view = mode === 'versus' ? 'versus' : 'setup';
+      Game.render();
+    };
+    app.querySelectorAll('.slot-pick').forEach(function (b) {
+      b.onclick = function () {
+        const n = +b.dataset.n, x = list[n - 1];
+        UI.sound('decide');
+        if (load || !x.state) return go(n);
+        UI.modal('<h2>枠' + n + 'に記録しなおす</h2><p>枠' + n + 'には「' + slotInfo(x.state).who.replace(/<[^>]+>/g, ' ') + '」の記録がある。新しいゲームを始めると、この記録は消える(準備の画面でもどれば残る)。</p>',
+          [{ label: 'やめておく' }, { label: 'この枠で始める', primary: true, onClick: function () { go(n); } }]);
+      };
+    });
+    app.querySelectorAll('.slot-del').forEach(function (b) {
+      b.onclick = function () {
+        const n = +b.dataset.del;
+        UI.modal('<h2>枠' + n + 'の記録を消す</h2><p>この記録は消えて、もとには戻せない。殿堂の記録は消えない。</p>',
+          [{ label: 'やめておく' }, { label: '消す', primary: true, onClick: function () { Game.deleteSave(n); renderSlots(app); } }]);
+      };
     });
   }
 
@@ -104,5 +180,5 @@ Game.Screens = (function () {
     };
   }
 
-  return { renderTitle: renderTitle, renderSetup: renderSetup, seatMap: seatMap, draft: function () { return draft; } };
+  return { renderTitle: renderTitle, renderSlots: renderSlots, renderSetup: renderSetup, seatMap: seatMap, draft: function () { return draft; } };
 })();
